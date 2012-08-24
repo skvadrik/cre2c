@@ -113,214 +113,59 @@ parse_signatures fp =
 
 
 
-ncfa_add_lambda_chain :: NCFA -> State -> State -> SignNum -> NCFA
-ncfa_add_lambda_chain ncfa st_start st_end sign =
-    case addTransition ncfa (st_start, Nothing, sign, st_end) of
-        (ncfa', st') | st' == st_end -> ncfa'
-        (ncfa', st')                 -> ncfa_add_lambda_chain ncfa' st' st_end sign
+-- уже щас вижу, что будет особый случай, когда звезда клини в конце регэкспа
+cfa_add_regexp :: (CFA, State) -> Regexp -> RegexpTable -> SignNum -> (CFA, State)
+cfa_add_regexp (cfa, st_start) (Regexp r) rt sign =
+    let (cfa', st') = cfa_add_regexp_alt (cfa, st_start) r rt sign
+        cfa''       = setFinal cfa' st' sign
+    in  (cfa'', lastState cfa'')
 
-ncfa_tie :: NCFA -> [State] -> SignNum -> (NCFA, State)
-ncfa_tie ncfa states sign =
-    let st_end = lastState ncfa
-    in  (foldl' (\ d s -> ncfa_add_lambda_chain d s st_end sign) ncfa states, st_end)
-
-ncfa_add_regexp :: (NCFA, State) -> Regexp -> RegexpTable -> SignNum -> (NCFA, State)
-ncfa_add_regexp (ncfa, st_start) (Regexp r) rt sign =
-    let (ncfa', st') = ncfa_add_regexp_alt (ncfa, st_start) r rt sign
-        ncfa''       = setFinal ncfa' st' sign
-    in  (ncfa'', lastState ncfa'')
-
-ncfa_add_regexp_alt :: (NCFA, State) -> RegexpAlt -> RegexpTable -> SignNum -> (NCFA, State)
-ncfa_add_regexp_alt (ncfa, st_start) r rt sign = case r of
-    AltFromCat rcat -> ncfa_add_regexp_cat (ncfa, st_start) rcat rt sign
+cfa_add_regexp_alt :: (CFA, State) -> RegexpAlt -> RegexpTable -> SignNum -> (CFA, [State])
+cfa_add_regexp_alt (cfa, st_start) r rt sign = case r of
+    AltFromCat rcat -> cfa_add_regexp_cat (cfa, st_start) rcat rt sign
     Alt rcat ralt   ->
-        let (ncfa', st)   = ncfa_add_regexp_cat (ncfa, st_start) rcat rt sign
-            (ncfa'', st') = ncfa_add_regexp_alt (ncfa', st_start) ralt rt sign
-            states        = st : [st']
-        in  ncfa_tie ncfa'' states sign
+        let (cfa', st)   = cfa_add_regexp_cat (cfa, st_start) rcat rt sign
+            (cfa'', st') = cfa_add_regexp_alt (cfa', st_start) ralt rt sign
+            states       = st : [st']
+        in  (cfa'', states)
+-- если какая-то альтернатива вернула не то, что просили, то возвращённое состояние надо добавить в список
+-- для итераций это будет всегда так, поэтому для них отдельную функцию
+-- иначе пытаться добавить всё в конечное состояние
 
-ncfa_add_regexp_cat :: (NCFA, State) -> RegexpCat -> RegexpTable -> SignNum -> (NCFA, State)
-ncfa_add_regexp_cat (ncfa, st_start) r rt sign = case r of
-    CatFromIter riter -> ncfa_add_regexp_iter (ncfa, st_start) riter rt sign
-    Cat riter rcat    -> ncfa_add_regexp_cat (ncfa_add_regexp_iter (ncfa, st_start) riter rt sign) rcat rt sign
+-- можно забабахать функцию типа changeState, но шоб она проверяла, если из изменяемого состояния
+-- есть переходы, то это состояние добавить в список
+-- полученный т.о. список вернуть
+-- если что, так можно же и все состояния не связанными оставить, только оверхед будет по состояниям.
 
-ncfa_add_regexp_iter :: (NCFA, State) -> RegexpIter -> RegexpTable -> SignNum -> (NCFA, State)
-ncfa_add_regexp_iter (ncfa, st_start) r rt sign = case r of
-    IterFromPrim rprim -> ncfa_add_regexp_prim (ncfa, st_start) rprim rt sign
+cfa_add_regexp_cat :: (CFA, State) -> RegexpCat -> RegexpTable -> SignNum -> (CFA, State)
+cfa_add_regexp_cat (cfa, st_start) r rt sign = case r of
+    CatFromIter riter -> cfa_add_regexp_iter (cfa, st_start) riter rt sign
+    Cat riter rcat    -> cfa_add_regexp_cat (cfa_add_regexp_iter (cfa, st_start) riter rt sign) rcat rt sign
+
+cfa_add_regexp_iter :: (CFA, State) -> RegexpIter -> RegexpTable -> SignNum -> (CFA, State)
+fa_add_regexp_iter (cfa, st_start) r rt sign = case r of
+    IterFromPrim rprim -> cfa_add_regexp_prim (cfa, st_start) rprim rt sign
     Iter rprim n       ->
         let build_rcat :: RegexpPrim -> Int -> RegexpCat
             build_rcat rp m = foldl' (\rc _ -> Cat (IterFromPrim rp) rc) ((CatFromIter . IterFromPrim) rprim) [1 .. m - 1]
 
             ralt            = foldl' (\r k -> Alt (build_rcat rprim (n - k)) r) (AltFromCat (build_rcat rprim n)) [1 .. n - 1]
-            (ncfa', st_end) = ncfa_add_regexp_alt (ncfa, st_start) ralt rt sign
+            (cfa', st_end)  = cfa_add_regexp_alt (cfa, st_start) ralt rt sign
 
-        in  (ncfa_add_lambda_chain ncfa' st_start st_end sign, st_end)
+        in  (cfa_add_lambda_chain ncfa' st_start st_end sign, st_end)
 
-ncfa_add_regexp_prim :: (NCFA, State) -> RegexpPrim -> RegexpTable -> SignNum -> (NCFA, State)
-ncfa_add_regexp_prim (ncfa, st_start) r rt sign = case r of
-    Elementary s -> foldl' (\(d, s) c -> ncfa_add_regexp_atom (d, s) c sign) (ncfa, st_start) s
+cfa_add_regexp_prim :: (CFA, State) -> RegexpPrim -> RegexpTable -> SignNum -> (CFA, State)
+cfa_add_regexp_prim (cfa, st_start) r rt sign = case r of
+    Elementary s -> foldl' (\(d, s) c -> cfa_add_regexp_atom (d, s) c sign) (cfa, st_start) s
     Name s       ->
         let Regexp ralt = M.lookupDefault undefined s rt
-        in  ncfa_add_regexp_alt (ncfa, st_start) ralt rt sign
-    Wrapped ralt -> ncfa_add_regexp_alt (ncfa, st_start) ralt rt sign
+        in  cfa_add_regexp_alt (cfa, st_start) ralt rt sign
+    Wrapped ralt -> cfa_add_regexp_alt (cfa, st_start) ralt rt sign
 
-ncfa_add_regexp_atom :: (NCFA, State) -> Char -> SignNum -> (NCFA, State)
-ncfa_add_regexp_atom (ncfa, st_start) c sign =
-    addTransition ncfa (st_start, Just c, sign, lastState ncfa)
+cfa_add_regexp_atom :: (CFA, State) -> Char -> SignNum -> (CFA, State)
+cfa_add_regexp_atom (cfa, st_start) c sign =
+    addTransition cfa (st_start, Just c, sign, lastState ncfa)
 
-
-
-
-{-
-code_for_initial_state :: DCFA -> M.HashMap SignNum [Condition] -> String
-code_for_initial_state dcfa sign2conds =
-    let (node0, merged_states) = neighbourhood dcfa (initialStateDCFA dcfa)
-    in  concat
-        [ ""
--}
-{-
-        , case M.lookup Nothing node0 of
-            Just (signs, st) -> concat
-                [ code_for_conditions $ M.filterWithKey (\ sign _ -> S.member sign signs) sign2conds
-                , code_for_accepting_transition signs
-                ]
-            Nothing          -> ""
--}
-{-
-        , "\nswitch (*CURSOR++) {\n\t"
-        , concatMap (\ (l, (sign_nums, st)) -> concat
-            [ "case "
-            , show $ fromJust l
-            , ":"
-            , code_for_conditions $ M.filterWithKey (\ sign _ -> S.member sign sign_nums) sign2conds
-            , "\n\t\tif (n_matching_signatures > 0) {"
--}
--- Вот тута проблема
--- что если из начального состояния по лямбда-дугам достижимо финальное (ну то есть с 0 или 1 не-лямбда-дугой на пути)
---        , if isFinal st dfa then code_for_accepting_transition sign_nums else ""
-{-
-            , "\n\t\t\tgoto m_"
-            , show st
-            , ";\n\t\t} else {\n\t\t\tMARKER = CURSOR;\n\t\t\tgoto m_fin;\n\t\t}\n\t"
-            ]) $ trace' $ filter (\ (l, _) -> isJust l) $ M.toList node0
-        , "default:"
-        , "\n\t\tMARKER = CURSOR;"
-        , "\n\t\tgoto m_fin;"
-        , "\n\t}"
-        ]
-
-
-code_for_conditions :: M.HashMap SignNum [Condition] -> String
-code_for_conditions = M.foldlWithKey' (\code sign conditions -> code ++ case conditions of
-    [] -> ""
-    _  -> concat
-        [ "\n\t\tis_active = "
-        , intercalate " && " conditions
-        , ";\n\t\tactive_signatures["
-        , show sign
-        , "] = is_active;"
-        , "\n\t\tn_matching_signatures += is_active;"
-        ]
-    ) ""
-
-
-code_for_accepting_transition :: SignSet -> String
-code_for_accepting_transition signs =
-    S.foldl' (\s k -> s ++ concat
-        [ "\nif (active_signatures["
-        , show k
-        , "] == true) {"
-        , "\n\taccepted_signatures[accepted_count++] = "
-        , show k
-        , ";\n\tactive_signatures["
-        , show k
-        , "] = false;\n}"
-        ]) "" signs
-
-
-code_for_non_accepting_transition :: [(Label, (SignSet, State))] -> Int -> Bool -> String
-code_for_non_accepting_transition nodes num_sign is_accepting = concat
-    [ "\nswitch (*CURSOR++) {\n\t"
-    , concatMap (\(l, (_, s)) -> concat
-        [ "case "
-        , case l of
-            Just c  -> show c
-            Nothing -> undefined
-        , ":"
-        , "\n\t\tgoto m_"
-        , show s
-        , ";\n\t"
-        ]) nodes
-    , "default:"
-    , if is_accepting then "" else "\n\t\tif (adjust_marker)\n\t\t\tMARKER = CURSOR;"
-    , "\n\t\tgoto m_fin;"
-    , "\n\t}"
-    ]
-
-
-trace' :: (Show a) => a -> a
-trace' a = trace (show a) a
-
-
-trace'' :: (Show a) => String -> a -> a
-trace'' s a = trace (s ++ show a) a
-
-
-code_for_state :: DFA -> State -> Int -> StateMap -> (BS.ByteString, StateMap)
-code_for_state dfa st num_sign merged_states =
-    let (neighbours, merged_states') = neighbourhood dfa st
-        all_neighbours = case M.lookup st merged_states of
-
-            True  -> M.foldlWithKey'
-                ( \ nbrs l' (signs', s') -> if S.intersection signs signs' /= S.empty
-                    then case M.lookup l' node of
-                        Just (signs'', s'') ->
-                            ( M.adjust (\ (signs_old, s_old) -> (S.union signs_old signs', s_old)) l' node
-                            , M.insertWith
-                                (\ _ ss -> S.insert s' ss)
-                                s''
-                                (S.insert s' S.empty)
-                                sts
-                            )
-                        Nothing             -> (M.insert l' (signs', s') node, sts)
-                    else (node, sts)
-                )
-                neighbours
-                states
-            Just states -> merge_neighbours $ S.foldl
-                (\ nbrs st' ->
-                    let nbrs' = fst $ neighbourhood dfa st'
-                    in  
-                )
-                neighbours
-                states
-            Nothing     -> neighbours
-        (accepting, non_accepting)   = partition (\ (l, (_, st')) -> isNothing l && isFinal st' dfa) $ M.toList neighbours
-        is_final                     = isFinal st dfa
-        is_lambda_final              = accepting /= []
-        code = BS.pack $ concat
-            [ "\n\nm_"
-            , show st
-            , ":"
-            , "\nprintf(\"c: %s\\n\", CURSOR);"
-            , if is_final then code_for_accepting_transition (acceptedSignatures dfa st) else ""
-            , if is_lambda_final then concatMap (\ (l, (_, st')) -> code_for_accepting_transition (acceptedSignatures dfa st')) accepting else ""
-            , if is_final || is_lambda_final then "\nMARKER = CURSOR;\nadjust_marker = false;" else ""
-            , case non_accepting of
-                []    -> "\ngoto m_fin;"
-                nodes -> code_for_non_accepting_transition nodes num_sign (is_final || is_lambda_final)
-            ]
-        merged_states'' = M.foldlWithKey'
-            ( \ all_states st' states -> M.insertWith
-                (\ new_states old_states -> S.union new_states old_states)
-                st'
-                states
-                all_states
-            )
-            merged_states
-            merged_states'
-    in  (code, merged_states'')
--}
 
 
 
@@ -380,115 +225,11 @@ main = do
     let num_sign = length indexes
     let signs2conds = M.fromList $ zip indexes conditions
 
-    let ncfa' = emptyNCFA
-    let ncfa  = fst $ M.foldlWithKey'
-            (\ (d, s) k r -> (fst (ncfa_add_regexp (d, s) r regexp_table k), s))
-            (ncfa', initialStateNCFA ncfa')
+    let cfa' = emptyCFA
+    let cfa  = fst $ M.foldlWithKey'
+            (\ (d, s) k r -> (fst (cfa_add_regexp (d, s) r regexp_table k), s))
+            (cfa', initialStateCFA cfa')
             (M.fromList (zip indexes regexps))
-    toDotNCFA ncfa "./ncfa.dot"
 
-    let dcfa = determine_ncfa ncfa
-    toDotDCFA dcfa "./dcfa.dot"
-
---    print ncfa
-    print dcfa
-
-    let sign_table = M.map (\r -> gen_signatures_from_regexp r (M.empty)) regexp_table
-    let all_signatures = M.fromList $ zip [1 .. num_sign] $ map (\r -> gen_signatures_from_regexp r sign_table) regexps
---    let all_signatures' = M.foldlWithKey' (\signatures sign_num sign_list -> map () sign_list) all_signatures
-    let sign_maxlen = maximum $ map BS.length $ concat $ M.elems all_signatures
-    print all_signatures
-    print $ M.size all_signatures
-    print sign_maxlen
-
-    let (test_string, stats) = gen_test_string_with_stats all_signatures
-    print (test_string, stats)
-
-{-
-    let code_labels = map (\k -> "code" ++ show k) [0 .. length codes - 1]
-    let main_code = BS.pack $ concat
-            [ "\n#define NUM_SIGN "
-            , show num_sign
-            , "\n#define SIGN_MAXLEN "
-            , show sign_maxlen
-            , "\n#define GOTO(x) { goto *code[x]; }"
-            , "\nbool active_signatures[NUM_SIGN];"
-            , "\nint accepted_signatures[NUM_SIGN + 1];"
-            , "\nint accepted_count = 0;"
-            , "\nint n_matching_signatures = 0;"
-            , "\nint i = 0;"
-            , "\nbool is_active;"
-            , "\nbool adjust_marker = true;"
-            , "\nstatic void * code[] = {"
-            , intercalate ", " (map ("&&" ++) code_labels)
-            , "};"
-            , "\nfor (i = 0; i < NUM_SIGN; i++) {"
-            , "\n\tactive_signatures[i] = true;"
-            , "\n\taccepted_signatures[i] = NUM_SIGN;"
-            , "\n}"
-            , "\naccepted_signatures[NUM_SIGN] = NUM_SIGN;"
-            , "\ngoto m_start;\n"
-            , concatMap (\ k -> concat
-                [ "\n"
-                , code_labels !! k
-                , ": "
-                , (map BS.unpack codes) !! k
-                , "\ngoto m_continue;"
-                ]) [0 .. length codes - 1]
-            , "\n\nm_fin:"
-            , "\nCURSOR = MARKER;"
-            , "\nadjust_marker = true;"
-            , "\ni = 0;"
-            , "\nm_continue:"
-            , "\nif (accepted_signatures[i] != NUM_SIGN)"
-            , "\n\tGOTO(accepted_signatures[i++]);"
-            , "\ngoto m_start;"
-            , "\n\nm_start:"
-            , "\nfor (i = accepted_count - 1; i >= 0; i--)"
-            , "\n\taccepted_signatures[i] = NUM_SIGN;"
-            , "\naccepted_count = 0;"
-            , "\nif (LIMIT - CURSOR < SIGN_MAXLEN) FILL();"
-            , "\nn_matching_signatures = 0;"
-            , code_for_initial_state dfa signs2conds
-            ]
--}
-
-    let (NCFA _ _ dg _) = ncfa
-    print $ M.size dg
-    let n_st = M.foldl' (\n (in_node, out_node) -> n + M.size in_node + M.size out_node) 0 dg
-    print n_st
-
-
-{-
-    let states_to_gen_code = codegen_states dfa
-    let states_code = fst $ foldl'
-            (\ (str, merged_states) st -> let (code, states) = code_for_state dfa st num_sign merged_states in (BS.concat [str, code], states))
-            (BS.pack "", M.empty)
-            states_to_gen_code
-    let end_code = BS.concat
-            [ (BS.pack . concat)
-                [ "}\n"
-                , "\nint main ()"
-                , "\n{"
-                , "\n    const char * buffer = \""
-                ]
-            , test_string
-            , (BS.pack . concat)
-                [ replicate (sign_maxlen + 0) '*'
-                , "\";\n    scan(buffer, strlen(buffer));"
-                , "\n    return 0;"
-                , "\n}"
-                , "\n"
-                ]
-            ]
-
-    BS.writeFile fdest $ BS.concat
-        [ code
-        , main_code
-        , states_code
-        , end_code
-        ]
--}
-
---    print $ initialNode dfa
---    print dfa
+    toDot cfa "./ncfa.dot"
+    print cfa
