@@ -11,7 +11,7 @@ module CFA
     , emptyCFA
     , addTransition
     , neighbourhood
-    , initialStateCFA
+    , initialState
     , setFinal
     , isFinal
     , acceptedSignaturesCFA
@@ -49,12 +49,12 @@ emptyCFA :: CFA
 emptyCFA = CFA 0 1 M.empty M.empty
 
 
-initialStateCFA :: CFA -> State
-initialStateCFA = initial_state
+initialState :: CFA -> State
+initialState = initial_state
 
 
-isFinalCFA :: State -> CFA -> Bool
-isFinalCFA st cfa = isJust $ M.lookup st (final_states cfa)
+isFinal :: State -> CFA -> Bool
+isFinal st cfa = isJust $ M.lookup st (final_states cfa)
 
 
 setFinal :: CFA -> SignNum -> State -> CFA

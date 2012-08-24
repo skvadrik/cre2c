@@ -204,9 +204,6 @@ sign_from_rprim r ss stbl = case r of
     Name name     -> concatMap (\s -> map (\s'' -> BS.concat [s, s'']) (M.lookupDefault undefined name stbl)) ss
     Wrapped ralt  -> sign_from_ralt ralt ss stbl
 
-
-
-
 gen_test_string_with_stats :: M.HashMap SignNum [BS.ByteString] -> (BS.ByteString, [SignNum])
 gen_test_string_with_stats signatures =
     ((BS.concat . map BS.concat . M.elems) signatures, concatMap (\(sign_num, sign_list) -> replicate (length sign_list) (sign_num - 1)) (M.toList signatures))
@@ -236,9 +233,9 @@ main = do
 
     let cfa' = emptyCFA
     let cfa  = fst $ M.foldlWithKey'
-            (\ (d, s) k r -> (fst (cfa_add_regexp (d, s) r regexp_table k), s))
-            (cfa', initialStateCFA cfa')
+            (\ (c, ss) k r -> ???(fst (cfa_add_regexp (d, ss) r regexp_table k), ss))
+            (cfa', [initialState cfa'])
             (M.fromList (zip indexes regexps))
 
-    toDot cfa "./ncfa.dot"
+    toDot cfa "./cfa.dot"
     print cfa
