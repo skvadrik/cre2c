@@ -114,20 +114,25 @@ parse_signatures fp =
 
 
 -- уже щас вижу, что будет особый случай, когда звезда клини в конце регэкспа
-cfa_add_regexp :: (CFA, State) -> Regexp -> RegexpTable -> SignNum -> (CFA, State)
-cfa_add_regexp (cfa, st_start) (Regexp r) rt sign =
-    let (cfa', st') = cfa_add_regexp_alt (cfa, st_start) r rt sign
-        cfa''       = setFinal cfa' st' sign
-    in  (cfa'', lastState cfa'')
 
-cfa_add_regexp_alt :: (CFA, State) -> RegexpAlt -> RegexpTable -> SignNum -> (CFA, [State])
-cfa_add_regexp_alt (cfa, st_start) r rt sign = case r of
-    AltFromCat rcat -> cfa_add_regexp_cat (cfa, st_start) rcat rt sign
+
+
+
+
+-- мошт надо внутрь автомата засунуть список состояний и получчать его функцией
+cfa_add_regexp :: (CFA, [State]) -> Regexp -> RegexpTable -> SignNum -> (CFA, [State])
+cfa_add_regexp (cfa, ss) (Regexp r) rt sign =
+    let (cfa', ss') = cfa_add_regexp_alt (cfa, ss) r rt sign
+        cfa''       = map (setFinal cfa' sign) ss'
+    in  (cfa'', ss')
+
+cfa_add_regexp_alt :: (CFA, [State]) -> RegexpAlt -> RegexpTable -> SignNum -> (CFA, [State])
+cfa_add_regexp_alt (cfa, ss) r rt sign = case r of
+    AltFromCat rcat -> cfa_add_regexp_cat (cfa, ss) rcat rt sign
     Alt rcat ralt   ->
-        let (cfa', st)   = cfa_add_regexp_cat (cfa, st_start) rcat rt sign
-            (cfa'', st') = cfa_add_regexp_alt (cfa', st_start) ralt rt sign
-            states       = st : [st']
-        in  (cfa'', states)
+        let (cfa', ss')   = cfa_add_regexp_cat (cfa, ss) rcat rt sign
+            (cfa'', ss'') = cfa_add_regexp_alt (cfa', ss) ralt rt sign
+        in  (cfa'', ss' ++ ss'')
 -- если какая-то альтернатива вернула не то, что просили, то возвращённое состояние надо добавить в список
 -- для итераций это будет всегда так, поэтому для них отдельную функцию
 -- иначе пытаться добавить всё в конечное состояние
@@ -137,34 +142,38 @@ cfa_add_regexp_alt (cfa, st_start) r rt sign = case r of
 -- полученный т.о. список вернуть
 -- если что, так можно же и все состояния не связанными оставить, только оверхед будет по состояниям.
 
-cfa_add_regexp_cat :: (CFA, State) -> RegexpCat -> RegexpTable -> SignNum -> (CFA, State)
-cfa_add_regexp_cat (cfa, st_start) r rt sign = case r of
-    CatFromIter riter -> cfa_add_regexp_iter (cfa, st_start) riter rt sign
-    Cat riter rcat    -> cfa_add_regexp_cat (cfa_add_regexp_iter (cfa, st_start) riter rt sign) rcat rt sign
+-- ДОБАВЛЯЯ ДУГУ надо смотреть на множество last states и из всех этих состояний добавлять дугу В ОДНО СОСТОЯНИЕ
+-- И В ОБЩЕМ-ТО  НУ НАФИГ СВЯЗЫВАНИЕ АЛЬТЕРНАТИВ, НАПРИМЕР :)
 
-cfa_add_regexp_iter :: (CFA, State) -> RegexpIter -> RegexpTable -> SignNum -> (CFA, State)
-fa_add_regexp_iter (cfa, st_start) r rt sign = case r of
-    IterFromPrim rprim -> cfa_add_regexp_prim (cfa, st_start) rprim rt sign
+cfa_add_regexp_cat :: (CFA, [State]) -> RegexpCat -> RegexpTable -> SignNum -> (CFA, [State])
+cfa_add_regexp_cat (cfa, ss) r rt sign = case r of
+    CatFromIter riter -> cfa_add_regexp_iter (cfa, ss) riter rt sign
+    Cat riter rcat    -> cfa_add_regexp_cat (cfa_add_regexp_iter (cfa, ss) riter rt sign) rcat rt sign
+
+cfa_add_regexp_iter :: (CFA, [State]) -> RegexpIter -> RegexpTable -> SignNum -> (CFA, [State])
+fa_add_regexp_iter (cfa, ss) r rt sign = case r of
+    IterFromPrim rprim -> cfa_add_regexp_prim (cfa, ss) rprim rt sign
     Iter rprim n       ->
         let build_rcat :: RegexpPrim -> Int -> RegexpCat
-            build_rcat rp m = foldl' (\rc _ -> Cat (IterFromPrim rp) rc) ((CatFromIter . IterFromPrim) rprim) [1 .. m - 1]
+            build_rcat rp m = foldl' (\ rc _ -> Cat (IterFromPrim rp) rc) ((CatFromIter . IterFromPrim) rprim) [1 .. m - 1]
 
-            ralt            = foldl' (\r k -> Alt (build_rcat rprim (n - k)) r) (AltFromCat (build_rcat rprim n)) [1 .. n - 1]
-            (cfa', st_end)  = cfa_add_regexp_alt (cfa, st_start) ralt rt sign
+            ralt            = foldl' (\ r k -> Alt (build_rcat rprim (n - k)) r) (AltFromCat (build_rcat rprim n)) [1 .. n - 1]
+            (cfa', ss')     = cfa_add_regexp_alt (cfa, ss) ralt rt sign
 
-        in  (cfa_add_lambda_chain ncfa' st_start st_end sign, st_end)
+        in  (cfa', ss ++ ss')
 
-cfa_add_regexp_prim :: (CFA, State) -> RegexpPrim -> RegexpTable -> SignNum -> (CFA, State)
-cfa_add_regexp_prim (cfa, st_start) r rt sign = case r of
-    Elementary s -> foldl' (\(d, s) c -> cfa_add_regexp_atom (d, s) c sign) (cfa, st_start) s
+cfa_add_regexp_prim :: (CFA, [State]) -> RegexpPrim -> RegexpTable -> SignNum -> (CFA, [State])
+cfa_add_regexp_prim (cfa, ss) r rt sign = case r of
+    Elementary s -> foldl' (\(d, s) c -> cfa_add_regexp_atom (d, s) c sign) (cfa, ss) s
     Name s       ->
         let Regexp ralt = M.lookupDefault undefined s rt
-        in  cfa_add_regexp_alt (cfa, st_start) ralt rt sign
-    Wrapped ralt -> cfa_add_regexp_alt (cfa, st_start) ralt rt sign
+        in  cfa_add_regexp_alt (cfa, ss) ralt rt sign
+    Wrapped ralt -> cfa_add_regexp_alt (cfa, ss) ralt rt sign
 
-cfa_add_regexp_atom :: (CFA, State) -> Char -> SignNum -> (CFA, State)
-cfa_add_regexp_atom (cfa, st_start) c sign =
-    addTransition cfa (st_start, Just c, sign, lastState ncfa)
+cfa_add_regexp_atom :: (CFA, [State]) -> Char -> SignNum -> (CFA, [State])
+cfa_add_regexp_atom (cfa, ss) c sign =
+    let s' = lastState cfa
+    in  map (\ s -> addTransition cfa (s, Just c, sign, s')) ss
 
 
 
