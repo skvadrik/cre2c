@@ -113,12 +113,6 @@ parse_signatures fp =
 
 
 
--- уже щас вижу, что будет особый случай, когда звезда клини в конце регэкспа
-
-
-
-
-
 trace' :: (Show a) => a -> a
 trace' a = trace (show a) a
 
@@ -129,8 +123,6 @@ trace'' s a = trace (s ++ show a) a
 
 
 
-
--- мошт надо внутрь автомата засунуть список состояний и получчать его функцией
 cfa_add_regexp :: (CFA, S.Set State) -> Regexp -> RegexpTable -> SignNum -> (CFA, S.Set State)
 cfa_add_regexp (cfa, ss) (Regexp r) rt sign =
     let (cfa', ss') = cfa_add_regexp_alt (cfa, ss) r rt sign
@@ -139,22 +131,20 @@ cfa_add_regexp (cfa, ss) (Regexp r) rt sign =
 
 cfa_add_regexp_alt :: (CFA, S.Set State) -> RegexpAlt -> RegexpTable -> SignNum -> (CFA, S.Set State)
 cfa_add_regexp_alt (cfa, ss) r rt sign = case r of
-    AltFromCat rcat -> trace'' "from rcat " $ cfa_add_regexp_cat (cfa, ss) rcat rt sign
-    Alt rcat ralt   -> trace'' "from ralt " $
+    AltFromCat rcat -> cfa_add_regexp_cat (cfa, ss) rcat rt sign
+    Alt rcat ralt   ->
         let (cfa', ss')   = cfa_add_regexp_cat (cfa, ss) rcat rt sign
             (cfa'', ss'') = cfa_add_regexp_alt (cfa', ss) ralt rt sign
         in  (cfa'', S.union ss' ss'')
--- если какая-то альтернатива вернула не то, что просили, то возвращённое состояние надо добавить в список
--- для итераций это будет всегда так, поэтому для них отдельную функцию
--- иначе пытаться добавить всё в конечное состояние
+
+-- есть смысл в том, чтобы мержить те состояния, в которые приводят альтернативы, взаимно не являющиесяя префиксами друг друга.
+-- смысл однако чисто теоретический, не знаю, насколько полезным это будет на практике
+-- число состояний уменьшится, но зато время/память генерации сканера возрастут.
+
 
 -- можно забабахать функцию типа changeState, но шоб она проверяла, если из изменяемого состояния
 -- есть переходы, то это состояние добавить в список
--- полученный т.о. список вернуть
--- если что, так можно же и все состояния не связанными оставить, только оверхед будет по состояниям.
 
--- ДОБАВЛЯЯ ДУГУ надо смотреть на множество last states и из всех этих состояний добавлять дугу В ОДНО СОСТОЯНИЕ
--- И В ОБЩЕМ-ТО  НУ НАФИГ СВЯЗЫВАНИЕ АЛЬТЕРНАТИВ, НАПРИМЕР :)
 
 cfa_add_regexp_cat :: (CFA, S.Set State) -> RegexpCat -> RegexpTable -> SignNum -> (CFA, S.Set State)
 cfa_add_regexp_cat (cfa, ss) r rt sign = case r of
@@ -164,14 +154,13 @@ cfa_add_regexp_cat (cfa, ss) r rt sign = case r of
 cfa_add_regexp_iter :: (CFA, S.Set State) -> RegexpIter -> RegexpTable -> SignNum -> (CFA, S.Set State)
 cfa_add_regexp_iter (cfa, ss) r rt sign = case r of
     IterFromPrim rprim -> cfa_add_regexp_prim (cfa, ss) rprim rt sign
-    Iter rprim n       ->
-        let build_rcat :: RegexpPrim -> Int -> RegexpCat
-            build_rcat rp m = foldl' (\ rc _ -> Cat (IterFromPrim rp) rc) ((CatFromIter . IterFromPrim) rprim) [1 .. m - 1]
-
-            ralt            = foldl' (\ r k -> Alt (build_rcat rprim (n - k)) r) (AltFromCat (build_rcat rprim n)) [1 .. n - 1]
-            (cfa', ss')     = cfa_add_regexp_alt (cfa, ss) ralt rt sign
-
-        in  (cfa', S.union ss ss')
+    Iter rprim n       -> foldl'
+        (\ (cfa', ss') _ ->
+            let (cfa'', ss'') = cfa_add_regexp_prim (cfa', ss') rprim rt sign
+            in  (cfa'', S.union ss' ss'')
+        )
+        (cfa, ss)
+        [1 .. n]
 
 cfa_add_regexp_prim :: (CFA, S.Set State) -> RegexpPrim -> RegexpTable -> SignNum -> (CFA, S.Set State)
 cfa_add_regexp_prim (cfa, ss) r rt sign = case r of
@@ -188,7 +177,8 @@ cfa_add_regexp_atom (cfa, ss) c sign =
             (\ (cfa', ss') s ->
                 let (cfa'', s') = addTransition cfa' (s, c, sign, sl)
                 in  (cfa'', S.insert s' ss')
-            ) (cfa, S.empty) (trace'' "** " ss)
+            ) (cfa, S.empty) 
+            ss
 
 
 
