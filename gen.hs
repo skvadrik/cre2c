@@ -186,10 +186,10 @@ cfa_add_regexp_atom :: (CFA, S.Set State) -> Char -> SignNum -> (CFA, S.Set Stat
 cfa_add_regexp_atom (cfa, ss) c sign =
     let sl  = lastState cfa
     in  S.foldl
-            (\ (cfa', ss'') s ->
+            (\ (cfa', ss') s ->
                 let (cfa'', s') = addTransition cfa' (s, c, sign, sl)
-                in  (cfa'', S.insert s' ss)
-            ) (cfa, S.empty) ss
+                in  (cfa'', S.insert s' ss')
+            ) (cfa, S.empty) (trace'' "** " ss)
 
 
 
