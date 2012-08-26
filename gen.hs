@@ -171,8 +171,9 @@ cfa_add_regexp_iter (cfa, ss) r rt sign = case r of
             ralt            = foldl' (\ r k -> Alt (build_rcat rprim (n - k)) r) (AltFromCat (build_rcat rprim n)) [1 .. n - 1]
             (cfa', ss')     = cfa_add_regexp_alt (cfa, ss) ralt rt sign
 
-          in  (cfa', ss')
---        in  (cfa', ss ++ ss')
+            cfa''           = S.foldl (\ c s -> setFinal c sign s) cfa' ss
+
+          in  (cfa'', S.union ss ss')
 
 cfa_add_regexp_prim :: (CFA, S.Set State) -> RegexpPrim -> RegexpTable -> SignNum -> (CFA, S.Set State)
 cfa_add_regexp_prim (cfa, ss) r rt sign = case r of
