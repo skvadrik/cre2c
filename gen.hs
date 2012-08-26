@@ -6,7 +6,7 @@ import           System.Exit                (exitFailure)
 import           Data.Functor               ((<$>))
 import qualified Data.HashMap.Strict   as M
 import qualified Data.Set              as S
-import           Data.List                  (foldl', nub)
+import           Data.List                  (foldl')
 import           CFA
 import           Control.Monad              (forM_, forM)
 import           RegexpParser
@@ -113,16 +113,6 @@ parse_signatures fp =
 
 
 
-trace' :: (Show a) => a -> a
-trace' a = trace (show a) a
-
-
-trace'' :: (Show a) => String -> a -> a
-trace'' s a = trace (s ++ show a) a
-
-
-
-
 cfa_add_regexp :: (CFA, S.Set State) -> Regexp -> RegexpTable -> SignNum -> (CFA, S.Set State)
 cfa_add_regexp (cfa, ss) (Regexp r) rt sign =
     let (cfa', ss') = cfa_add_regexp_alt (cfa, ss) r rt sign
@@ -134,6 +124,7 @@ cfa_add_regexp_alt (cfa, ss) r rt sign = case r of
     AltFromCat rcat -> cfa_add_regexp_cat (cfa, ss) rcat rt sign
     Alt rcat ralt   ->
         let (cfa', ss')   = cfa_add_regexp_cat (cfa, ss) rcat rt sign
+--        let (cfa', ss')   = cfa_add_regexp_cat_TO_WHERE_I_SAY (cfa, ss) rcat rt sign
             (cfa'', ss'') = cfa_add_regexp_alt (cfa', ss) ralt rt sign
         in  (cfa'', S.union ss' ss'')
 
@@ -216,6 +207,90 @@ gen_test_string_with_stats signatures =
 
 
 
+code_for_initial_state :: CFA -> M.HashMap SignNum [Condition] -> String
+code_for_initial_state cfa sign2conds = concat
+    [ "\nswitch (*CURSOR++) {\n\t"
+    , concatMap (\ (l, (ks, s)) -> concat
+        [ "case "
+        , show l
+        , ":"
+        , code_for_conditions $ M.filterWithKey (\ k _ -> S.member k ks) sign2conds
+        , "\n\t\tif (n_matching_signatures > 0) {"
+        , "\n\t\t\tgoto m_"
+        , show s
+        , ";\n\t\t} else {\n\t\t\tMARKER = CURSOR;\n\t\t\tgoto m_fin;\n\t\t}\n\t"
+        ]) (M.toList (neighbourhood (initialState cfa) cfa))
+    , "default:"
+    , "\n\t\tMARKER = CURSOR;"
+    , "\n\t\tgoto m_fin;"
+    , "\n\t}"
+    ]
+
+
+code_for_conditions :: M.HashMap SignNum [Condition] -> String
+code_for_conditions = M.foldlWithKey' (\code k conditions -> code ++ case conditions of
+    [] -> ""
+    _  -> concat
+        [ "\n\t\tis_active = "
+        , intercalate " && " conditions
+        , ";\n\t\tactive_signatures["
+        , show k
+        , "] = is_active;"
+        , "\n\t\tn_matching_signatures += is_active;"
+        ]
+    ) ""
+
+
+
+trace' :: (Show a) => a -> a
+trace' a = trace (show a) a
+
+
+trace'' :: (Show a) => String -> a -> a
+trace'' s a = trace (s ++ show a) a
+
+
+
+
+-- нужно следить за отпадающимим сигнатуоами
+-- возможно, небольшой список будет эффективнее
+code_for_state :: CFA -> State -> BS.ByteString
+code_for_state cfa s = (BS.pack . concat)
+    [ "\nm_"
+    , show s
+    , ":"
+    , if isFinal s cfa
+        then S.foldl' (\ s k -> s ++ concat
+            [ "\nif (active_signatures["
+            , show k
+            , "] == true) {"
+            , "\n\taccepted_signatures[accepted_count++] = "
+            , show k
+            , ";\n\tactive_signatures["
+            , show k
+            , "] = false;"
+            , "\nMARKER = CURSOR;"
+            , "\nadjust_marker = false;\n}"
+            ]) "" (acceptedSignatures s cfa)
+        else ""
+--    , "\nprintf(\"%s\\n\", CURSOR);"
+    , "\nswitch (*CURSOR++) {\n\t"
+    , concatMap (\ (l, (_, s')) -> concat
+        [ "case "
+        , show l
+        , ":\n\t\tgoto m_"
+        , show s'
+        , ";\n\t"
+        ]) (M.toList (neighbourhood s cfa))
+    , "default:"
+    , if isFinal s cfa then "" else "\n\t\tif (adjust_marker) \n\t\t\tMARKER = CURSOR;"
+    , "\n\t\tgoto m_fin;"
+    , "\n\t}"
+    ]
+
+
+
+
 main :: IO ()
 main = do
     args <- getArgs
@@ -226,15 +301,16 @@ main = do
 
 --    gen_test_source fsrc 3 10
 
-    (code, rules, rest) <- parse_source fsrc
+    (code_prolog, rules, rest) <- parse_source fsrc
     regexp_table <- case fsign of
         Just fs -> parse_signatures fs
         Nothing -> return M.empty
 
     let (conditions, regexps, codes) = (unzip3 . M.elems) rules
-    let indexes = M.keys rules
-    let num_sign = length indexes
-    let signs2conds = M.fromList $ zip indexes conditions
+    let indexes                      = M.keys rules
+    let num_sign                     = length indexes
+    let signs2conds                  = M.fromList $ zip indexes conditions
+    let code_labels                  = map (\k -> "code" ++ show k) [0 .. length codes - 1]
 
     let cfa' = emptyCFA
     let cfa  = fst $ M.foldlWithKey'
@@ -244,3 +320,88 @@ main = do
 
     toDot cfa "./cfa.dot"
     print cfa
+
+    let sign_table           = M.map (\r -> gen_signatures_from_regexp r (M.empty)) regexp_table
+    let all_signatures       = M.fromList $ zip [1 .. num_sign] $ map (\r -> gen_signatures_from_regexp r sign_table) regexps
+    let sign_maxlen          = maximum $ map BS.length $ concat $ M.elems all_signatures
+    let (test_string, stats) = gen_test_string_with_stats all_signatures
+
+    print all_signatures
+    print $ M.size all_signatures
+    print sign_maxlen
+    print (test_string, stats)
+
+    let code_init = BS.pack $ concat
+            [ "\n#define NUM_SIGN "
+            , show num_sign
+            , "\n#define SIGN_MAXLEN "
+            , show sign_maxlen
+            , "\n#define GOTO(x) { goto *code[x]; }"
+            , "\nbool active_signatures[NUM_SIGN];"
+            , "\nint accepted_signatures[NUM_SIGN + 1];"
+            , "\nint accepted_count = 0;"
+            , "\nint n_matching_signatures = 0;"
+            , "\nint i = 0;"
+            , "\nbool is_active;"
+            , "\nbool adjust_marker = true;"
+            , "\nstatic void * code[] = {"
+            , intercalate ", " (map ("&&" ++) code_labels)
+            , "};"
+            , "\nfor (i = 0; i < NUM_SIGN; i++) {"
+            , "\n\tactive_signatures[i] = true;"
+            , "\n\taccepted_signatures[i] = NUM_SIGN;"
+            , "\n}"
+            , "\naccepted_signatures[NUM_SIGN] = NUM_SIGN;"
+            , "\ngoto m_start;\n"
+            , concatMap (\ k -> concat
+                [ "\n"
+                , code_labels !! k
+                , ": "
+                , (map BS.unpack codes) !! k
+                , "\ngoto m_continue;"
+                ]) [0 .. length codes - 1]
+            , "\n\nm_fin:"
+            , "\nCURSOR = MARKER;"
+            , "\nadjust_marker = true;"
+            , "\ni = 0;"
+            , "\nm_continue:"
+            , "\nif (accepted_signatures[i] != NUM_SIGN)"
+            , "\n\tGOTO(accepted_signatures[i++]);"
+            , "\ngoto m_start;"
+            , "\n\nm_start:"
+            , "\nfor (i = accepted_count - 1; i >= 0; i--)"
+            , "\n\taccepted_signatures[i] = NUM_SIGN;"
+            , "\naccepted_count = 0;"
+            , "\nif (LIMIT - CURSOR < SIGN_MAXLEN) FILL();"
+            , "\nn_matching_signatures = 0;"
+            , code_for_initial_state cfa signs2conds
+            ]
+
+    let code_states = foldl'
+            (\ code s -> BS.concat [code, code_for_state cfa s])
+            (BS.pack "")
+            ((filter (/= (initialState cfa)) . states) cfa)
+
+    let code_epilog = BS.concat
+            [ (BS.pack . concat)
+                [ "}\n"
+                , "\nint main ()"
+                , "\n{"
+                , "\n    const char * buffer = \""
+                ]
+            , test_string
+            , (BS.pack . concat)
+                [ replicate (sign_maxlen + 0) '*'
+                , "\";\n    scan(buffer, strlen(buffer));"
+                , "\n    return 0;"
+                , "\n}"
+                , "\n"
+                ]
+            ]
+
+    BS.writeFile fdest $ BS.concat
+        [ code_prolog
+        , code_init
+        , code_states
+        , code_epilog
+        ]

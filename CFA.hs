@@ -8,6 +8,7 @@ module CFA
     , SignSet
     , emptyCFA
     , lastState
+    , states
     , addTransition
     , neighbourhood
     , initialState
@@ -20,10 +21,9 @@ module CFA
 
 import qualified Data.HashMap.Strict as M
 import qualified Data.Set            as S
-import           Data.List                (partition, foldl')
+import           Data.List                (foldl', nub)
 import           Control.Monad            (forM_)
-import           Data.Char                (ord)
-import           Data.Maybe               (isJust, isNothing, fromJust)
+import           Data.Maybe               (isJust, fromJust)
 
 import Debug.Trace
 
@@ -63,12 +63,16 @@ setFinal :: CFA -> SignNum -> State -> CFA
 setFinal (CFA s0 sl g fss) k s = CFA s0 sl g (M.insertWith (\ _ ks -> S.insert k ks) s (S.insert k S.empty) fss)
 
 
-acceptedSignatures :: CFA -> State -> SignSet
-acceptedSignatures (CFA _ _ _ fss) s = M.lookupDefault S.empty s fss
+acceptedSignatures :: State -> CFA -> SignSet
+acceptedSignatures s (CFA _ _ _ fss) = M.lookupDefault S.empty s fss
 
 
-neighbourhood :: CFA -> State -> CFANode
-neighbourhood (CFA _ _ g _) s = M.lookupDefault M.empty s g
+neighbourhood :: State -> CFA -> CFANode
+neighbourhood s (CFA _ _ g _) = M.lookupDefault M.empty s g
+
+
+states :: CFA -> [State]
+states (CFA _ _ g fss) = nub $ M.keys g ++ M.keys fss
 
 
 
