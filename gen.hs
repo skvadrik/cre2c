@@ -116,16 +116,57 @@ parse_signatures fp =
 cfa_add_regexp :: (CFA, S.Set State) -> Regexp -> RegexpTable -> SignNum -> (CFA, S.Set State)
 cfa_add_regexp (cfa, ss) (Regexp r) rt sign =
     let (cfa', ss') = cfa_add_regexp_alt (cfa, ss) r rt sign
-        cfa''       = S.foldl (\ c s -> setFinal c sign s) cfa' ss'
+        cfa''       = S.foldl (\ c s -> setFinal s sign c) cfa' ss'
     in  (cfa'', ss')
+
+------------------------------------------------------------------------------------------------------------------
+cfa_add_tie_regexp_cat :: (CFA, S.Set State) -> RegexpCat -> State -> RegexpTable -> SignNum -> (CFA, S.Set State)
+cfa_add_tie_regexp_cat (cfa, ss) r s rt sign = case r of
+    CatFromIter riter -> cfa_add_tie_regexp_iter (cfa, ss) riter s rt sign
+    Cat riter rcat    -> cfa_add_regexp_cat (cfa_add_regexp_iter (cfa, ss) riter rt sign) rcat rt sign
+
+cfa_add_tie_regexp_iter :: (CFA, S.Set State) -> RegexpIter -> State -> RegexpTable -> SignNum -> (CFA, S.Set State)
+cfa_add_tie_regexp_iter (cfa, ss) r s rt sign = case r of
+    IterFromPrim rprim -> cfa_add_tie_regexp_prim (cfa, ss) rprim s rt sign
+    Iter rprim n       -> foldl'
+        (\ (cfa', ss') _ ->
+            let (cfa'', ss'') = cfa_add_regexp_prim (cfa', ss') rprim rt sign
+            in  (cfa'', S.union ss' ss'')
+        )
+        (cfa, ss)
+        [1 .. n]
+
+cfa_add_tie_regexp_prim :: (CFA, S.Set State) -> RegexpPrim -> State -> RegexpTable -> SignNum -> (CFA, S.Set State)
+cfa_add_tie_regexp_prim (cfa, ss) r s rt sign = case r of
+    Elementary str -> foldl' (\(cfa', ss') c -> cfa_add_tie_regexp_atom (cfa', ss') c s sign) (cfa, ss) str
+    Name s         ->
+        let Regexp ralt = M.lookupDefault undefined s rt
+        in  cfa_add_regexp_alt (cfa, ss) ralt rt sign
+    Wrapped ralt   -> cfa_add_regexp_alt (cfa, ss) ralt rt sign
+
+cfa_add_tie_regexp_atom :: (CFA, S.Set State) -> Char -> State -> SignNum -> (CFA, S.Set State)
+cfa_add_tie_regexp_atom (cfa, ss) c s sign = S.foldl
+    (\ (cfa', ss') s' ->
+        let (cfa'', s'') = addTransition cfa' (s', c, sign, s)
+        in  (cfa'', S.insert s'' ss')
+    ) (cfa, S.empty)
+    ss
+------------------------------------------------------------------------------------------------------------------
 
 cfa_add_regexp_alt :: (CFA, S.Set State) -> RegexpAlt -> RegexpTable -> SignNum -> (CFA, S.Set State)
 cfa_add_regexp_alt (cfa, ss) r rt sign = case r of
     AltFromCat rcat -> cfa_add_regexp_cat (cfa, ss) rcat rt sign
     Alt rcat ralt   ->
         let (cfa', ss')   = cfa_add_regexp_cat (cfa, ss) rcat rt sign
---        let (cfa', ss')   = cfa_add_regexp_cat_TO_WHERE_I_SAY (cfa, ss) rcat rt sign
-            (cfa'', ss'') = cfa_add_regexp_alt (cfa', ss) ralt rt sign
+            (cfa'', ss'') = bind_ralt (cfa', ss) ralt (lastState cfa) rt sign
+        in  (cfa'', S.union ss' ss'')
+
+bind_ralt :: (CFA, S.Set State) -> RegexpAlt -> State -> RegexpTable -> SignNum -> (CFA, S.Set State)
+bind_ralt (cfa, ss) r s rt sign = case r of
+    AltFromCat rcat -> cfa_add_tie_regexp_cat (cfa, ss) rcat s rt sign
+    Alt rcat ralt   ->
+        let (cfa', ss')   = cfa_add_tie_regexp_cat (cfa, ss) rcat s rt sign
+            (cfa'', ss'') = bind_ralt (cfa', ss) ralt s rt sign
         in  (cfa'', S.union ss' ss'')
 
 -- есть смысл в том, чтобы мержить те состояния, в которые приводят альтернативы, взаимно не являющиесяя префиксами друг друга.
@@ -168,7 +209,7 @@ cfa_add_regexp_atom (cfa, ss) c sign =
             (\ (cfa', ss') s ->
                 let (cfa'', s') = addTransition cfa' (s, c, sign, sl)
                 in  (cfa'', S.insert s' ss')
-            ) (cfa, S.empty) 
+            ) (cfa, S.empty)
             ss
 
 
@@ -273,7 +314,7 @@ code_for_state cfa s = (BS.pack . concat)
             , "\nadjust_marker = false;\n}"
             ]) "" (acceptedSignatures s cfa)
         else ""
---    , "\nprintf(\"%s\\n\", CURSOR);"
+    , "\nprintf(\"%s\\n\", CURSOR);"
     , "\nswitch (*CURSOR++) {\n\t"
     , concatMap (\ (l, (_, s')) -> concat
         [ "case "
@@ -283,6 +324,7 @@ code_for_state cfa s = (BS.pack . concat)
         , ";\n\t"
         ]) (M.toList (neighbourhood s cfa))
     , "default:"
+--    , if isFinal s cfa then "" else "\n\t\tMARKER = CURSOR;"
     , if isFinal s cfa then "" else "\n\t\tif (adjust_marker) \n\t\t\tMARKER = CURSOR;"
     , "\n\t\tgoto m_fin;"
     , "\n\t}"

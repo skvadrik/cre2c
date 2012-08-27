@@ -59,8 +59,8 @@ isFinal :: State -> CFA -> Bool
 isFinal st cfa = isJust $ M.lookup st (final_states cfa)
 
 
-setFinal :: CFA -> SignNum -> State -> CFA
-setFinal (CFA s0 sl g fss) k s = CFA s0 sl g (M.insertWith (\ _ ks -> S.insert k ks) s (S.insert k S.empty) fss)
+setFinal :: State -> SignNum -> CFA -> CFA
+setFinal s k (CFA s0 sl g fss) = CFA s0 sl g (M.insertWith (\ _ ks -> S.insert k ks) s (S.insert k S.empty) fss)
 
 
 acceptedSignatures :: State -> CFA -> SignSet
