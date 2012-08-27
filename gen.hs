@@ -159,13 +159,14 @@ bind_rprim (cfa, ss) r s rt sign = case r of
 
 bind_ratom :: (CFA, S.Set State) -> Char -> Maybe State -> SignNum -> (CFA, S.Set State)
 bind_ratom (cfa, ss) c s sign =
-    let sl = if isJust s then fromJust s else maxStateNumber cfa
+    let (s', cfa') = case s of
+            Just s' -> (s', cfa)
+            Nothing -> let s'' = maxStateNumber cfa in (s'', setBindable (Just s'') cfa)
     in  S.foldl
-            (\ (cfa', ss') s' ->
-                let (cfa'', s'') = addTransition cfa' (s', c, sign, sl)
-                in  (cfa'', S.insert s'' ss')
-            ) (setBindable (Just sl) cfa, S.empty)
-            ss
+            (\ (cfa'', ss') s'' ->
+                let (cfa''', s''') = addTransition cfa'' (s'', c, sign, s')
+                in  (cfa''', S.insert s''' ss')
+            ) (cfa', S.empty) ss
 
 
 
