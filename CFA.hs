@@ -100,8 +100,9 @@ addTransition cfa@(CFA s0 sl sb g fss) (s1, l, k, s2) = case M.lookup s1 g of
         in  (CFA s0 sl sb g' fss, (snd . fromJust) mb_node)
     _ ->
         let ks = S.insert k S.empty
-            g' = M.insertWith (\ _ node -> M.insert l (ks, s2) node) s1 (M.insert l (ks, s2) M.empty) g
-        in  (CFA s0 (max (sl + 1) s2) sb g' fss, s2)
+            g'  = M.insertWith (\ _ node -> M.insert l (ks, s2) node) s1 (M.insert l (ks, s2) M.empty) g
+            g'' = M.insertWith (\ _ node -> node) s2 (M.empty) g'
+        in  (CFA s0 (max (sl + 1) s2) sb g'' fss, s2)
 
 
 

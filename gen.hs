@@ -317,7 +317,7 @@ main = do
         [src, dest, sign] -> return (src, dest, Just sign)
         _                 -> usage >> undefined
 
-    gen_test_source fsrc 1 100000
+    gen_test_source fsrc 1 50000
 
     (code_prolog, rules, rest) <- parse_source fsrc
     regexp_table <- case fsign of
@@ -396,14 +396,10 @@ main = do
             , code_for_initial_state (initialNode cfa) signs2conds
             ]
 
-    let code_states' = M.foldlWithKey'
+    let code_states = M.foldlWithKey'
             (\ code s node -> BS.concat [code, code_for_state cfa s node])
             (BS.pack "")
             (cfaGraph cfa)
-    let code_states = M.foldlWithKey'
-            (\ code s signs -> BS.concat [code, code_for_final_state s signs])
-            code_states'
-            (finalStates cfa)
 
     let code_epilog = BS.concat
             [ (BS.pack . concat)
