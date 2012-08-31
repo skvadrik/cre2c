@@ -1,7 +1,8 @@
 {-# LANGUAGE BangPatterns #-}
 
 module CFA
-    ( CFA(..)
+    ( CFA
+    , CFANode
     , Label
     , State
     , SignNum
@@ -13,9 +14,10 @@ module CFA
     , maxStateNumber
     , bindableState
     , isFinal
-    , states
-    , neighbourhood
+    , finalStates
+    , cfaGraph
     , acceptedSignatures
+    , initialNode
 
     , setFinal
     , setBindable
@@ -64,20 +66,23 @@ maxStateNumber = max_state_number
 bindableState :: CFA -> Maybe State
 bindableState = bindable_state
 
+acceptedSignatures :: State -> CFA -> SignSet
+acceptedSignatures s (CFA _ _ _ _ fss) = M.lookupDefault S.empty s fss
+
+finalStates :: CFA -> M.HashMap State SignSet
+finalStates = final_states
+
+cfaGraph :: CFA -> CFAGraph
+cfaGraph = cfa_graph
+
+initialNode :: CFA -> CFANode
+initialNode (CFA st0 _ _ g _) = M.lookupDefault undefined st0 g
+
 
 
 
 isFinal :: State -> CFA -> Bool
 isFinal st cfa = isJust $ M.lookup st (final_states cfa)
-
-acceptedSignatures :: State -> CFA -> SignSet
-acceptedSignatures s (CFA _ _ _ _ fss) = M.lookupDefault S.empty s fss
-
-neighbourhood :: State -> CFA -> CFANode
-neighbourhood s (CFA _ _ _ g _) = M.lookupDefault M.empty s g
-
-states :: CFA -> [State]
-states (CFA _ _ _ g fss) = nub $ M.keys g ++ M.keys fss
 
 
 

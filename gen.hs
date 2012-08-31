@@ -141,9 +141,7 @@ bind_riter (cfa, ss) r s rt sign = case r of
                 (\ (cfa', ss') _ ->
                     let (cfa'', ss'') = bind_rprim (cfa', ss') rprim Nothing rt sign
                     in  (cfa'', S.union ss' ss'')
-                )
-                (cfa, ss)
-                [1 .. n - 1]
+                ) (cfa, ss) [1 .. n - 1]
             (cfa'', ss'') = bind_rprim (cfa', ss') rprim s rt sign
         in  (cfa'', S.union ss' ss'')
 
@@ -204,8 +202,8 @@ gen_test_string_with_stats signatures =
 
 
 
-code_for_initial_state :: CFA -> M.HashMap SignNum [Condition] -> String
-code_for_initial_state cfa sign2conds = concat
+code_for_initial_state :: CFANode -> M.HashMap SignNum [Condition] -> String
+code_for_initial_state node0 sign2conds = concat
     [ "\nswitch (*CURSOR++) {\n\t"
     , concatMap (\ (l, (ks, s)) -> concat
         [ "case "
@@ -216,7 +214,7 @@ code_for_initial_state cfa sign2conds = concat
         , "\n\t\t\tgoto m_"
         , show s
         , ";\n\t\t} else {\n\t\t\tMARKER = CURSOR;\n\t\t\tgoto m_fin;\n\t\t}\n\t"
-        ]) (M.toList (neighbourhood (initialState cfa) cfa))
+        ]) (M.toList node0)
     , "default:"
     , "\n\t\tMARKER = CURSOR;"
     , "\n\t\tgoto m_fin;"
@@ -227,13 +225,14 @@ code_for_initial_state cfa sign2conds = concat
 code_for_conditions :: M.HashMap SignNum [Condition] -> String
 code_for_conditions = M.foldlWithKey' (\code k conditions -> code ++ case conditions of
     [] -> ""
-    _  -> concat
-        [ "\n\t\tis_active = "
-        , intercalate " && " conditions
-        , ";\n\t\tactive_signatures["
+    _  -> let conds = intercalate " && " conditions in concat
+        [ "\n\t\tactive_signatures["
         , show k
-        , "] = is_active;"
-        , "\n\t\tn_matching_signatures += is_active;"
+        , "] = "
+        , conds
+        , ";\n\t\tn_matching_signatures += "
+        , conds
+        , ";"
         ]
     ) ""
 
@@ -249,10 +248,32 @@ trace'' s a = trace (s ++ show a) a
 
 
 
+code_for_final_state :: State -> SignSet -> BS.ByteString
+code_for_final_state s signs = (BS.pack . concat)
+    [ "\nm_"
+    , show s
+    , ":"
+    , S.foldl' (\ s k -> s ++ concat
+        [ "\nif (active_signatures["
+        , show k
+        , "] == true) {"
+        , "\n\taccepted_signatures[accepted_count++] = "
+        , show k
+        , ";\n\tactive_signatures["
+        , show k
+        , "] = false;"
+        , "\nMARKER = CURSOR;"
+        , "\nadjust_marker = false;\n}"
+        ]) "" signs
+    , "\nprintf(\"%s\\n\", CURSOR);"
+    , "\ngoto m_fin;"
+    ]
+
+
 -- нужно следить за отпадающимим сигнатуоами
 -- возможно, небольшой список будет эффективнее
-code_for_state :: CFA -> State -> BS.ByteString
-code_for_state cfa s = (BS.pack . concat)
+code_for_state :: CFA -> State -> CFANode -> BS.ByteString
+code_for_state cfa s node = (BS.pack . concat)
     [ "\nm_"
     , show s
     , ":"
@@ -278,7 +299,7 @@ code_for_state cfa s = (BS.pack . concat)
         , ":\n\t\tgoto m_"
         , show s'
         , ";\n\t"
-        ]) (M.toList (neighbourhood s cfa))
+        ]) (M.toList node)
     , "default:"
     , if isFinal s cfa then "" else "\n\t\tif (adjust_marker) \n\t\t\tMARKER = CURSOR;"
     , "\n\t\tgoto m_fin;"
@@ -296,7 +317,7 @@ main = do
         [src, dest, sign] -> return (src, dest, Just sign)
         _                 -> usage >> undefined
 
---    gen_test_source fsrc 3 10
+    gen_test_source fsrc 1 100000
 
     (code_prolog, rules, rest) <- parse_source fsrc
     regexp_table <- case fsign of
@@ -315,33 +336,32 @@ main = do
             (cfa', S.insert (initialState cfa') S.empty)
             (M.fromList (zip indexes regexps))
 
-    toDot cfa "./cfa.dot"
+--    toDot cfa "./cfa.dot"
     print cfa
-    print regexps
+--    print regexps
 
     let sign_table           = M.map (\r -> gen_signatures_from_regexp r (M.empty)) regexp_table
     let all_signatures       = M.fromList $ zip [1 .. num_sign] $ map (\r -> gen_signatures_from_regexp r sign_table) regexps
     let sign_maxlen          = maximum $ map BS.length $ concat $ M.elems all_signatures
     let (test_string, stats) = gen_test_string_with_stats all_signatures
 
-    print all_signatures
-    print $ M.size all_signatures
-    print sign_maxlen
-    print (test_string, stats)
-    print $ length $ states cfa
+--    print all_signatures
+--    print $ M.size all_signatures
+--    print sign_maxlen
+--    print (test_string, stats)
+--    print $ length $ states cfa
 
     let code_init = BS.pack $ concat
             [ "\n#define NUM_SIGN "
             , show num_sign
             , "\n#define SIGN_MAXLEN "
-            , show sign_maxlen
+--            , show sign_maxlen
             , "\n#define GOTO(x) { goto *code[x]; }"
             , "\nbool active_signatures[NUM_SIGN];"
             , "\nint accepted_signatures[NUM_SIGN + 1];"
             , "\nint accepted_count = 0;"
             , "\nint n_matching_signatures = 0;"
             , "\nint i = 0;"
-            , "\nbool is_active;"
             , "\nbool adjust_marker = true;"
             , "\nstatic void * code[] = {"
             , intercalate ", " (map ("&&" ++) code_labels)
@@ -373,13 +393,17 @@ main = do
             , "\naccepted_count = 0;"
             , "\nif (LIMIT - CURSOR < SIGN_MAXLEN) FILL();"
             , "\nn_matching_signatures = 0;"
-            , code_for_initial_state cfa signs2conds
+            , code_for_initial_state (initialNode cfa) signs2conds
             ]
 
-    let code_states = foldl'
-            (\ code s -> BS.concat [code, code_for_state cfa s])
+    let code_states' = M.foldlWithKey'
+            (\ code s node -> BS.concat [code, code_for_state cfa s node])
             (BS.pack "")
-            ((filter (/= (initialState cfa)) . states) cfa)
+            (cfaGraph cfa)
+    let code_states = M.foldlWithKey'
+            (\ code s signs -> BS.concat [code, code_for_final_state s signs])
+            code_states'
+            (finalStates cfa)
 
     let code_epilog = BS.concat
             [ (BS.pack . concat)
@@ -388,9 +412,9 @@ main = do
                 , "\n{"
                 , "\n    const char * buffer = \""
                 ]
-            , test_string
+--            , test_string
             , (BS.pack . concat)
-                [ replicate (sign_maxlen + 0) '*'
+                [ ""--replicate (sign_maxlen + 0) '*'
                 , "\";\n    scan(buffer, strlen(buffer));"
                 , "\n    return 0;"
                 , "\n}"
