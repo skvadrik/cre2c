@@ -226,6 +226,7 @@ code_for_initial_state node0 sign2conds = concat
 code_for_conditions :: M.HashMap SignNum [Condition] -> String
 code_for_conditions = M.foldlWithKey' (\code k conditions -> code ++ case conditions of
     [] -> ""
+{-
     _  -> let conds = intercalate " && " conditions in concat
         [ "\n\t\tactive_signatures["
         , show k
@@ -234,6 +235,20 @@ code_for_conditions = M.foldlWithKey' (\code k conditions -> code ++ case condit
         , ";\n\t\tactive_count += "
         , conds
         , ";"
+        ]
+    ) ""
+-}
+    _  -> let conds = intercalate " && " conditions in concat
+        [ "\n\t\tif ("
+        , conds
+        , ") {"
+        , "\n\t\t\tactive_signatures["
+        , show k
+        , "] = true;"
+        , "\n\t\t\tactive_count ++;"
+        , "\n\t\t\ton_signatures[on_count++] = "
+        , show k
+        , ";\n\t\t}"
         ]
     ) ""
 
@@ -294,18 +309,28 @@ code_for_state cfa s node = (BS.pack . concat)
         else ""
     , "\nprintf(\"%s\\n\", CURSOR);"
     , "\nswitch (*CURSOR++) {"
-    , concatMap (\ (l, (_, s')) -> concat
+    , concatMap (\ (l, (signs, s')) -> concat
         [ "\n\tcase "
         , show l
         , ":"
+-- yet there's another way in case you would store ingoing sign set... no! you don't know by what arc you came to this state
+-- surely ingoing sign set == outgoing one for non-terminal states :)
+        , "\n\t\tfor (int i = 0; i < on_count; i++)"
+        , "\n\t\t\tif (on_signatures[i] != "
+        , intercalate " && on_signatures[i] != " $ (map show . S.toList) signs
+        , ") {\n\t\t\t\tactive_signatures[on_signatures[i]] = false;"
+        , "\n\t\t\t\tif (i < on_count - 1)"
+        , "\n\t\t\t\t\ton_signatures[i--] = on_signatures[on_count - 1];"
+        , "\n\t\t\t\ton_count --;"
+        , "\n\t\t\t}"
         , "\n\t\tif (active_count > 0)"
         , "\n\t\t\tgoto m_"
         , show s'
         , ";\n\t\telse {"
         , "\n\t\t\tif (adjust_marker)"
         , "\n\t\t\t\tMARKER = CURSOR;"
-        , "\n\t\t\t\tgoto m_fin;"
-        , "\n\t\t\t}"
+        , "\n\t\t\tgoto m_fin;"
+        , "\n\t\t}"
         ]) (M.toList node)
     , "\n\tdefault:"
     , if isFinal s cfa then "" else "\n\t\tif (adjust_marker) \n\t\t\tMARKER = CURSOR;"
@@ -364,12 +389,14 @@ main = do
             , show sign_maxlen
             , "\n#define GOTO(x) { goto *code[x]; }"
             , "\n\nbool active_signatures[NUM_SIGN];"
-            , "\nint  active_count   = 0;"
-            , "\n\nint  accepted_signatures[NUM_SIGN + 1];"
-            , "\nint  accepted_count = 0;"
+            , "\nint  active_count;"
+            , "\n\nint accepted_signatures[NUM_SIGN + 1];"
+            , "\nint accepted_count;"
             , "\nfor (int i = 0; i <= NUM_SIGN; i++) {"
             , "\n\taccepted_signatures[i] = NUM_SIGN;"
             , "\n}"
+            , "\nint on_signatures[NUM_SIGN];"
+            , "\nint on_count;"
             , "\n\nint  j;"
             , "\nbool adjust_marker;"
             , "\n\nstatic void * code[] = {"
@@ -391,11 +418,13 @@ main = do
             , "\n\tGOTO(accepted_signatures[j++]);"
             , "\ngoto m_start;"
             , "\n\n\nm_start:"
+-- try to adopt copying of last element into hole instead of checking if element equals NUM_SIGN
             , "\nfor (int i = accepted_count - 1; i >= 0; i--)"
             , "\n\taccepted_signatures[i] = NUM_SIGN;"
             , "\nfor (int i = 0; i < NUM_SIGN; i++)"
             , "\n\tactive_signatures[i] = false;"
             , "\nactive_count   = 0;"
+            , "\non_count       = 0;"
             , "\naccepted_count = 0;"
             , "\nadjust_marker  = true;"
             , "\nif (LIMIT - CURSOR < SIGN_MAXLEN) FILL();\n\n"
