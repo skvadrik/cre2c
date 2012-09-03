@@ -391,7 +391,7 @@ main = do
             , "\n\nbool active_signatures[NUM_SIGN];"
             , "\nint  active_count;"
             , "\n\nint accepted_signatures[NUM_SIGN + 1];"
-            , "\nint accepted_count;"
+            , "\nint accepted_count = 0;"
             , "\nfor (int i = 0; i <= NUM_SIGN; i++) {"
             , "\n\taccepted_signatures[i] = NUM_SIGN;"
             , "\n}"
