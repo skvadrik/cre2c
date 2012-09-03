@@ -246,7 +246,6 @@ code_for_conditions = M.foldlWithKey' (\code k conditions -> code ++ case condit
         , show k
         , "] = true;"
         , "\n\t\t\tactive_count ++;"
-        , "\n\t\t\ton_signatures[on_count++] = "
         , show k
         , ";\n\t\t}"
         ]
@@ -312,25 +311,9 @@ code_for_state cfa s node = (BS.pack . concat)
     , concatMap (\ (l, (signs, s')) -> concat
         [ "\n\tcase "
         , show l
-        , ":"
--- yet there's another way in case you would store ingoing sign set... no! you don't know by what arc you came to this state
--- surely ingoing sign set == outgoing one for non-terminal states :)
-        , "\n\t\tfor (int i = 0; i < on_count; i++)"
-        , "\n\t\t\tif (on_signatures[i] != "
-        , intercalate " && on_signatures[i] != " $ (map show . S.toList) signs
-        , ") {\n\t\t\t\tactive_signatures[on_signatures[i]] = false;"
-        , "\n\t\t\t\tif (i < on_count - 1)"
-        , "\n\t\t\t\t\ton_signatures[i--] = on_signatures[on_count - 1];"
-        , "\n\t\t\t\ton_count --;"
-        , "\n\t\t\t}"
-        , "\n\t\tif (active_count > 0)"
-        , "\n\t\t\tgoto m_"
+        , ":\n\t\tgoto m_"
         , show s'
-        , ";\n\t\telse {"
-        , "\n\t\t\tif (adjust_marker)"
-        , "\n\t\t\t\tMARKER = CURSOR;"
-        , "\n\t\t\tgoto m_fin;"
-        , "\n\t\t}"
+        , ";\n\t\tgoto m_fin;"
         ]) (M.toList node)
     , "\n\tdefault:"
     , if isFinal s cfa then "" else "\n\t\tif (adjust_marker) \n\t\t\tMARKER = CURSOR;"
@@ -395,8 +378,6 @@ main = do
             , "\nfor (int i = 0; i <= NUM_SIGN; i++) {"
             , "\n\taccepted_signatures[i] = NUM_SIGN;"
             , "\n}"
-            , "\nint on_signatures[NUM_SIGN];"
-            , "\nint on_count;"
             , "\n\nint  j;"
             , "\nbool adjust_marker;"
             , "\n\nstatic void * code[] = {"
@@ -424,7 +405,6 @@ main = do
             , "\nfor (int i = 0; i < NUM_SIGN; i++)"
             , "\n\tactive_signatures[i] = false;"
             , "\nactive_count   = 0;"
-            , "\non_count       = 0;"
             , "\naccepted_count = 0;"
             , "\nadjust_marker  = true;"
             , "\nif (LIMIT - CURSOR < SIGN_MAXLEN) FILL();\n\n"
