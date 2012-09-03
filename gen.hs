@@ -15,6 +15,7 @@ import           Data.Maybe                 (isNothing, fromJust, isJust)
 import           Control.Arrow              (second)
 import           RegexpGenerator
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.DList            as DL
 
 import Debug.Trace
 
@@ -210,7 +211,7 @@ code_for_initial_state node0 sign2conds = concat
         , show l
         , ":"
         , code_for_conditions $ M.filterWithKey (\ k _ -> S.member k ks) sign2conds
-        , "\n\t\tif (n_matching_signatures > 0) {"
+        , "\n\t\tif (active_count > 0) {"
         , "\n\t\t\tgoto m_"
         , show s
         , ";\n\t\t} else {\n\t\t\tMARKER = CURSOR;\n\t\t\tgoto m_fin;\n\t\t}\n\t"
@@ -230,7 +231,7 @@ code_for_conditions = M.foldlWithKey' (\code k conditions -> code ++ case condit
         , show k
         , "] = "
         , conds
-        , ";\n\t\tn_matching_signatures += "
+        , ";\n\t\tactive_count += "
         , conds
         , ";"
         ]
@@ -238,9 +239,9 @@ code_for_conditions = M.foldlWithKey' (\code k conditions -> code ++ case condit
 
 
 
+
 trace' :: (Show a) => a -> a
 trace' a = trace (show a) a
-
 
 trace'' :: (Show a) => String -> a -> a
 trace'' s a = trace (s ++ show a) a
@@ -292,15 +293,21 @@ code_for_state cfa s node = (BS.pack . concat)
             ]) "" (acceptedSignatures s cfa)
         else ""
     , "\nprintf(\"%s\\n\", CURSOR);"
-    , "\nswitch (*CURSOR++) {\n\t"
+    , "\nswitch (*CURSOR++) {"
     , concatMap (\ (l, (_, s')) -> concat
-        [ "case "
+        [ "\n\tcase "
         , show l
-        , ":\n\t\tgoto m_"
+        , ":"
+        , "\n\t\tif (active_count > 0)"
+        , "\n\t\t\tgoto m_"
         , show s'
-        , ";\n\t"
+        , ";\n\t\telse {"
+        , "\n\t\t\tif (adjust_marker)"
+        , "\n\t\t\t\tMARKER = CURSOR;"
+        , "\n\t\t\t\tgoto m_fin;"
+        , "\n\t\t\t}"
         ]) (M.toList node)
-    , "default:"
+    , "\n\tdefault:"
     , if isFinal s cfa then "" else "\n\t\tif (adjust_marker) \n\t\t\tMARKER = CURSOR;"
     , "\n\t\tgoto m_fin;"
     , "\n\t}"
@@ -317,7 +324,7 @@ main = do
         [src, dest, sign] -> return (src, dest, Just sign)
         _                 -> usage >> undefined
 
-    gen_test_source fsrc 1 50000
+--    gen_test_source fsrc 3 10
 
     (code_prolog, rules, rest) <- parse_source fsrc
     regexp_table <- case fsign of
@@ -336,42 +343,39 @@ main = do
             (cfa', S.insert (initialState cfa') S.empty)
             (M.fromList (zip indexes regexps))
 
---    toDot cfa "./cfa.dot"
+    toDot cfa "./cfa.dot"
     print cfa
---    print regexps
+    print regexps
 
     let sign_table           = M.map (\r -> gen_signatures_from_regexp r (M.empty)) regexp_table
     let all_signatures       = M.fromList $ zip [1 .. num_sign] $ map (\r -> gen_signatures_from_regexp r sign_table) regexps
     let sign_maxlen          = maximum $ map BS.length $ concat $ M.elems all_signatures
     let (test_string, stats) = gen_test_string_with_stats all_signatures
 
---    print all_signatures
---    print $ M.size all_signatures
---    print sign_maxlen
---    print (test_string, stats)
---    print $ length $ states cfa
+    print all_signatures
+    print $ M.size all_signatures
+    print sign_maxlen
+    print (test_string, stats)
 
     let code_init = BS.pack $ concat
             [ "\n#define NUM_SIGN "
             , show num_sign
             , "\n#define SIGN_MAXLEN "
---            , show sign_maxlen
+            , show sign_maxlen
             , "\n#define GOTO(x) { goto *code[x]; }"
-            , "\nbool active_signatures[NUM_SIGN];"
-            , "\nint accepted_signatures[NUM_SIGN + 1];"
-            , "\nint accepted_count = 0;"
-            , "\nint n_matching_signatures = 0;"
-            , "\nint i = 0;"
-            , "\nbool adjust_marker = true;"
-            , "\nstatic void * code[] = {"
-            , intercalate ", " (map ("&&" ++) code_labels)
-            , "};"
-            , "\nfor (i = 0; i < NUM_SIGN; i++) {"
-            , "\n\tactive_signatures[i] = true;"
+            , "\n\nbool active_signatures[NUM_SIGN];"
+            , "\nint  active_count   = 0;"
+            , "\n\nint  accepted_signatures[NUM_SIGN + 1];"
+            , "\nint  accepted_count = 0;"
+            , "\nfor (int i = 0; i <= NUM_SIGN; i++) {"
             , "\n\taccepted_signatures[i] = NUM_SIGN;"
             , "\n}"
-            , "\naccepted_signatures[NUM_SIGN] = NUM_SIGN;"
-            , "\ngoto m_start;\n"
+            , "\n\nint  j;"
+            , "\nbool adjust_marker;"
+            , "\n\nstatic void * code[] = {"
+            , intercalate ", " (map ("&&" ++) code_labels)
+            , "};"
+            , "\n\ngoto m_start;\n\n"
             , concatMap (\ k -> concat
                 [ "\n"
                 , code_labels !! k
@@ -379,20 +383,22 @@ main = do
                 , (map BS.unpack codes) !! k
                 , "\ngoto m_continue;"
                 ]) [0 .. length codes - 1]
-            , "\n\nm_fin:"
+            , "\n\n\nm_fin:"
             , "\nCURSOR = MARKER;"
-            , "\nadjust_marker = true;"
-            , "\ni = 0;"
+            , "\nj = 0;"
             , "\nm_continue:"
-            , "\nif (accepted_signatures[i] != NUM_SIGN)"
-            , "\n\tGOTO(accepted_signatures[i++]);"
+            , "\nif (accepted_signatures[j] != NUM_SIGN)"
+            , "\n\tGOTO(accepted_signatures[j++]);"
             , "\ngoto m_start;"
-            , "\n\nm_start:"
-            , "\nfor (i = accepted_count - 1; i >= 0; i--)"
+            , "\n\n\nm_start:"
+            , "\nfor (int i = accepted_count - 1; i >= 0; i--)"
             , "\n\taccepted_signatures[i] = NUM_SIGN;"
+            , "\nfor (int i = 0; i < NUM_SIGN; i++)"
+            , "\n\tactive_signatures[i] = false;"
+            , "\nactive_count   = 0;"
             , "\naccepted_count = 0;"
-            , "\nif (LIMIT - CURSOR < SIGN_MAXLEN) FILL();"
-            , "\nn_matching_signatures = 0;"
+            , "\nadjust_marker  = true;"
+            , "\nif (LIMIT - CURSOR < SIGN_MAXLEN) FILL();\n\n"
             , code_for_initial_state (initialNode cfa) signs2conds
             ]
 
@@ -408,9 +414,9 @@ main = do
                 , "\n{"
                 , "\n    const char * buffer = \""
                 ]
---            , test_string
+            , test_string
             , (BS.pack . concat)
-                [ ""--replicate (sign_maxlen + 0) '*'
+                [ replicate (sign_maxlen + 0) '*'
                 , "\";\n    scan(buffer, strlen(buffer));"
                 , "\n    return 0;"
                 , "\n}"
