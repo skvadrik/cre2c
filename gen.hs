@@ -113,6 +113,62 @@ parse_signatures fp =
 
 
 
+{-
+cfa_add_regexp :: (CFA, S.Set State) -> Regexp -> RegexpTable -> SignNum -> (CFA, S.Set State)
+cfa_add_regexp (cfa, ss) (Regexp r) rt sign =
+    let (cfa', ss') = bind_ralt (cfa, ss) r Nothing rt sign
+        cfa''       = S.foldl (\ c s -> setFinal s sign c) cfa' ss'
+    in  (cfa'', ss')
+
+bind_ralt :: (CFA, S.Set State) -> RegexpAlt -> Maybe State -> RegexpTable -> SignNum -> (CFA, S.Set State)
+bind_ralt (cfa, ss) r s rt sign = case r of
+    AltFromCat rcat -> bind_rcat (cfa, ss) rcat s rt sign
+    Alt rcat ralt   ->
+        let (cfa', ss')   = bind_rcat (cfa, ss) rcat s rt sign
+            sl            = if isJust s then s else bindableState cfa'
+            (cfa'', ss'') = bind_ralt (cfa', ss) ralt sl rt sign
+        in  (cfa'', S.union ss' ss'')
+
+bind_rcat :: (CFA, S.Set State) -> RegexpCat -> Maybe State -> RegexpTable -> SignNum -> (CFA, S.Set State)
+bind_rcat (cfa, ss) r s rt sign = case r of
+    CatFromIter riter -> bind_riter (cfa, ss) riter s rt sign
+    Cat riter rcat    -> bind_rcat (bind_riter (cfa, ss) riter Nothing rt sign) rcat s rt sign
+
+bind_riter :: (CFA, S.Set State) -> RegexpIter -> Maybe State -> RegexpTable -> SignNum -> (CFA, S.Set State)
+bind_riter (cfa, ss) r s rt sign = case r of
+    IterFromPrim rprim -> bind_rprim (cfa, ss) rprim s rt sign
+    Iter rprim n       ->
+        let (cfa', ss') = foldl'
+                (\ (cfa', ss') _ ->
+                    let (cfa'', ss'') = bind_rprim (cfa', ss') rprim Nothing rt sign
+                    in  (cfa'', S.union ss' ss'')
+                ) (cfa, ss) [1 .. n - 1]
+            (cfa'', ss'') = bind_rprim (cfa', ss') rprim s rt sign
+        in  (cfa'', S.union ss' ss'')
+
+bind_rprim :: (CFA, S.Set State) -> RegexpPrim -> Maybe State -> RegexpTable -> SignNum -> (CFA, S.Set State)
+bind_rprim (cfa, ss) r s rt sign = case r of
+    Elementary str ->
+        let (cfa'', ss'') = foldl' (\ (cfa', ss') c -> bind_ratom (cfa', ss') c Nothing sign) (cfa, ss) (init str)
+        in  bind_ratom (cfa'', ss'') (last str) s sign
+    Name str       ->
+        let Regexp ralt = M.lookupDefault undefined str rt
+        in  bind_ralt (cfa, ss) ralt s rt sign
+    Wrapped ralt   -> bind_ralt (cfa, ss) ralt s rt sign
+
+bind_ratom :: (CFA, S.Set State) -> Char -> Maybe State -> SignNum -> (CFA, S.Set State)
+bind_ratom (cfa, ss) c s sign =
+    let (s', cfa') = case s of
+            Just s' -> (s', cfa)
+            Nothing -> let s'' = maxStateNumber cfa in (s'', setBindable (Just s'') cfa)
+    in  S.foldl
+            (\ (cfa'', ss') s'' ->
+                let (cfa''', s''') = addTransition cfa'' (s'', c, sign, s')
+                in  (cfa''', S.insert s''' ss')
+            ) (cfa', S.empty) ss
+-}
+
+
 
 cfa_add_regexp :: (CFA, S.Set State) -> Regexp -> RegexpTable -> SignNum -> (CFA, S.Set State)
 cfa_add_regexp (cfa, ss) (Regexp r) rt sign =
@@ -218,18 +274,6 @@ code_for_initial_state node0 sign2conds = concat
 code_for_conditions :: M.HashMap SignNum [Condition] -> String
 code_for_conditions = M.foldlWithKey' (\code k conditions -> code ++ case conditions of
     [] -> ""
-{-
-    _  -> let conds = intercalate " && " conditions in concat
-        [ "\n\t\tactive_signatures["
-        , show k
-        , "] = "
-        , conds
-        , ";\n\t\tactive_count += "
-        , conds
-        , ";"
-        ]
-    ) ""
--}
     _  -> let conds = intercalate " && " conditions in concat
         [ "\n\t\tif ("
         , conds
@@ -238,8 +282,7 @@ code_for_conditions = M.foldlWithKey' (\code k conditions -> code ++ case condit
         , show k
         , "] = true;"
         , "\n\t\t\tactive_count ++;"
-        , show k
-        , ";\n\t\t}"
+        , "\n\t\t}"
         ]
     ) ""
 
@@ -255,30 +298,6 @@ trace'' s a = trace (s ++ show a) a
 
 
 
-code_for_final_state :: State -> SignSet -> BS.ByteString
-code_for_final_state s signs = (BS.pack . concat)
-    [ "\nm_"
-    , show s
-    , ":"
-    , S.foldl' (\ s k -> s ++ concat
-        [ "\nif (active_signatures["
-        , show k
-        , "] == true) {"
-        , "\n\taccepted_signatures[accepted_count++] = "
-        , show k
-        , ";\n\tactive_signatures["
-        , show k
-        , "] = false;"
-        , "\nMARKER = CURSOR;"
-        , "\nadjust_marker = false;\n}"
-        ]) "" signs
-    , "\nprintf(\"%s\\n\", CURSOR);"
-    , "\ngoto m_fin;"
-    ]
-
-
--- нужно следить за отпадающимим сигнатуоами
--- возможно, небольшой список будет эффективнее
 code_for_state :: CFA -> State -> CFANode -> BS.ByteString
 code_for_state cfa s node = (BS.pack . concat)
     [ "\nm_"
@@ -294,23 +313,26 @@ code_for_state cfa s node = (BS.pack . concat)
             , ";\n\tactive_signatures["
             , show k
             , "] = false;"
-            , "\nMARKER = CURSOR;"
-            , "\nadjust_marker = false;\n}"
+            , "\n\tactive_count --;"
+            , "\n\tMARKER = CURSOR;"
+            , "\n\tadjust_marker = false;\n}"
             ]) "" (acceptedSignatures s cfa)
         else ""
---    , "\nprintf(\"%s\\n\", CURSOR);"
-    , "\nswitch (*CURSOR++) {"
+    , "\nprintf(\"%s\\n\", CURSOR);"
+    , if isFinal s cfa then "\nif (active_count > 0) " else "\n"
+    , "switch (*CURSOR++) {"
     , concatMap (\ (l, (signs, s')) -> concat
         [ "\n\tcase "
         , show l
         , ":\n\t\tgoto m_"
         , show s'
-        , ";\n\t\tgoto m_fin;"
+        , ";"
         ]) (M.toList node)
     , "\n\tdefault:"
-    , if isFinal s cfa then "" else "\n\t\tif (adjust_marker) \n\t\t\tMARKER = CURSOR;"
+    , if isFinal s cfa then "" else "\n\t\tif (adjust_marker)\n\t\t\tMARKER = CURSOR;"
     , "\n\t\tgoto m_fin;"
     , "\n\t}"
+    , if isFinal s cfa then "\nelse goto m_fin;" else ""
     ]
 
 
@@ -324,7 +346,7 @@ main = do
         [src, dest, sign] -> return (src, dest, Just sign)
         _                 -> usage >> undefined
 
---    gen_test_source fsrc 3 10
+    gen_test_source fsrc 3 10
 
     (code_prolog, rules, rest) <- parse_source fsrc
     regexp_table <- case fsign of
@@ -365,11 +387,8 @@ main = do
             , "\n#define GOTO(x) { goto *code[x]; }"
             , "\n\nbool active_signatures[NUM_SIGN];"
             , "\nint  active_count;"
-            , "\n\nint accepted_signatures[NUM_SIGN + 1];"
+            , "\n\nint accepted_signatures[NUM_SIGN];"
             , "\nint accepted_count = 0;"
-            , "\nfor (int i = 0; i <= NUM_SIGN; i++) {"
-            , "\n\taccepted_signatures[i] = NUM_SIGN;"
-            , "\n}"
             , "\n\nint  j;"
             , "\nbool adjust_marker;"
             , "\n\nstatic void * code[] = {"
@@ -387,13 +406,10 @@ main = do
             , "\nCURSOR = MARKER;"
             , "\nj = 0;"
             , "\nm_continue:"
-            , "\nif (accepted_signatures[j] != NUM_SIGN)"
+            , "\nif (j < accepted_count)"
             , "\n\tGOTO(accepted_signatures[j++]);"
             , "\ngoto m_start;"
             , "\n\n\nm_start:"
--- try to adopt copying of last element into hole instead of checking if element equals NUM_SIGN
-            , "\nfor (int i = accepted_count - 1; i >= 0; i--)"
-            , "\n\taccepted_signatures[i] = NUM_SIGN;"
             , "\nfor (int i = 0; i < NUM_SIGN; i++)"
             , "\n\tactive_signatures[i] = false;"
             , "\nactive_count   = 0;"
