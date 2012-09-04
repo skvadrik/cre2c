@@ -116,56 +116,48 @@ parse_signatures fp =
 
 cfa_add_regexp :: (CFA, S.Set State) -> Regexp -> RegexpTable -> SignNum -> (CFA, S.Set State)
 cfa_add_regexp (cfa, ss) (Regexp r) rt sign =
-    let (cfa', ss') = bind_ralt (cfa, ss) r Nothing rt sign
+    let (cfa', ss') = cfa_add_regexp_alt (cfa, ss) r rt sign
         cfa''       = S.foldl (\ c s -> setFinal s sign c) cfa' ss'
     in  (cfa'', ss')
 
-bind_ralt :: (CFA, S.Set State) -> RegexpAlt -> Maybe State -> RegexpTable -> SignNum -> (CFA, S.Set State)
-bind_ralt (cfa, ss) r s rt sign = case r of
-    AltFromCat rcat -> bind_rcat (cfa, ss) rcat s rt sign
+cfa_add_regexp_alt :: (CFA, S.Set State) -> RegexpAlt -> RegexpTable -> SignNum -> (CFA, S.Set State)
+cfa_add_regexp_alt (cfa, ss) r rt sign = case r of
+    AltFromCat rcat -> cfa_add_regexp_cat (cfa, ss) rcat rt sign
     Alt rcat ralt   ->
-        let (cfa', ss')   = bind_rcat (cfa, ss) rcat s rt sign
-            sl            = if isJust s then s else bindableState cfa'
-            (cfa'', ss'') = bind_ralt (cfa', ss) ralt sl rt sign
+        let (cfa', ss')   = cfa_add_regexp_cat (cfa, ss) rcat rt sign
+            (cfa'', ss'') = cfa_add_regexp_alt (cfa', ss) ralt rt sign
         in  (cfa'', S.union ss' ss'')
 
-bind_rcat :: (CFA, S.Set State) -> RegexpCat -> Maybe State -> RegexpTable -> SignNum -> (CFA, S.Set State)
-bind_rcat (cfa, ss) r s rt sign = case r of
-    CatFromIter riter -> bind_riter (cfa, ss) riter s rt sign
-    Cat riter rcat    -> bind_rcat (bind_riter (cfa, ss) riter Nothing rt sign) rcat s rt sign
+cfa_add_regexp_cat :: (CFA, S.Set State) -> RegexpCat -> RegexpTable -> SignNum -> (CFA, S.Set State)
+cfa_add_regexp_cat (cfa, ss) r rt sign = case r of
+    CatFromIter riter -> cfa_add_regexp_iter (cfa, ss) riter rt sign
+    Cat riter rcat    -> cfa_add_regexp_cat (cfa_add_regexp_iter (cfa, ss) riter rt sign) rcat rt sign
 
-bind_riter :: (CFA, S.Set State) -> RegexpIter -> Maybe State -> RegexpTable -> SignNum -> (CFA, S.Set State)
-bind_riter (cfa, ss) r s rt sign = case r of
-    IterFromPrim rprim -> bind_rprim (cfa, ss) rprim s rt sign
-    Iter rprim n       ->
-        let (cfa', ss') = foldl'
-                (\ (cfa', ss') _ ->
-                    let (cfa'', ss'') = bind_rprim (cfa', ss') rprim Nothing rt sign
-                    in  (cfa'', S.union ss' ss'')
-                ) (cfa, ss) [1 .. n - 1]
-            (cfa'', ss'') = bind_rprim (cfa', ss') rprim s rt sign
-        in  (cfa'', S.union ss' ss'')
+cfa_add_regexp_iter :: (CFA, S.Set State) -> RegexpIter -> RegexpTable -> SignNum -> (CFA, S.Set State)
+cfa_add_regexp_iter (cfa, ss) r rt sign = case r of
+    IterFromPrim rprim -> cfa_add_regexp_prim (cfa, ss) rprim rt sign
+    Iter rprim n       -> foldl'
+        (\ (cfa', ss') _ ->
+            let (cfa'', ss'') = cfa_add_regexp_prim (cfa', ss') rprim rt sign
+            in  (cfa'', S.union ss' ss'')
+        ) (cfa, ss) [1 .. n]
 
-bind_rprim :: (CFA, S.Set State) -> RegexpPrim -> Maybe State -> RegexpTable -> SignNum -> (CFA, S.Set State)
-bind_rprim (cfa, ss) r s rt sign = case r of
-    Elementary str ->
-        let (cfa'', ss'') = foldl' (\ (cfa', ss') c -> bind_ratom (cfa', ss') c Nothing sign) (cfa, ss) (init str)
-        in  bind_ratom (cfa'', ss'') (last str) s sign
-    Name str       ->
-        let Regexp ralt = M.lookupDefault undefined str rt
-        in  bind_ralt (cfa, ss) ralt s rt sign
-    Wrapped ralt   -> bind_ralt (cfa, ss) ralt s rt sign
+cfa_add_regexp_prim :: (CFA, S.Set State) -> RegexpPrim -> RegexpTable -> SignNum -> (CFA, S.Set State)
+cfa_add_regexp_prim (cfa, ss) r rt sign = case r of
+    Elementary s -> foldl' (\(d, s) c -> cfa_add_regexp_atom (d, s) c sign) (cfa, ss) s
+    Name s       ->
+        let Regexp ralt = M.lookupDefault undefined s rt
+        in  cfa_add_regexp_alt (cfa, ss) ralt rt sign
+    Wrapped ralt -> cfa_add_regexp_alt (cfa, ss) ralt rt sign
 
-bind_ratom :: (CFA, S.Set State) -> Char -> Maybe State -> SignNum -> (CFA, S.Set State)
-bind_ratom (cfa, ss) c s sign =
-    let (s', cfa') = case s of
-            Just s' -> (s', cfa)
-            Nothing -> let s'' = maxStateNumber cfa in (s'', setBindable (Just s'') cfa)
+cfa_add_regexp_atom :: (CFA, S.Set State) -> Char -> SignNum -> (CFA, S.Set State)
+cfa_add_regexp_atom (cfa, ss) c sign =
+    let sl  = maxStateNumber cfa
     in  S.foldl
-            (\ (cfa'', ss') s'' ->
-                let (cfa''', s''') = addTransition cfa'' (s'', c, sign, s')
-                in  (cfa''', S.insert s''' ss')
-            ) (cfa', S.empty) ss
+            (\ (cfa', ss') s ->
+                     let (cfa'', s') = addTransition cfa' (s, c, sign, sl)
+                     in  (cfa'', S.insert s' ss')
+            ) (cfa, S.empty) ss
 
 
 
@@ -306,7 +298,7 @@ code_for_state cfa s node = (BS.pack . concat)
             , "\nadjust_marker = false;\n}"
             ]) "" (acceptedSignatures s cfa)
         else ""
-    , "\nprintf(\"%s\\n\", CURSOR);"
+--    , "\nprintf(\"%s\\n\", CURSOR);"
     , "\nswitch (*CURSOR++) {"
     , concatMap (\ (l, (signs, s')) -> concat
         [ "\n\tcase "
