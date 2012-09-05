@@ -13,7 +13,6 @@ module CFA
     , maxStateNumber
     , cfaGraph
     , isFinal
-    , finalStates
     , acceptedSignatures
 
     , setFinal
@@ -64,9 +63,6 @@ cfaGraph = cfa_graph
 
 isFinal :: State -> CFA -> Bool
 isFinal st cfa = isJust $ M.lookup st (final_states cfa)
-
-finalStates :: CFA -> M.HashMap State SignSet
-finalStates = final_states
 
 acceptedSignatures :: State -> CFA -> SignSet
 acceptedSignatures s (CFA _ _ _ fss) = M.lookupDefault (S.empty) s fss
