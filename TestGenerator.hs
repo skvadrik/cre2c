@@ -11,13 +11,9 @@ import qualified Data.ByteString.Char8 as BS
 import qualified Data.HashMap.Strict   as M
 import           Control.Monad               (forM)
 
+import           Types
 import           RegexpGenerator
 import           RegexpParser
-
-
-type RegexpTable = M.HashMap String Regexp
-type SignTable   = M.HashMap String [BS.ByteString]
-type SignNum     = Int
 
 
 gen_signatures_from_regexp :: Regexp -> SignTable -> [BS.ByteString]

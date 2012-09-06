@@ -9,17 +9,11 @@ import           Data.List                  (intercalate)
 import           Control.Arrow              (second)
 import qualified Data.ByteString.Char8 as BS
 
+import           Types
 import           CFA
 import           RE2CFA
 import           CFA2CPP
 import           RegexpParser
-
-
-type Code        = BS.ByteString
-type Condition   = String
-type Rule        = ([Condition], Regexp, Code)
-type RegexpTable = M.HashMap String Regexp
-type SignTable   = M.HashMap String [BS.ByteString]
 
 
 usage :: IO ()
@@ -61,7 +55,9 @@ parse_signatures fp =
         ( second (parseRegexp . tail)
         . break (== '=')
         . filter (`notElem` " \t")
+        . takeWhile (/= ';')
         )
+    . filter (\ l -> l /= "" && head l /= '-')
     . lines
     <$> readFile fp
 
@@ -88,3 +84,4 @@ main = do
     toDot cfa "./cfa.dot"
     print cfa
     print regexps
+    print regexp_table

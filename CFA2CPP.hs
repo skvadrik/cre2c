@@ -9,12 +9,8 @@ import           Data.List                  (intercalate)
 import qualified Data.ByteString.Char8 as BS
 --import qualified Data.DList            as DL
 
+import           Types
 import           CFA
-import           RegexpParser
-
-
-type Code        = BS.ByteString
-type Condition   = String
 
 
 cfa2cpp :: FilePath -> CFA -> Code -> Code -> [[Condition]] -> [Code] -> Int -> IO ()

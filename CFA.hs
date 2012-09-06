@@ -28,22 +28,7 @@ import           Data.List                (foldl')
 import           Control.Monad            (forM_)
 import           Data.Maybe               (isJust, fromJust)
 
-
-type State    = Int
-type Label    = Char
-type SignNum  = Int
-type SignSet  = S.Set SignNum
-
-type CFANode  = M.HashMap Label (SignSet, State)
-type CFAGraph = M.HashMap State CFANode
-data CFA      = CFA
-    { initial_state    :: State
-    , max_state_number :: State
-    , cfa_graph        :: CFAGraph
-    , final_states     :: M.HashMap State SignSet
-    } deriving (Show)
-
-
+import           Types
 
 
 emptyCFA :: CFA
