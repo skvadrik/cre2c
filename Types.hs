@@ -32,26 +32,16 @@ data RegexpPrim
     | Any
     | Range String
     deriving (Show, Eq, Ord)
-data Token
-    = TokenChain String
-    | TokenName String
-    | TokenInt Int
-    | TokenOBracket
-    | TokenCBracket
-    | TokenOSqBracket
-    | TokenCSqBracket
-    | TokenOParenthesis
-    | TokenCParenthesis
-    | TokenComma
-    | TokenVSlash
-    | TokenDQuote
-    | TokenDot
-    | TokenQueryMark
+data RegexpDefs
+    = Def  RegexpDef
+    | Defs RegexpDef RegexpDefs
+    deriving (Show)
+data RegexpDef
+    = RegexpDef String String
     deriving (Show)
 type RegexpTable = M.HashMap String Regexp
 
 
----------------- CFA types
 type State    = Int
 type SignNum  = Int
 type SignSet  = S.Set SignNum

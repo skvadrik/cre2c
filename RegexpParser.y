@@ -1,6 +1,6 @@
 {
 
-module RegexpParser where
+module RegexpParser (parseRegexp) where
 
 import Data.Char
 import Types
@@ -23,6 +23,7 @@ import Types
     '}'           { TokenCParenthesis }
     ','           { TokenComma }
     '|'           { TokenVSlash }
+    '\''          { TokenQuote }
     '"'           { TokenDQuote }
     '.'           { TokenDot }
     '?'           { TokenQueryMark }
@@ -44,29 +45,49 @@ RegexpIter : RegexpPrim '?'                 { IterMaybe    $1       }
 
 RegexpPrim : name                           { Name         $1 }
            | '"' chain '"'                  { Elementary   $2 }
+           | '\'' chain '\''                { Elementary   $2 }
            | '(' RegexpAlt ')'              { Wrapped      $2 }
            | '[' chain ']'                  { Range        $2 }
            | '.'                            { Any             }
 
 {
+data Token
+    = TokenChain String
+    | TokenName String
+    | TokenInt Int
+    | TokenOBracket
+    | TokenCBracket
+    | TokenOSqBracket
+    | TokenCSqBracket
+    | TokenOParenthesis
+    | TokenCParenthesis
+    | TokenComma
+    | TokenVSlash
+    | TokenQuote
+    | TokenDQuote
+    | TokenDot
+    | TokenQueryMark
+    deriving (Show)
+
 
 parseError :: [Token] -> a
 parseError e = error $ "Parse error: " ++ show e
 
 
 lexer [] = []
-lexer (c:cs)
+lexer (c : cs)
       | isSpace c = lexer cs
-      | isAlpha c = lexName (c:cs)
-lexer ('.':cs) = TokenDot : lexer cs
-lexer ('?':cs) = TokenQueryMark : lexer cs
-lexer ('(':cs) = TokenOBracket : lexer cs
-lexer (')':cs) = TokenCBracket : lexer cs
-lexer ('{':cs) = TokenOParenthesis : lexInt cs
-lexer ('}':cs) = TokenCParenthesis : lexer cs
-lexer ('"':cs) = TokenDQuote : lexQuotedChain cs
-lexer ('[':cs) = TokenOSqBracket : lexChain cs
-lexer ('|':cs) = TokenVSlash : lexer cs
+      | isAlpha c = lexName (c : cs)
+lexer ('.'  : cs) = TokenDot : lexer cs
+lexer ('?'  : cs) = TokenQueryMark : lexer cs
+lexer ('('  : cs) = TokenOBracket : lexer cs
+lexer (')'  : cs) = TokenCBracket : lexer cs
+lexer ('{'  : cs) = TokenOParenthesis : lexInt cs
+lexer ('}'  : cs) = TokenCParenthesis : lexer cs
+lexer ('"'  : cs) = TokenDQuote : lexDQuotedChain cs
+lexer ('\'' : cs) = TokenQuote : lexQuotedChain cs
+lexer ('['  : cs) = TokenOSqBracket : lexChain cs
+lexer ('|'  : cs) = TokenVSlash : lexer cs
 
 lexInt cs =
     let (num, rest) = span isDigit cs
@@ -77,8 +98,11 @@ lexInt cs =
 lexName cs = TokenName nm : lexer rest
     where (nm, rest) = span (\ c -> isAlphaNum c || c == '_') cs
 
-lexQuotedChain cs = TokenChain ch : TokenDQuote : lexer (tail rest)
+lexDQuotedChain cs = TokenChain ch : TokenDQuote : lexer (tail rest)
     where (ch, rest) = span (/= '"') cs
+
+lexQuotedChain cs = TokenChain ch : TokenQuote : lexer (tail rest)
+    where (ch, rest) = span (/= '\'') cs
 
 lexChain cs = TokenChain ch : TokenCSqBracket : lexer (tail rest)
     where (ch, rest) = span (/= ']') cs

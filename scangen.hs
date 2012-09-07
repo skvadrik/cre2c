@@ -8,12 +8,16 @@ import qualified Data.HashMap.Strict   as M
 import           Data.List                  (intercalate)
 import           Control.Arrow              (second)
 import qualified Data.ByteString.Char8 as BS
+import           Data.Maybe                 (catMaybes)
 
 import           Types
 import           CFA
 import           RE2CFA
 import           CFA2CPP
 import           RegexpParser
+import           RegexpDefsParser
+
+import Debug.Trace
 
 
 usage :: IO ()
@@ -48,18 +52,16 @@ parse_source fp = do
     return (code, rules, rest)
 
 
+trace' a = trace (show a) a
+
+
+gen_regexp_table :: RegexpDefs -> [(String, Regexp)]
+gen_regexp_table (Def  (RegexpDef name regexp))      = [(name, parseRegexp regexp)]
+gen_regexp_table (Defs (RegexpDef name regexp) defs) = (name, parseRegexp regexp) : gen_regexp_table defs
+
+
 parse_signatures :: FilePath -> IO RegexpTable
-parse_signatures fp =
-    M.fromList
-    . map
-        ( second (parseRegexp . tail)
-        . break (== '=')
-        . filter (`notElem` " \t")
-        . takeWhile (/= ';')
-        )
-    . filter (\ l -> l /= "" && head l /= '-')
-    . lines
-    <$> readFile fp
+parse_signatures fp = M.fromList . gen_regexp_table . parseRegexpDefs <$> readFile fp
 
 
 main :: IO ()
