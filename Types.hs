@@ -46,7 +46,7 @@ data Token
     | TokenVSlash
     | TokenDQuote
     | TokenDot
-    | TokenQuertMark
+    | TokenQueryMark
     deriving (Show)
 type RegexpTable = M.HashMap String Regexp
 

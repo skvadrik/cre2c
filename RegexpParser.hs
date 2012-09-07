@@ -320,7 +320,7 @@ lexInt cs =
             '}' : cs' -> TokenInt (read num) : TokenCParenthesis : lexer cs'
 
 lexName cs = TokenName nm : lexer rest
-    where (nm, rest) = span isAlphaNum cs
+    where (nm, rest) = span (\ c -> isAlphaNum c || c == '_') cs
 
 lexQuotedChain cs = TokenChain ch : TokenDQuote : lexer (tail rest)
     where (ch, rest) = span (/= '"') cs

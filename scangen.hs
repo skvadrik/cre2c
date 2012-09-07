@@ -82,6 +82,6 @@ main = do
     cfa2cpp fdest cfa prolog epilog conditions codes sign_maxlen
 
     toDot cfa "./cfa.dot"
-    print cfa
-    print regexps
+--    print cfa
+--    print regexps
     print regexp_table

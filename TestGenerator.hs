@@ -34,8 +34,9 @@ sign_from_rcat r ss stbl = case r of
 
 sign_from_riter :: RegexpIter -> [BS.ByteString] -> SignTable -> [BS.ByteString]
 sign_from_riter r ss stbl = case r of
-    IterFromPrim rprim -> sign_from_rprim rprim ss stbl
-    Iter rprim n       -> let ss' = sign_from_rprim rprim ss stbl in concatMap (\s' -> map (\k -> (BS.concat . replicate k) s') [0 .. n]) ss'
+    IterFromPrim rprim     -> sign_from_rprim rprim ss stbl
+    IterRepeat   rprim n   -> let ss' = sign_from_rprim rprim ss stbl in map (\s' -> ((BS.concat . replicate n) s')) ss'
+    IterRange    rprim n m -> let ss' = sign_from_rprim rprim ss stbl in concatMap (\s' -> map (\k -> (BS.concat . replicate k) s') [n .. m]) ss'
 
 
 sign_from_rprim :: RegexpPrim -> [BS.ByteString] -> SignTable -> [BS.ByteString]
@@ -45,6 +46,10 @@ sign_from_rprim r ss stbl = case r of
         _  -> map (\s'' -> BS.concat [s''', s'']) ss
     Name name     -> concatMap (\s -> map (\s'' -> BS.concat [s, s'']) (M.lookupDefault undefined name stbl)) ss
     Wrapped ralt  -> sign_from_ralt ralt ss stbl
+    Range s       -> let ss' = map (\ c -> BS.pack [c]) s in concatMap (\ s' -> map (\ s -> BS.concat [s', s]) ss) ss'
+    Any           -> let s' = BS.pack "*" in case ss of
+        [] -> [s']
+        _  -> map (\s'' -> BS.concat [s', s'']) ss
 
 
 new_test :: [Regexp] -> RegexpTable -> (BS.ByteString, [SignNum], Int)

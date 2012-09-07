@@ -36,25 +36,22 @@ cfa_add_regexp_cat (cfa, ss) r rt sign = case r of
 cfa_add_regexp_iter :: (CFA, S.Set State) -> RegexpIter -> RegexpTable -> SignNum -> (CFA, S.Set State)
 cfa_add_regexp_iter (cfa, ss) r rt sign = case r of
     IterFromPrim rprim  -> cfa_add_regexp_prim (cfa, ss) rprim rt sign
-    IterRepeat rprim n  -> foldl'
-        (\ (cfa', ss') _ ->
-            let (cfa'', ss'') = cfa_add_regexp_prim (cfa', ss') rprim rt sign
-            in  (cfa'', S.union ss' ss'')
-        ) (cfa, ss) [1 .. n]
+    IterRepeat rprim n  ->
+        let rcat = foldl' (\ rc _ -> Cat (IterFromPrim rprim) rc) ((CatFromIter . IterFromPrim) rprim)  [1 .. n]
+        in  cfa_add_regexp_cat (cfa, ss) rcat rt sign
     IterRange rprim n m ->
--- тут короч надо разобраться и для range и repeat нормально добавить.
-        let rcat        = foldl' ()  [1 .. n]
+        let rcat        = foldl' (\ rc _ -> Cat (IterFromPrim rprim) rc) ((CatFromIter . IterFromPrim) rprim)  [1 .. n]
             (cfa', ss') = cfa_add_regexp_cat (cfa, ss) rcat rt sign
-        foldl'
-        (\ (cfa', ss') _ ->
-            let (cfa'', ss'') = cfa_add_regexp_prim (cfa', ss') rprim rt sign
-            in  (cfa'', S.union ss' ss'')
-        ) (cfa, ss) [n .. m]
+        in  foldl'
+            (\ (cfa'', ss'') _ ->
+                let (cfa''', ss''') = cfa_add_regexp_prim (cfa'', ss'') rprim rt sign
+                in  (cfa''', S.union ss'' ss''')
+            ) (cfa', ss') [n .. m - 1]
 
 
 cfa_add_regexp_prim :: (CFA, S.Set State) -> RegexpPrim -> RegexpTable -> SignNum -> (CFA, S.Set State)
 cfa_add_regexp_prim (cfa, ss) r rt sign = case r of
-    Elementary s -> foldl' (\(d, s) c -> cfa_add_regexp_atom (d, s) c sign) (cfa, ss) s
+    Elementary s -> foldl' (\(d, s) c -> cfa_add_regexp_atom (d, s) (LabelChar c) sign) (cfa, ss) s
     Name s       ->
         let Regexp ralt = M.lookupDefault undefined s rt
         in  cfa_add_regexp_alt (cfa, ss) ralt rt sign

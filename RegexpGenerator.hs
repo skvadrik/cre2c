@@ -29,10 +29,18 @@ skip_regexp cs =
 
 skip_int cs =
     let cs' = dropWhile (`elem` special_chars) cs
-        n   = (show . (+ 1) . (`mod` 10) . ord) (head cs)
-    in  concat
-            [ "{,"
-            , n
+        n   = ((+ 1) . (`mod` 10) . ord) (head cs)
+    in  if n > 5 then concat
+            [ "{"
+            , show n
+            , "}"
+            , gen_regexp cs'
+            ]
+        else let m = n + 2 in concat
+            [ "{"
+            , show n
+            , ","
+            , show m
             , "}"
             , gen_regexp cs'
             ]
