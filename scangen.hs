@@ -49,9 +49,6 @@ main = do
         _                 -> usage >> undefined
 
     (prolog, rules, epilog) <- parse_source fsrc
-    print prolog
-    print rules
-    print epilog
     regexp_table <- case fsign of
         Just fs -> parse_regexps fs
         Nothing -> return M.empty

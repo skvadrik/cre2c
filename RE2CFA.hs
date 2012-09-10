@@ -36,6 +36,9 @@ cfa_add_regexp_cat (cfa, ss) r rt sign = case r of
 cfa_add_regexp_iter :: (CFA, S.Set State) -> RegexpIter -> RegexpTable -> SignNum -> (CFA, S.Set State)
 cfa_add_regexp_iter (cfa, ss) r rt sign = case r of
     IterFromPrim rprim  -> cfa_add_regexp_prim (cfa, ss) rprim rt sign
+    IterMaybe rprim     ->
+        let (cfa', ss') = cfa_add_regexp_prim (cfa, ss) rprim rt sign
+        in  (cfa', S.union ss ss')
     IterRepeat rprim n  ->
         let rcat = foldl' (\ rc _ -> Cat (IterFromPrim rprim) rc) ((CatFromIter . IterFromPrim) rprim)  [1 .. n]
         in  cfa_add_regexp_cat (cfa, ss) rcat rt sign

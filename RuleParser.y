@@ -68,13 +68,13 @@ lexer ('{'  : cs) = TokenOParenthesis : lex_code cs
 lex_code :: String -> [Token]
 lex_code cs =
     let lex_code' :: Int -> String -> String -> (String, String)
-        lex_code' 0 tok rest         = (init tok, rest)
+        lex_code' 0 tok rest         = ('{' : tok, rest)
         lex_code' i tok ""           = undefined
         lex_code' i tok ('{' : rest) = lex_code' (i + 1) (tok ++ "{") rest
         lex_code' i tok ('}' : rest) = lex_code' (i - 1) (tok ++ "}") rest
         lex_code' i tok (r : est)    = lex_code' i (tok ++ [r]) est
         (code, rest) =  lex_code' 1 "" cs
-    in  TokenOParenthesis : TokenCode (BS.pack code) : TokenCParenthesis : lexer rest
+    in  TokenCode (BS.pack code) : TokenCParenthesis : lexer rest
 
 
 lex_name :: String -> [Token]
