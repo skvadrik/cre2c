@@ -26,6 +26,9 @@ import           Types
 
 %%
 
+File
+    : Code Rules Code                    {  }
+
 Rules
     : Rule                               { OneRule   $1    }
     | Rule Rules                         { ManyRules $1 $2 }
@@ -55,14 +58,21 @@ parseError :: [Token] -> a
 parseError e = error $ "Parse error: " ++ show e
 
 
-lexer :: String -> [Token]
+lexer ::  String -> [Token]
 lexer [] = []
+lexer ('\n' : '/' : '*' : 's' : 't' : 'a' : 'r' : 't' : ':' : cs) = TokenStart : lex_rules cs
+lexer (c : cs) = 
+
+
+lex_rules :: String -> [Token]
+lex_rules [] = []
+lex_rules ('\n' : 'e' : 'n' : 'd' : '*' : '/' : cs) = TokenEnd : lexer cs
 lexer (c : cs)
-      | isSpace c = lexer cs
-      | isAlpha c = lex_name (c : cs)
-lexer ('>'  : cs) = TokenAngle        : lex_name cs
-lexer ('='  : cs) = TokenEq           : lexer cs
-lexer ('{'  : cs) = TokenOParenthesis : lex_code cs
+    | isSpace c = lex_rules cs
+    | isAlpha c = lex_name (c : cs)
+lex_rules ('>'  : cs) = TokenAngle        : lex_name cs
+lex_rules ('='  : cs) = TokenEq           : lex_rules cs
+lex_rules ('{'  : cs) = TokenOParenthesis : lex_code cs
 
 
 lex_code :: String -> [Token]
@@ -74,18 +84,18 @@ lex_code cs =
         lex_code' i tok ('}' : rest) = lex_code' (i - 1) (tok ++ "}") rest
         lex_code' i tok (r : est)    = lex_code' i (tok ++ [r]) est
         (code, rest) =  lex_code' 1 "" cs
-    in  TokenCode (BS.pack code) : TokenCParenthesis : lexer rest
+    in  TokenCode (BS.pack code) : TokenCParenthesis : lex_rules rest
 
 
 lex_name :: String -> [Token]
 lex_name cs =
     let (nm, rest) = span (\ c -> isAlphaNum c || c == '_') cs
-        rest'      = lexer rest
+        rest'      = lex_rules rest
     in  if nm /= "" then TokenName nm : rest' else rest'
 
 
 --------------------------------------------------------------------------------
-parse_rules :: String -> RuleTable
+parse_rules :: FilePath -> IO (Code, RuleTable, Code)
 parse_rules =
     let conds2list :: CondList -> [Cond]
         conds2list (OneCond c)      = [c]
@@ -97,7 +107,9 @@ parse_rules =
         rules2table (ManyRules (SimpleRule           name code) rules) = ([],                  name, code) : rules2table rules
         rules2table (ManyRules (ComplexRule condlist name code) rules) = (conds2list condlist, name, code) : rules2table rules
 
-    in  M.fromList . (\ rt -> zip [0 .. length rt] rt) . rules2table . parser . lexer
+        
+
+    in  M.fromList . (\ rt -> zip [0 .. length rt] rt) . rules2table . parser . lexer <$> readFile fp
 
 }
 
