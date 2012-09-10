@@ -76,7 +76,25 @@ instance Hashable Label where
 
 
 ---------------- Common types
-type Code        = BS.ByteString
-type Condition   = String
-type Rule        = ([Condition], String, Code)
-type SignTable   = M.HashMap String [BS.ByteString]
+data Rules
+    = ManyRules Rule Rules
+    | OneRule   Rule
+    deriving (Show)
+data Rule
+    = SimpleRule  RegexpName Code
+    | ComplexRule CondList RegexpName Code
+    deriving (Show)
+data CondList
+    = ManyConds Cond CondList
+    | OneCond   Cond
+    deriving (Show)
+type Cond
+    = String
+type RegexpName
+    = String
+type Code
+    = BS.ByteString
+type RuleTable
+    = M.HashMap Int ([Cond], RegexpName, Code)
+type SignTable
+    = M.HashMap String [BS.ByteString]

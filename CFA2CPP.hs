@@ -13,7 +13,7 @@ import           Types
 import           CFA
 
 
-cfa2cpp :: FilePath -> CFA -> Code -> Code -> [[Condition]] -> [Code] -> Int -> IO ()
+cfa2cpp :: FilePath -> CFA -> Code -> Code -> [[Cond]] -> [Code] -> Int -> IO ()
 cfa2cpp fp cfa prolog epilog conditions codes sign_maxlen =
     let entry  = code_for_entry (initialNode cfa) conditions codes sign_maxlen
         states = M.foldlWithKey'
@@ -32,7 +32,7 @@ cfa2cpp fp cfa prolog epilog conditions codes sign_maxlen =
             ]
 
 
-code_for_entry :: CFANode -> [[Condition]] -> [Code] -> Int -> Code
+code_for_entry :: CFANode -> [[Cond]] -> [Code] -> Int -> Code
 code_for_entry node0 conditions codes sign_maxlen =
     let n           = length codes
         sign2conds  = M.fromList $ zip [0 .. n - 1] conditions
@@ -78,7 +78,7 @@ code_for_entry node0 conditions codes sign_maxlen =
             ]
 
 
-code_for_initial_state :: CFANode -> M.HashMap SignNum [Condition] -> String
+code_for_initial_state :: CFANode -> M.HashMap SignNum [Cond] -> String
 code_for_initial_state node0 sign2conds = concat
     [ "\nswitch (*CURSOR++) {\n\t"
     , concatMap (\ (l, (ks, s)) -> concat
@@ -98,7 +98,7 @@ code_for_initial_state node0 sign2conds = concat
     ]
 
 
-code_for_conditions :: M.HashMap SignNum [Condition] -> String
+code_for_conditions :: M.HashMap SignNum [Cond] -> String
 code_for_conditions = M.foldlWithKey' (\code k conditions -> code ++ case conditions of
     [] -> ""
     _  -> let conds = intercalate " && " conditions in concat

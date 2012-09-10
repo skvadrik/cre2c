@@ -397,7 +397,6 @@ lexer (c : cs)
       | isSpace c = lexer cs
       | isAlpha c = lex_name lexer (c : cs)
 lexer ('='  : cs)        = TokenEq : lex_regexp cs
-lexer ('\n' : cs)        = lexer cs
 lexer ('-'  : '-'  : cs) = lex_comment cs
 
 

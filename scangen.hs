@@ -15,6 +15,7 @@ import           CFA
 import           RE2CFA
 import           CFA2CPP
 import           RegexpParser
+import           RuleParser
 
 import Debug.Trace
 
@@ -23,40 +24,17 @@ usage :: IO ()
 usage = putStrLn "usage: ./scangen.hs <source code file> <destination code file> <regexp file>" >> exitFailure
 
 
-parse_source :: FilePath -> IO (Code, M.HashMap SignNum Rule, Code)
+parse_source :: FilePath -> IO (Code, RuleTable, Code)
 parse_source fp = do
     (prolog, scangen_code, epilog) <-
         (\ (prolog, rest) ->
               let (scangen_code, epilog) = break (== BS.pack "end*/") (tail rest)
-              in  (BS.unlines prolog, filter (/= BS.empty) scangen_code, BS.unlines (tail epilog))
+              in  (BS.unlines prolog, BS.unlines scangen_code, BS.unlines (tail epilog))
         )
         . break (== BS.pack "/*start:")
         . BS.lines
         <$> BS.readFile fp
-{-
-    let split_line :: String -> ([Condition], String, Code)
-        split_line l =
-            let (s1, s2) = break (== '>') l
-                (s3, s4) = (break (== '=') . tail) s2
-                conditions  = words s1
-                regexp_name = (head . words) s3
-                code        = (BS.pack . dropWhile (/= '{')) s4
-            in  (conditions, regexp_name, code)
--}
-    let split_line :: String -> ([Condition], String, Code)
-        split_line l =
-            let (s1, s2) = (break (not . isAlphaNum) . dropWhile (`elem` "\t ")) l
-                (s3, s4) = (break (== '=') . tail) s2
-                conditions  = words s1
-                regexp_name = (head . words) s3
-                code        = (BS.pack . dropWhile (/= '{')) s4
-            in  (conditions, regexp_name, code)
-    let rules =
-            ( M.fromList
-            . zip [0 .. length scangen_code - 1]
-            . map (split_line . BS.unpack)
-            ) scangen_code
-    return (prolog, rules, epilog)
+    return (prolog, parse_rules (BS.unpack scangen_code), epilog)
 
 
 trace' a = trace (show a) a
