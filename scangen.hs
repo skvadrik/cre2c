@@ -15,53 +15,51 @@ import           CFA
 import           RE2CFA
 import           CFA2CPP
 import           RegexpParser
-import           RegexpDefsParser
 
 import Debug.Trace
 
 
 usage :: IO ()
-usage = putStrLn "usage: ./scan.hs <source file> <destination file> [file with predefined regexps]" >> exitFailure
+usage = putStrLn "usage: ./scangen.hs <source code file> <destination code file> <regexp file>" >> exitFailure
 
 
 parse_source :: FilePath -> IO (Code, M.HashMap SignNum Rule, Code)
 parse_source fp = do
-    (code, comment, rest) <-
-          (\(code', rest') ->
-              let (comment, rest'') = break (== BS.pack "end*/") (tail rest')
-              in  (BS.intercalate (BS.pack "\n") code', comment, BS.intercalate (BS.pack "\n") (tail rest'')))
+    (prolog, scangen_code, epilog) <-
+        (\ (prolog, rest) ->
+              let (scangen_code, epilog) = break (== BS.pack "end*/") (tail rest)
+              in  (BS.unlines prolog, filter (/= BS.empty) scangen_code, BS.unlines (tail epilog))
+        )
         . break (== BS.pack "/*start:")
         . BS.lines
         <$> BS.readFile fp
-    let split_line :: BS.ByteString -> ([Condition], String, Code)
+{-
+    let split_line :: String -> ([Condition], String, Code)
         split_line l =
-            let (s1, s2) = (BS.break (== '>') . BS.reverse) l
-                (s3, s4) = (BS.break (== '=') . BS.reverse) s1
-                conditions  = (words . reverse . dropWhile (== '>')) (BS.unpack s2)
-                signature   = dropWhile (`elem` "> \t") $ BS.unpack s3
-                code        = BS.dropWhile (/= '{') s4
-            in  (conditions, signature, code)
+            let (s1, s2) = break (== '>') l
+                (s3, s4) = (break (== '=') . tail) s2
+                conditions  = words s1
+                regexp_name = (head . words) s3
+                code        = (BS.pack . dropWhile (/= '{')) s4
+            in  (conditions, regexp_name, code)
+-}
+    let split_line :: String -> ([Condition], String, Code)
+        split_line l =
+            let (s1, s2) = (break (not . isAlphaNum) . dropWhile (`elem` "\t ")) l
+                (s3, s4) = (break (== '=') . tail) s2
+                conditions  = words s1
+                regexp_name = (head . words) s3
+                code        = (BS.pack . dropWhile (/= '{')) s4
+            in  (conditions, regexp_name, code)
     let rules =
             ( M.fromList
-            . zip [0 .. length comment - 1]
-            . map
-                ( (\(conds, sign, code) -> (conds, parseRegexp (concat ["(", sign, ")"]), code))
-                . split_line
-                )
-            ) comment
-    return (code, rules, rest)
+            . zip [0 .. length scangen_code - 1]
+            . map (split_line . BS.unpack)
+            ) scangen_code
+    return (prolog, rules, epilog)
 
 
 trace' a = trace (show a) a
-
-
-gen_regexp_table :: RegexpDefs -> [(String, Regexp)]
-gen_regexp_table (Def  (RegexpDef name regexp))      = [(name, parseRegexp regexp)]
-gen_regexp_table (Defs (RegexpDef name regexp) defs) = (name, parseRegexp regexp) : gen_regexp_table defs
-
-
-parse_signatures :: FilePath -> IO RegexpTable
-parse_signatures fp = M.fromList . gen_regexp_table . parseRegexpDefs <$> readFile fp
 
 
 main :: IO ()
@@ -73,8 +71,11 @@ main = do
         _                 -> usage >> undefined
 
     (prolog, rules, epilog) <- parse_source fsrc
+    print prolog
+    print rules
+    print epilog
     regexp_table <- case fsign of
-        Just fs -> parse_signatures fs
+        Just fs -> parse_regexps fs
         Nothing -> return M.empty
 
     let (conditions, regexps, codes) = (unzip3 . M.elems) rules

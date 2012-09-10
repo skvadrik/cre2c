@@ -37,7 +37,7 @@ data RegexpDefs
     | Defs RegexpDef RegexpDefs
     deriving (Show)
 data RegexpDef
-    = RegexpDef String String
+    = RegexpDef String Regexp
     deriving (Show)
 type RegexpTable = M.HashMap String Regexp
 
@@ -78,5 +78,5 @@ instance Hashable Label where
 ---------------- Common types
 type Code        = BS.ByteString
 type Condition   = String
-type Rule        = ([Condition], Regexp, Code)
+type Rule        = ([Condition], String, Code)
 type SignTable   = M.HashMap String [BS.ByteString]

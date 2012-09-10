@@ -1,15 +1,20 @@
 {
 
-module RegexpParser (parseRegexp) where
+module RegexpParser
+    ( parse_regexps
+    ) where
 
-import Data.Char
-import Types
+import qualified Data.HashMap.Strict as M
+import           Data.Char
+import           Control.Applicative      ((<$>))
+
+import           Types
 
 }
 
-%name parse_tokenized_regexp
+%name      parser
 %tokentype { Token }
-%error { parseError }
+%error     { parseError }
 
 %token
     name          { TokenName $$ }
@@ -27,32 +32,50 @@ import Types
     '"'           { TokenDQuote }
     '.'           { TokenDot }
     '?'           { TokenQueryMark }
+    '='           { TokenEq }
+    ';'           { TokenSemicolon }
 
 %%
 
-Regexp     : RegexpAlt                      { Regexp       $1 }
+RegexpDefs
+    : RegexpDef                      { Def  $1    }
+    | RegexpDef RegexpDefs           { Defs $1 $2 }
 
-RegexpAlt  : RegexpCat '|' RegexpAlt        { Alt          $1 $3 }
-           | RegexpCat                      { AltFromCat   $1    }
+RegexpDef
+    : name '=' Regexp ';'            { RegexpDef $1 $3 }
 
-RegexpCat  : RegexpIter RegexpCat           { Cat          $1 $2 }
-           | RegexpIter                     { CatFromIter  $1    }
+Regexp
+    : RegexpAlt                      { Regexp       $1 }
 
-RegexpIter : RegexpPrim '?'                 { IterMaybe    $1       }
-           | RegexpPrim '{' int '}'         { IterRepeat   $1 $3    }
-           | RegexpPrim '{' int ',' int '}' { IterRange    $1 $3 $5 }
-           | RegexpPrim                     { IterFromPrim $1       }
+RegexpAlt
+    : RegexpCat '|' RegexpAlt        { Alt          $1 $3 }
+    | RegexpCat                      { AltFromCat   $1    }
 
-RegexpPrim : name                           { Name         $1 }
-           | '"' chain '"'                  { Elementary   $2 }
-           | '\'' chain '\''                { Elementary   $2 }
-           | '(' RegexpAlt ')'              { Wrapped      $2 }
-           | '[' chain ']'                  { Range        $2 }
-           | '.'                            { Any             }
+RegexpCat
+    : RegexpIter RegexpCat           { Cat          $1 $2 }
+    | RegexpIter                     { CatFromIter  $1    }
+
+RegexpIter
+    : RegexpPrim '?'                 { IterMaybe    $1       }
+    | RegexpPrim '{' int '}'         { IterRepeat   $1 $3    }
+    | RegexpPrim '{' int ',' int '}' { IterRange    $1 $3 $5 }
+    | RegexpPrim                     { IterFromPrim $1       }
+
+RegexpPrim
+    : name                           { Name         $1 }
+    | '"' chain '"'                  { Elementary   $2 }
+    | '\'' chain '\''                { Elementary   $2 }
+    | '(' RegexpAlt ')'              { Wrapped      $2 }
+    | '[' chain ']'                  { Range        $2 }
+    | '.'                            { Any             }
+
 
 {
+
 data Token
-    = TokenChain String
+    = TokenSemicolon
+    | TokenEq
+    | TokenChain String
     | TokenName String
     | TokenInt Int
     | TokenOBracket
@@ -74,40 +97,79 @@ parseError :: [Token] -> a
 parseError e = error $ "Parse error: " ++ show e
 
 
+lexer :: String -> [Token]
 lexer [] = []
 lexer (c : cs)
       | isSpace c = lexer cs
-      | isAlpha c = lexName (c : cs)
-lexer ('.'  : cs) = TokenDot : lexer cs
-lexer ('?'  : cs) = TokenQueryMark : lexer cs
-lexer ('('  : cs) = TokenOBracket : lexer cs
-lexer (')'  : cs) = TokenCBracket : lexer cs
-lexer ('{'  : cs) = TokenOParenthesis : lexInt cs
-lexer ('}'  : cs) = TokenCParenthesis : lexer cs
-lexer ('"'  : cs) = TokenDQuote : lexDQuotedChain cs
-lexer ('\'' : cs) = TokenQuote : lexQuotedChain cs
-lexer ('['  : cs) = TokenOSqBracket : lexChain cs
-lexer ('|'  : cs) = TokenVSlash : lexer cs
+      | isAlpha c = lex_name lexer (c : cs)
+lexer ('='  : cs)        = TokenEq : lex_regexp cs
+lexer ('\n' : cs)        = lexer cs
+lexer ('-'  : '-'  : cs) = lex_comment cs
 
-lexInt cs =
+
+lex_name :: (String -> [Token]) -> String -> [Token]
+lex_name f cs =
+    let (nm, rest) = span (\ c -> isAlphaNum c || c == '_') cs
+        rest'      = f rest
+    in  if nm /= "" then TokenName nm : rest' else rest'
+
+
+lex_comment cs = lexer $ dropWhile (/= '\n') cs
+
+
+lex_regexp :: String -> [Token]
+lex_regexp [] = []
+lex_regexp (c : cs)
+      | isSpace c = lex_regexp cs
+      | isAlpha c = lex_name lex_regexp (c : cs)
+lex_regexp ('.'  : cs) = TokenDot          : lex_regexp cs
+lex_regexp ('?'  : cs) = TokenQueryMark    : lex_regexp cs
+lex_regexp ('('  : cs) = TokenOBracket     : lex_regexp cs
+lex_regexp (')'  : cs) = TokenCBracket     : lex_regexp cs
+lex_regexp ('{'  : cs) = TokenOParenthesis : lex_int cs
+lex_regexp ('}'  : cs) = TokenCParenthesis : lex_regexp cs
+lex_regexp ('"'  : cs) = TokenDQuote       : lex_dqchain cs
+lex_regexp ('\'' : cs) = TokenQuote        : lex_qchain cs
+lex_regexp ('['  : cs) = TokenOSqBracket   : lex_chain cs
+lex_regexp ('|'  : cs) = TokenVSlash       : lex_regexp cs
+lex_regexp (';'  : cs) = TokenSemicolon    : lexer cs
+
+
+lex_int cs =
     let (num, rest) = span isDigit cs
     in  case rest of
-            ',' : cs' -> TokenInt (read num) : TokenComma : lexInt cs'
-            '}' : cs' -> TokenInt (read num) : TokenCParenthesis : lexer cs'
+            ',' : cs' -> TokenInt (read num) : TokenComma : lex_int cs'
+            '}' : cs' -> TokenInt (read num) : TokenCParenthesis : lex_regexp cs'
 
-lexName cs = TokenName nm : lexer rest
-    where (nm, rest) = span (\ c -> isAlphaNum c || c == '_') cs
 
-lexDQuotedChain cs = TokenChain ch : TokenDQuote : lexer (tail rest)
+lex_dqchain cs = TokenChain ch : TokenDQuote : lex_regexp (tail rest)
     where (ch, rest) = span (/= '"') cs
 
-lexQuotedChain cs = TokenChain ch : TokenQuote : lexer (tail rest)
+
+lex_qchain cs = TokenChain ch : TokenQuote : lex_regexp (tail rest)
     where (ch, rest) = span (/= '\'') cs
 
-lexChain cs = TokenChain ch : TokenCSqBracket : lexer (tail rest)
+
+lex_chain cs = TokenChain ch : TokenCSqBracket : lex_regexp (tail rest)
     where (ch, rest) = span (/= ']') cs
 
-parseRegexp = parse_tokenized_regexp . lexer
+
+--------------------------------------------------------------------------------
+parse_regexps :: FilePath -> IO RegexpTable
+parse_regexps fp =
+    let regexps2table :: RegexpDefs -> [(String, Regexp)]
+        regexps2table (Def  (RegexpDef name regexp))      = [(name, regexp)]
+        regexps2table (Defs (RegexpDef name regexp) defs) = (name, regexp) : regexps2table defs
+    in  M.fromList . regexps2table . parser . lexer <$> readFile fp
 
 }
+
+
+
+
+
+
+
+
+
 

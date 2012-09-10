@@ -70,10 +70,10 @@ cfa_add_regexp_atom (cfa, ss) l sign =
             ) (cfa, S.empty) ss
 
 
-re2cfa :: [Regexp] -> RegexpTable -> CFA
+re2cfa :: [String] -> RegexpTable -> CFA
 re2cfa rs rt =
     let cfa = emptyCFA
     in  fst $ foldl'
-            (\ (cfa, ss) (k, r) -> (fst (cfa_add_regexp (cfa, ss) r rt k), ss))
+            (\ (cfa, ss) (k, r) -> (fst (cfa_add_regexp (cfa, ss) (M.lookupDefault undefined r rt) rt k), ss))
             (cfa, S.insert (initialState cfa) S.empty)
             (zip [0 .. length rs] rs)
