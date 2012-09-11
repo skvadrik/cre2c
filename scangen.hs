@@ -15,26 +15,13 @@ import           CFA
 import           RE2CFA
 import           CFA2CPP
 import           RegexpParser
-import           RuleParser
+import           SourceParser
 
 import Debug.Trace
 
 
 usage :: IO ()
 usage = putStrLn "usage: ./scangen.hs <source code file> <destination code file> <regexp file>" >> exitFailure
-
-
-parse_source :: FilePath -> IO (Code, RuleTable, Code)
-parse_source fp = do
-    (prolog, scangen_code, epilog) <-
-        (\ (prolog, rest) ->
-              let (scangen_code, epilog) = break (== BS.pack "end*/") (tail rest)
-              in  (BS.unlines prolog, BS.unlines scangen_code, BS.unlines (tail epilog))
-        )
-        . break (== BS.pack "/*start:")
-        . BS.lines
-        <$> BS.readFile fp
-    return (prolog, parse_rules (BS.unpack scangen_code), epilog)
 
 
 trace' a = trace (show a) a
