@@ -32,7 +32,7 @@ import           Types
 
 
 emptyCFA :: CFA
-emptyCFA = CFA 0 0 M.empty M.empty
+emptyCFA = CFA 0 1 M.empty M.empty
 
 initialState :: CFA -> State
 initialState = initial_state

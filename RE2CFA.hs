@@ -54,7 +54,7 @@ cfa_add_regexp_iter (cfa, ss) r rt sign = case r of
 
 cfa_add_regexp_prim :: (CFA, S.Set State) -> RegexpPrim -> RegexpTable -> SignNum -> (CFA, S.Set State)
 cfa_add_regexp_prim (cfa, ss) r rt sign = case r of
-    Elementary s -> foldl' (\(d, s) c -> cfa_add_regexp_atom (d, s) (LabelChar c) sign) (cfa, ss) s
+    Elementary s -> foldl' (\(d, s) c -> cfa_add_regexp_atom (d, s) (LabelChar (trace' c)) sign) (cfa, ss) $ trace' s
     Name s       ->
         let Regexp ralt = M.lookupDefault undefined s rt
         in  cfa_add_regexp_alt (cfa, ss) ralt rt sign
@@ -73,10 +73,10 @@ cfa_add_regexp_atom (cfa, ss) l sign =
             ) (cfa, S.empty) ss
 
 
-re2cfa :: [String] -> RegexpTable -> CFA
+re2cfa :: [RegexpName] -> RegexpTable -> CFA
 re2cfa rs rt =
     let cfa = emptyCFA
     in  fst $ foldl'
             (\ (cfa, ss) (k, r) -> (fst (cfa_add_regexp (cfa, ss) (M.lookupDefault undefined r rt) rt k), ss))
             (cfa, S.insert (initialState cfa) S.empty)
-            (zip [0 .. length rs] rs)
+            (zip [0 .. length rs - 1] rs)

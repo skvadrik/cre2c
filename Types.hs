@@ -6,6 +6,10 @@ import qualified Data.Set              as S
 import qualified Data.ByteString.Char8 as BS
 import           Data.Hashable
 
+import Debug.Trace
+trace' a = trace (show a) a
+trace'' s a = trace (s ++ show a) a
+
 
 ---------------- regexp types
 data Regexp
@@ -59,7 +63,6 @@ data Label
     = LabelChar Char
     | LabelRange String
     | LabelAny
-    deriving (Show)
 
 instance Eq Label where
     LabelAny      == _             = True
@@ -74,6 +77,10 @@ instance Hashable Label where
     hash (LabelChar c)  = hash [c]
     hash (LabelRange s) = hash s
 
+instance Show Label where
+    show (LabelAny)     = "*"
+    show (LabelChar c)  = [c]
+    show (LabelRange s) = s
 
 ---------------- Common types
 data Rules
