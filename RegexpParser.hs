@@ -5,7 +5,8 @@ module RegexpParser
 
 import qualified Data.HashMap.Strict as M
 import           Data.Char
-import           Control.Applicative      ((<$>))
+import           Control.Applicative       ((<$>))
+import qualified Data.DList          as DL
 
 import           Types
 
@@ -435,16 +436,30 @@ lex_int cs =
             '}' : cs' -> TokenInt (read num) : TokenCParenthesis : lex_regexp cs'
 
 
-lex_dqchain cs = TokenChain ch : TokenDQuote : lex_regexp (tail rest)
-    where (ch, rest) = span (/= '"') cs
+take_escaped_till :: Char -> String -> (String, String)
+take_escaped_till c s =
+    let f :: DL.DList Char -> String -> (DL.DList Char, String)
+        f tok ""                = (tok, "")
+        f tok ('\\' : x : xs)   = f (DL.snoc (DL.snoc tok '\\') x) xs
+        f tok (x : xs) | x == c = (DL.snoc tok x, xs)
+        f tok (x : xs)          = f (DL.snoc tok x) xs
+        (tok, rest) = f (DL.fromList [c]) s
+    in  (DL.toList tok, rest)
 
 
-lex_qchain cs = TokenChain ch : TokenQuote : lex_regexp (tail rest)
-    where (ch, rest) = span (/= '\'') cs
+lex_dqchain cs =
+    let (ch, rest) = take_escaped_till '"' cs
+    in  TokenChain (read ch) : TokenDQuote : lex_regexp rest
 
 
-lex_chain cs = TokenChain ch : TokenCSqBracket : lex_regexp (tail rest)
-    where (ch, rest) = span (/= ']') cs
+lex_qchain cs =
+    let (ch, rest) = take_escaped_till '\'' cs
+    in  TokenChain (read ch) : TokenQuote : lex_regexp rest
+
+
+lex_chain cs =
+    let (ch, rest) = take_escaped_till ']' cs
+    in  TokenChain (read ch) : TokenCSqBracket : lex_regexp rest
 
 
 --------------------------------------------------------------------------------
