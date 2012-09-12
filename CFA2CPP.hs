@@ -5,8 +5,10 @@ module CFA2CPP
 
 import qualified Data.HashMap.Strict   as M
 import qualified Data.Set              as S
-import           Data.List                  (intercalate)
+import           Data.List                   (intercalate)
 import qualified Data.ByteString.Char8 as BS
+import           Numeric                     (showHex)
+import           Data.Char                   (ord)
 --import qualified Data.DList            as DL
 
 import           Types
@@ -81,19 +83,34 @@ code_for_entry node0 conditions codes sign_maxlen =
 code_for_initial_state :: CFANode -> M.HashMap SignNum [Cond] -> String
 code_for_initial_state node0 sign2conds = concat
     [ "\nswitch (*CURSOR++) {\n\t"
-    , concatMap (\ (l, (ks, s)) -> concat
-        [ "case "
-        , show l
-        , ":"
-        , code_for_conditions $ M.filterWithKey (\ k _ -> S.member k ks) sign2conds
-        , "\n\t\tif (active_count > 0) {"
-        , "\n\t\t\tgoto m_"
-        , show s
-        , ";\n\t\t} else {\n\t\t\tMARKER = CURSOR;\n\t\t\tgoto m_fin;\n\t\t}\n\t"
-        ]) (M.toList node0)
+    , concatMap (\ (l, (ks, s')) ->
+        let code_for_cond_case :: Char -> String
+            code_for_cond_case c = concat
+                [ "\n\tcase "
+                , let i = ord c in "\'" ++ (if i < 0x20 || i == 0x5C || i == 0x27 || i > 0x7E then "\\x" ++ showHex i "" else [c])
+                , "':"
+                , code_for_conditions $ M.filterWithKey (\ k _ -> S.member k ks) sign2conds
+                , "\n\t\tif (active_count > 0) {"
+                , "\n\t\t\tgoto m_"
+                , show s'
+                , ";"
+                ]
+        in  case l of
+            LabelAny     -> ""
+            LabelChar c  -> code_for_cond_case c
+            LabelRange s -> concatMap code_for_cond_case s
+        ) (M.toList node0)
     , "default:"
-    , "\n\t\tMARKER = CURSOR;"
-    , "\n\t\tgoto m_fin;"
+    , case M.lookup LabelAny node0 of
+        Just (_, s') -> concat
+            [ "\n\t\tgoto m_"
+            , show s'
+            ,  ";"
+            ]
+        Nothing      -> concat
+            [ "\n\t\tMARKER = CURSOR;"
+            , "\n\t\tgoto m_fin;"
+            ]
     , "\n\t}"
     ]
 
@@ -137,16 +154,31 @@ code_for_state s node is_final signs = (BS.pack . concat)
     , "\nprintf(\"%s\\n\", CURSOR);"
     , if is_final then "\nif (active_count > 0) " else "\n"
     , "switch (*CURSOR++) {"
-    , concatMap (\ (l, (_, s')) -> concat
-        [ "\n\tcase "
-        , show l
-        , ":\n\t\tgoto m_"
-        , show s'
-        , ";"
-        ]) (M.toList node)
+    , concatMap (\ (l, (_, s')) ->
+        let code_for_case :: Char -> String
+            code_for_case c = concat
+                [ "\n\tcase "
+                , let i = ord c in "\'" ++ (if i < 0x20 || i == 0x5C || i == 0x27 || i > 0x7E then "\\x" ++ showHex i "" else [c])
+                , "':\n\t\tgoto m_"
+                , show s'
+                , ";"
+                ]
+        in case l of
+            LabelAny     -> ""
+            LabelChar c  -> code_for_case c
+            LabelRange s -> concatMap code_for_case s
+        ) (M.toList node)
     , "\n\tdefault:"
-    , if is_final then "" else "\n\t\tif (adjust_marker)\n\t\t\tMARKER = CURSOR;"
-    , "\n\t\tgoto m_fin;"
+    , case M.lookup LabelAny node of
+        Just (_, s') -> concat
+            [ "\n\t\tgoto m_"
+            , show s'
+            ,  ";"
+            ]
+        Nothing      -> concat
+            [ if is_final then "" else "\n\t\tif (adjust_marker)\n\t\t\tMARKER = CURSOR;"
+            , "\n\t\tgoto m_fin;"
+            ]
     , "\n\t}"
     , if is_final then "\nelse goto m_fin;" else ""
     ]

@@ -79,8 +79,8 @@ instance Hashable Label where
 
 instance Show Label where
     show (LabelAny)     = "*"
-    show (LabelChar c)  = [c]
-    show (LabelRange s) = s
+    show (LabelChar c)  = show c
+    show (LabelRange s) = tail $ init $ show $ s
 
 ---------------- Common types
 data Rules
