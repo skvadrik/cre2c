@@ -24,7 +24,7 @@ main = do
 
     let (conds, regexps, codes) = (unzip3 . M.elems) rules
     let cfa                     = re2cfa regexps regexp_table
-    let sign_maxlen             = 50
+    let sign_maxlen             = 56
 
     cfa2cpp fdest cfa prolog epilog conds codes sign_maxlen
 

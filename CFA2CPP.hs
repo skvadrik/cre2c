@@ -90,7 +90,7 @@ code_for_initial_state node0 sign2conds = concat
                 , let i = ord c in "\'" ++ (if i < 0x20 || i == 0x5C || i == 0x27 || i > 0x7E then "\\x" ++ showHex i "" else [c])
                 , "':"
                 , code_for_conditions $ M.filterWithKey (\ k _ -> S.member k ks) sign2conds
-                , "\n\t\tif (active_count > 0) {"
+                , "\n\t\tif (active_count > 0)"
                 , "\n\t\t\tgoto m_"
                 , show s'
                 , ";"
@@ -100,7 +100,7 @@ code_for_initial_state node0 sign2conds = concat
             LabelChar c  -> code_for_cond_case c
             LabelRange s -> concatMap code_for_cond_case s
         ) (M.toList node0)
-    , "default:"
+    , "\n\tdefault:"
     , case M.lookup LabelAny node0 of
         Just (_, s') -> concat
             [ "\n\t\tgoto m_"
@@ -117,7 +117,12 @@ code_for_initial_state node0 sign2conds = concat
 
 code_for_conditions :: M.HashMap SignNum [Cond] -> String
 code_for_conditions = M.foldlWithKey' (\code k conditions -> code ++ case conditions of
-    [] -> ""
+    [] -> concat
+        [ "\n\t\tactive_signatures["
+        , show k
+        , "] = true;"
+        , "\n\t\tactive_count ++;"
+        ]
     _  -> let conds = intercalate " && " conditions in concat
         [ "\n\t\tif ("
         , conds
@@ -151,7 +156,7 @@ code_for_state s node is_final signs = (BS.pack . concat)
             , "\n\tadjust_marker = false;\n}"
             ]) "" $ signs
         else ""
-    , "\nprintf(\"%s\\n\", CURSOR);"
+--    , "\nprintf(\"%s\\n\", CURSOR);"
     , if is_final then "\nif (active_count > 0) " else "\n"
     , "switch (*CURSOR++) {"
     , concatMap (\ (l, (_, s')) ->
