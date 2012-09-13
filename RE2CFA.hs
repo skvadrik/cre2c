@@ -59,7 +59,14 @@ cfa_add_regexp_prim (cfa, ss) r rt sign = case r of
         let Regexp ralt = M.lookupDefault undefined s rt
         in  cfa_add_regexp_alt (cfa, ss) ralt rt sign
     Wrapped ralt -> cfa_add_regexp_alt (cfa, ss) ralt rt sign
+-- тут надо осторожно: добавлять ещё все состояния, в которые переходим по обычным дугам
+-- потом будет ещё жопа при добавлении новой дуги
     Any          -> cfa_add_regexp_atom (cfa, ss) LabelAny sign
+-- что если значение из диапазона совпадает с уже добавленной дугой?
+-- тогда останется только первая дуга
+-- надо addTransition переделывать
+-- может оказаться проще убрать диапазрны, заменить альтернативами
+-- ну то есть времени на генерацию не жалко. Но шоб не намутить.
     Range s      -> cfa_add_regexp_atom (cfa, ss) (LabelRange s) sign
 
 

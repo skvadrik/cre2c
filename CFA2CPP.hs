@@ -51,6 +51,8 @@ code_for_entry node0 conditions codes sign_maxlen =
             , "\nint accepted_count = 0;"
             , "\n\nint  j;"
             , "\nbool adjust_marker;"
+            , "\nbool default_case_enabled = true;"
+            , "\nbool parsing_default;"
             , "\n\nstatic void * code[] = {"
             , intercalate ", " (map ("&&" ++) code_labels)
             , "};"
@@ -68,13 +70,17 @@ code_for_entry node0 conditions codes sign_maxlen =
             , "\nm_continue:"
             , "\nif (j < accepted_count)"
             , "\n\tGOTO(accepted_signatures[j++]);"
+            , "\nif (!default_case_enabled && !parsing_default)"
+            , "\n\tdefault_case_enabled = true;"
             , "\ngoto m_start;"
             , "\n\n\nm_start:"
             , "\nfor (int i = 0; i < NUM_SIGN; i++)"
             , "\n\tactive_signatures[i] = false;"
-            , "\nactive_count   = 0;"
-            , "\naccepted_count = 0;"
-            , "\nadjust_marker  = true;"
+            , "\nactive_count    = 0;"
+            , "\naccepted_count  = 0;"
+            , "\nadjust_marker   = true;"
+            , "\nparsing_default = false;"
+            , "\ntoken           = CURSOR;"
             , "\nif (LIMIT - CURSOR < SIGN_MAXLEN) FILL();\n\n"
             , code_for_initial_state node0 sign2conds
             ]
@@ -87,8 +93,10 @@ code_for_initial_state node0 sign2conds = concat
         let code_for_cond_case :: Char -> String
             code_for_cond_case c = concat
                 [ "\n\tcase "
-                , let i = ord c in "\'" ++ (if i < 0x20 || i == 0x5C || i == 0x27 || i > 0x7E then "\\x" ++ showHex i "" else [c])
-                , "':"
+                , "0x" ++ showHex (ord c) ""
+--                , let i = ord c in "\'" ++ (if i < 0x20 || i == 0x5C || i == 0x27 || i > 0x7E then "\\x" ++ showHex i "" else [c])
+--                , "':"
+                , ":"
                 , code_for_conditions $ M.filterWithKey (\ k _ -> S.member k ks) sign2conds
                 , "\n\t\tif (active_count > 0)"
                 , "\n\t\t\tgoto m_"
@@ -103,9 +111,15 @@ code_for_initial_state node0 sign2conds = concat
     , "\n\tdefault:"
     , case M.lookup LabelAny node0 of
         Just (_, s') -> concat
-            [ "\n\t\tgoto m_"
+            [ "\n\t\tif (default_case_enabled) {"
+            , "\n\t\t\tparsing_default = true;"
+            , "\n\t\t\tgoto m_"
             , show s'
             ,  ";"
+            , "\n\t\t} else if (adjust_marker) {"
+            , "\n\t\t\tMARKER = CURSOR;"
+            , "\n\t\t\tgoto m_fin;"
+            , "\n\t\t}"
             ]
         Nothing      -> concat
             [ "\n\t\tMARKER = CURSOR;"
@@ -163,8 +177,10 @@ code_for_state s node is_final signs = (BS.pack . concat)
         let code_for_case :: Char -> String
             code_for_case c = concat
                 [ "\n\tcase "
-                , let i = ord c in "\'" ++ (if i < 0x20 || i == 0x5C || i == 0x27 || i > 0x7E then "\\x" ++ showHex i "" else [c])
-                , "':\n\t\tgoto m_"
+                , "0x" ++ showHex (ord c) ""
+--                , let i = ord c in "\'" ++ (if i < 0x20 || i == 0x5C || i == 0x27 || i > 0x7E then "\\x" ++ showHex i "" else [c])
+--                , "':\n\t\tgoto m_"
+                , ":\n\t\tgoto m_"
                 , show s'
                 , ";"
                 ]
@@ -176,12 +192,20 @@ code_for_state s node is_final signs = (BS.pack . concat)
     , "\n\tdefault:"
     , case M.lookup LabelAny node of
         Just (_, s') -> concat
-            [ "\n\t\tgoto m_"
+            [ "\n\t\tif (default_case_enabled) {"
+            , "\n\t\t\tparsing_default = true;"
+            , "\n\t\t\tgoto m_"
             , show s'
             ,  ";"
+            , "\n\t\t} else if (adjust_marker) {"
+            , "\n\t\t\tMARKER = CURSOR;"
+            , "\n\t\t\tgoto m_fin;"
+            , "\n\t\t}"
             ]
         Nothing      -> concat
-            [ if is_final then "" else "\n\t\tif (adjust_marker)\n\t\t\tMARKER = CURSOR;"
+            [ if is_final then "" else "\n\t\tif (adjust_marker && !parsing_default)\n\t\t\tMARKER = CURSOR;"
+            , "\n\t\tif (parsing_default)"
+            , "\n\t\t\tdefault_case_enabled = false;"
             , "\n\t\tgoto m_fin;"
             ]
     , "\n\t}"
