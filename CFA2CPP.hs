@@ -45,8 +45,8 @@ code_for_entry n sign_maxlen = BS.pack $ concat
     , show n
     , "\n#define SIGN_MAXLEN "
     , show sign_maxlen
-    , "\n\nbool forbidden_signatures[NUM_SIGN + 1];"
-    , "\nfor (int i = 0; i <= NUM_SIGN; i++)"
+    , "\n\nbool forbidden_signatures[NUM_SIGN];"
+    , "\nfor (int i = 0; i < NUM_SIGN; i++)"
     , "\n\tforbidden_signatures[i] = NUM_SIGN;"
     , "\nint  forbidden_count;"
     , "\nint  new_forbidden_count;"
@@ -103,7 +103,6 @@ code_for_initial_state node0 sign2conds = BS.pack $ concat
             LabelRange s -> concatMap code_for_cond_case s
         ) (M.toList node0)
     , "\n\tdefault:"
---    , "\n\t\tprintf(\"def0\\n\");"
     , case M.lookup LabelAny node0 of
         Just (ks, s') -> concat
             [ "\n\t\tif (default_case_enabled) {"
@@ -125,11 +124,11 @@ code_for_initial_state node0 sign2conds = BS.pack $ concat
             , show s'
             ,  ";"
             , "\n\t\t} else"
-            , "\n\t\t\tMARKER ++;// = CURSOR;"
+            , "\n\t\t\tMARKER ++;"
             , "\n\t\tgoto m_fin;"
             ]
         Nothing      -> concat
-            [ "\n\t\tMARKER ++;// = CURSOR;"
+            [ "\n\t\tMARKER ++;"
 
 --            , "\nprintf(\"def0 - fallout\\n\");"
 
@@ -188,8 +187,8 @@ code_for_state s node = (BS.pack . concat)
             , "\n\t\t\tgoto m_"
             , show s'
             ,  ";"
-            , "\n\t\t} else if (1 || adjust_marker)"
-            , "\n\t\t\tMARKER ++;// = CURSOR;"
+            , "\n\t\t}"
+            , "\n\t\tMARKER += adjust_marker;"
 
 --            , "\n\t\tprintf(\"def\\n\");"
 
@@ -197,8 +196,7 @@ code_for_state s node = (BS.pack . concat)
             ]
 
         Nothing      -> concat
-            [ "\n\t\tif (1 || adjust_marker && !parsing_default)"
-            , "\n\t\t\tMARKER ++;// = CURSOR"
+            [ "\n\t\tMARKER += adjust_marker && !parsing_default;"
             , "\n\t\tif (parsing_default)"
             , "\n\t\t\tdefault_case_enabled = false;"
 
@@ -216,12 +214,12 @@ code_for_final_state s node signs codes = (BS.pack . concat)
     , show s
     , ":"
     , S.foldl' (\ s k -> s ++ concat
-        [ "\nfor (j = 0; j <= forbidden_count; j++)"
+        [ "\nfor (j = 0; j < forbidden_count; j++)"
         , "\n\tif (forbidden_signatures[j] == "
         , show k
         , ")\n\t\tbreak;"
 --        , "\nprintf(\"fc = %d\\n\", forbidden_count);"
-        , "\nif (j == forbidden_count + 1) {\n\t"
+        , "\nif (j == forbidden_count) {\n\t"
         , BS.unpack $ codes !! k
         , "\n\tMARKER = CURSOR;"
         , "\n\tadjust_marker = false;\n}"
@@ -257,14 +255,11 @@ code_for_final_state s node signs codes = (BS.pack . concat)
             , "\n\t\t\tgoto m_"
             , show s'
             ,  ";"
-            , "\n\t\t} else {"
-            , "\n\t\t\tif (adjust_marker)"
-            , "\n\t\t\t\tMARKER = CURSOR;"
+            , "\n\t\t} else"
+            , "\n\t\t\tgoto m_fin;"
 
 --            , "\n\t\tprintf(\"defF\\n\");"
 
-            , "\n\t\t\tgoto m_fin;"
-            , "\n\t\t}"
             ]
         Nothing      -> concat
             [ "\n\t\tif (parsing_default)"
