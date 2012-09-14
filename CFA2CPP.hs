@@ -21,7 +21,7 @@ cfa2cpp fp cfa prolog epilog conditions codes sign_maxlen =
         states = M.foldlWithKey'
             (\ code s node -> BS.concat
                 [ code
-                , code_for_state s node (isFinal s cfa) (acceptedSignatures s cfa)
+                , if isFinal s cfa then code_for_final_state s node (acceptedSignatures s cfa) codes else code_for_state s node
                 ]
             )
             (BS.pack "")
@@ -44,43 +44,23 @@ code_for_entry node0 conditions codes sign_maxlen =
             , show n
             , "\n#define SIGN_MAXLEN "
             , show sign_maxlen
-            , "\n#define GOTO(x) { goto *code[x]; }"
-            , "\n\nbool active_signatures[NUM_SIGN];"
-            , "\nint  active_count;"
-            , "\n\nint accepted_signatures[NUM_SIGN];"
-            , "\nint accepted_count = 0;"
-            , "\n\nint  j;"
+            , "\n\nbool forbidden_signatures[NUM_SIGN + 1];"
+            , "\nfor (int i = 0; i <= NUM_SIGN; i++)"
+            , "\n\tforbidden_signatures[i] = NUM_SIGN;"
+            , "\nint  forbidden_count;"
+            , "\nint  new_forbidden_count;"
             , "\nbool adjust_marker;"
             , "\nbool default_case_enabled = true;"
             , "\nbool parsing_default;"
-            , "\n\nstatic void * code[] = {"
-            , intercalate ", " (map ("&&" ++) code_labels)
-            , "};"
+            , "\nint  j;"
             , "\n\ngoto m_start;\n\n"
-            , concatMap (\ k -> concat
-                [ "\n"
-                , code_labels !! k
-                , ": "
-                , (map BS.unpack codes) !! k
-                , "\ngoto m_continue;"
-                ]) [0 .. n - 1]
+
             , "\n\n\nm_fin:"
             , "\nCURSOR = MARKER;"
-            , "\nj = 0;"
-            , "\nm_continue:"
-            , "\nif (j < accepted_count)"
-            , "\n\tGOTO(accepted_signatures[j++]);"
             , "\nif (!default_case_enabled && !parsing_default)"
             , "\n\tdefault_case_enabled = true;"
-            , "\ngoto m_start;"
+
             , "\n\n\nm_start:"
-            , "\nfor (int i = 0; i < NUM_SIGN; i++)"
-            , "\n\tactive_signatures[i] = true;"
---            , "\nactive_count    = 0;"
-            , "\naccepted_count  = 0;"
-            , "\nadjust_marker   = true;"
-            , "\nparsing_default = false;"
-            , "\ntoken           = CURSOR;"
             , "\nif (LIMIT - CURSOR < SIGN_MAXLEN) FILL();\n\n"
             , code_for_initial_state node0 sign2conds
             ]
@@ -94,11 +74,23 @@ code_for_initial_state node0 sign2conds = concat
             code_for_cond_case c = concat
                 [ "\n\tcase "
                 , "0x" ++ showHex (ord c) ""
---                , let i = ord c in "\'" ++ (if i < 0x20 || i == 0x5C || i == 0x27 || i > 0x7E then "\\x" ++ showHex i "" else [c])
---                , "':"
                 , ":"
+
+--                , "\nprintf(\"case0: %X\\n\", "
+--                , "0x" ++ showHex (ord c) ""
+--                , ");"
+--                , "\nprintf(\"%p\\n\", MARKER);"
+                , "\n\t\tnew_forbidden_count = 0;"
+                , "\n\t\tadjust_marker       = true;"
+                , "\n\t\tparsing_default     = false;"
+                , "\n\t\ttoken               = MARKER;"
                 , code_for_conditions $ M.filterWithKey (\ k _ -> S.member k ks) sign2conds
---                , "\n\t\tif (active_count > 0)"
+                , "\n\t\tfor (int i = new_forbidden_count; i < forbidden_count; i++)"
+                , "\n\t\t\tforbidden_signatures[i] = NUM_SIGN;"
+                , "\n\t\tforbidden_count = new_forbidden_count;"
+                , "\n\t\tif (forbidden_count <"
+                , show $ S.size ks
+                , ")"
                 , "\n\t\t\tgoto m_"
                 , show s'
                 , ";"
@@ -109,25 +101,29 @@ code_for_initial_state node0 sign2conds = concat
             LabelRange s -> concatMap code_for_cond_case s
         ) (M.toList node0)
     , "\n\tdefault:"
+--    , "\n\t\tprintf(\"def0\\n\");"
     , case M.lookup LabelAny node0 of
-        Just (_, s') -> concat
-{-
-            [ "\n\t\t if (adjust_marker)"
-            , "\n\t\t\tMARKER = CURSOR;"
-            , "\n\t\tgoto m_fin;"
-            ]
--}
-
+        Just (ks, s') -> concat
             [ "\n\t\tif (default_case_enabled) {"
-            , "\n\t\t\tparsing_default = true;"
+--            , "\nprintf(\"def\\n\");"
+            , "\n\t\t\tnew_forbidden_count = 0;"
+            , "\n\t\t\tadjust_marker       = true;"
+            , "\n\t\t\tparsing_default     = true;"
+            , "\n\t\t\ttoken               = MARKER;"
+            , code_for_conditions $ M.filterWithKey (\ k _ -> S.member k ks) sign2conds
+            , "\n\t\t\tfor (int i = new_forbidden_count; i < forbidden_count; i++)"
+            , "\n\t\t\t\tforbidden_signatures[i] = NUM_SIGN;"
+            , "\n\t\t\tforbidden_count = new_forbidden_count;"
+            , "\n\t\t\tif (forbidden_count <"
+            , show $ S.size ks
+            , ")"
             , "\n\t\t\tgoto m_"
             , show s'
             ,  ";"
-            , "\n\t\t} else if (adjust_marker)"
+            , "\n\t\t} else"
             , "\n\t\t\tMARKER = CURSOR;"
             , "\n\t\tgoto m_fin;"
             ]
-
         Nothing      -> concat
             [ "\n\t\tMARKER = CURSOR;"
             , "\n\t\tgoto m_fin;"
@@ -139,14 +135,12 @@ code_for_initial_state node0 sign2conds = concat
 code_for_conditions :: M.HashMap SignNum [Cond] -> String
 code_for_conditions = M.foldlWithKey' (\code k conditions -> code ++ case conditions of
     [] -> ""
-    _  -> let conds = intercalate " && " conditions in concat
+    _  -> concat
         [ "\n\t\tif (!("
-        , conds
-        , ")) {"
-        , "\n\t\t\tactive_signatures["
+        , intercalate " && " conditions
+        , "))\n\t\tforbidden_signatures[new_forbidden_count++] = "
         , show k
-        , "] = false;"
-        , "\n\t\t}"
+        , ";"
         ]
     ) ""
 
@@ -162,10 +156,15 @@ code_for_state s node = (BS.pack . concat)
         let code_for_case :: Char -> String
             code_for_case c = concat
                 [ "\n\tcase "
-                , "0x" ++ showHex (ord c) ""
---                , let i = ord c in "\'" ++ (if i < 0x20 || i == 0x5C || i == 0x27 || i > 0x7E then "\\x" ++ showHex i "" else [c])
---                , "':\n\t\tgoto m_"
-                , ":\n\t\tgoto m_"
+                , "0x"
+                , showHex (ord c) ""
+                , ":"
+
+--                , "\nprintf(\"case: %X\\n\", "
+--                , "0x" ++ showHex (ord c) ""
+--                , ");"
+
+                , "\n\t\tgoto m_"
                 , show s'
                 , ";"
                 ]
@@ -175,14 +174,9 @@ code_for_state s node = (BS.pack . concat)
             LabelRange s -> concatMap code_for_case s
         ) (M.toList node)
     , "\n\tdefault:"
+--    , "\n\t\tprintf(\"def\\n\");"
     , case M.lookup LabelAny node of
         Just (_, s') -> concat
-{-
-            [ "\n\t\t if (adjust_marker)"
-            , "\n\t\t\tMARKER = CURSOR;"
-            , "\n\t\tgoto m_fin;"
-            ]
--}
             [ "\n\t\tif (default_case_enabled) {"
             , "\n\t\t\tparsing_default = true;"
             , "\n\t\t\tgoto m_"
@@ -194,49 +188,47 @@ code_for_state s node = (BS.pack . concat)
             ]
 
         Nothing      -> concat
-            [ "\n\t\tif (adjust_marker)"
+            [ "\n\t\tif (adjust_marker && !parsing_default)"
             , "\n\t\t\tMARKER = CURSOR;"
-            , "\n\t\tgoto m_fin;"
-            ]
-{-
-            [ if is_final then "" else "\n\t\tif (adjust_marker && !parsing_default)\n\t\t\tMARKER = CURSOR;"
             , "\n\t\tif (parsing_default)"
             , "\n\t\t\tdefault_case_enabled = false;"
             , "\n\t\tgoto m_fin;"
             ]
--}
     , "\n\t}"
     ]
 
 
-code_for_final_state :: State -> CFANode -> SignSet -> Code
-code_for_final_state s node signs = (BS.pack . concat)
+code_for_final_state :: State -> CFANode -> SignSet -> [Code] -> Code
+code_for_final_state s node signs codes = (BS.pack . concat)
     [ "\nm_"
     , show s
     , ":"
     , S.foldl' (\ s k -> s ++ concat
-        [ "\nif (active_signatures["
+        [ "\nfor (j = 0; j <= forbidden_count; j++)"
+        , "\n\tif (forbidden_signatures[j] == "
         , show k
-        , "] == true) {"
-        , "\n\taccepted_signatures[accepted_count++] = "
-        , show k
-        , ";\n\tactive_signatures["
-        , show k
-        , "] = false;"
+        , ")\n\t\tbreak;"
+--        , "\nprintf(\"fc = %d\\n\", forbidden_count);"
+        , "\nif (j == forbidden_count + 1) {\n\t"
+        , BS.unpack $ codes !! k
         , "\n\tMARKER = CURSOR;"
         , "\n\tadjust_marker = false;\n}"
         ]) "" signs
 --    , "\nprintf(\"%s\\n\", CURSOR);"
-    , "\nif (active_count > 0) "
-    , "switch (*CURSOR++) {"
+    , "\nswitch (*CURSOR++) {"
     , concatMap (\ (l, (_, s')) ->
         let code_for_case :: Char -> String
             code_for_case c = concat
                 [ "\n\tcase "
+                , "0x"
+                , showHex (ord c) ""
+                , ":"
+
+                , "\nprintf(\"caseF: %X\\n\", "
                 , "0x" ++ showHex (ord c) ""
---                , let i = ord c in "\'" ++ (if i < 0x20 || i == 0x5C || i == 0x27 || i > 0x7E then "\\x" ++ showHex i "" else [c])
---                , "':\n\t\tgoto m_"
-                , ":\n\t\tgoto m_"
+                , ");"
+
+                , "\n\t\tgoto m_"
                 , show s'
                 , ";"
                 ]
@@ -246,34 +238,27 @@ code_for_final_state s node signs = (BS.pack . concat)
             LabelRange s -> concatMap code_for_case s
         ) (M.toList node)
     , "\n\tdefault:"
+--    , "\n\t\tprintf(\"defF\\n\");"
     , case M.lookup LabelAny node of
         Just (_, s') -> concat
-{-
-            [ "\n\t\t if (adjust_marker)"
-            , "\n\t\t\tMARKER = CURSOR;"
-            , "\n\t\tgoto m_fin;"
-            ]
--}
             [ "\n\t\tif (default_case_enabled) {"
             , "\n\t\t\tparsing_default = true;"
             , "\n\t\t\tgoto m_"
             , show s'
             ,  ";"
-            , "\n\t\t} else if (adjust_marker)"
-            , "\n\t\t\tMARKER = CURSOR;"
-            , "\n\t\tgoto m_fin;"
+            , "\n\t\t} else {"
+            , "\n\t\t\tif (adjust_marker)"
+            , "\n\t\t\t\tMARKER = CURSOR;"
+            , "\n\t\t\tgoto m_fin;"
+            , "\n\t\t}"
             ]
-
-        Nothing      -> "\n\t\tgoto m_fin;"
-{-
-            [ if is_final then "" else "\n\t\tif (adjust_marker && !parsing_default)\n\t\t\tMARKER = CURSOR;"
-            , "\n\t\tif (parsing_default)"
+        Nothing      -> concat
+            [ "\n\t\tif (parsing_default)"
             , "\n\t\t\tdefault_case_enabled = false;"
             , "\n\t\tgoto m_fin;"
             ]
--}
     , "\n\t}"
-    , if is_final then "\nelse goto m_fin;" else ""
+-- it was for if(active_count > 0)    , "\nelse goto m_fin;"
     ]
 
 
