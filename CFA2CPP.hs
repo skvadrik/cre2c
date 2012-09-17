@@ -51,19 +51,23 @@ code_for_entry n sign_maxlen = BS.pack $ concat
     , "\nint  forbidden_count;"
     , "\nint  new_forbidden_count;"
     , "\nbool adjust_marker;"
-    , "\nbool default_case_enabled = true;"
-    , "\nbool parsing_default;"
     , "\nint  j;"
     , "\n\ngoto m_start;\n\n"
 
     , "\n\n\nm_fin:"
     , "\nCURSOR = MARKER;"
-    , "\nif (!default_case_enabled && !parsing_default)"
-    , "\n\tdefault_case_enabled = true;"
 
     , "\n\n\nm_start:"
     , "\nif (LIMIT - CURSOR < SIGN_MAXLEN) FILL();\n\n"
     ]
+
+
+{-
+три проблемы
+1) Range ---- диапазоны. Видно придётся их делать на альтернативах.
+2) Any ---- их надо загонять не только в дефолты, но из  всех состояний добавлять дуги.
+3) case sensitivity
+-}
 
 
 code_for_initial_state :: CFANode -> M.HashMap SignNum [Cond] -> Code
@@ -84,7 +88,6 @@ code_for_initial_state node0 sign2conds = BS.pack $ concat
 
                 , "\n\t\tnew_forbidden_count = 0;"
                 , "\n\t\tadjust_marker       = true;"
-                , "\n\t\tparsing_default     = false;"
                 , "\n\t\ttoken               = MARKER;"
                 , code_for_conditions $ M.filterWithKey (\ k _ -> S.member k ks) sign2conds
                 , "\n\t\tfor (int i = new_forbidden_count; i < forbidden_count; i++)"
@@ -98,11 +101,11 @@ code_for_initial_state node0 sign2conds = BS.pack $ concat
                 , ";"
                 ]
         in  case l of
-            LabelAny     -> ""
             LabelChar c  -> code_for_cond_case c
             LabelRange s -> concatMap code_for_cond_case s
         ) (M.toList node0)
     , "\n\tdefault:"
+{-
     , case M.lookup LabelAny node0 of
         Just (ks, s') -> concat
             [ "\n\t\tif (default_case_enabled) {"
@@ -134,6 +137,9 @@ code_for_initial_state node0 sign2conds = BS.pack $ concat
 
             , "\n\t\tgoto m_fin;"
             ]
+-}
+    , "\n\t\tMARKER ++;"
+    , "\n\t\tgoto m_fin;"
     , "\n\t}"
     ]
 
@@ -175,11 +181,11 @@ code_for_state s node = (BS.pack . concat)
                 , ";"
                 ]
         in case l of
-            LabelAny     -> ""
             LabelChar c  -> code_for_case c
             LabelRange s -> concatMap code_for_case s
         ) (M.toList node)
     , "\n\tdefault:"
+{-
     , case M.lookup LabelAny node of
         Just (_, s') -> concat
             [ "\n\t\tif (default_case_enabled) {"
@@ -204,6 +210,9 @@ code_for_state s node = (BS.pack . concat)
 
             , "\n\t\tgoto m_fin;"
             ]
+-}
+    , "\n\t\tMARKER += adjust_marker;"
+    , "\n\t\tgoto m_fin;"
     , "\n\t}"
     ]
 
@@ -243,11 +252,11 @@ code_for_final_state s node signs codes = (BS.pack . concat)
                 , ";"
                 ]
         in case l of
-            LabelAny     -> ""
             LabelChar c  -> code_for_case c
             LabelRange s -> concatMap code_for_case s
         ) (M.toList node)
     , "\n\tdefault:"
+{-
     , case M.lookup LabelAny node of
         Just (_, s') -> concat
             [ "\n\t\tif (default_case_enabled) {"
@@ -269,8 +278,9 @@ code_for_final_state s node signs codes = (BS.pack . concat)
 
             , "\n\t\tgoto m_fin;"
             ]
+-}
+    , "\n\t\tgoto m_fin;"
     , "\n\t}"
--- it was for if(active_count > 0)    , "\nelse goto m_fin;"
     ]
 
 

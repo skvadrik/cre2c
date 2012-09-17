@@ -24,7 +24,7 @@ module CFA
 
 import qualified Data.HashMap.Strict as M
 import qualified Data.Set            as S
-import           Data.List                (foldl')
+import           Data.List                (foldl', intersect)
 import           Control.Monad            (forM_)
 import           Data.Maybe               (isJust, fromJust)
 
@@ -58,16 +58,63 @@ acceptedSignatures s (CFA _ _ _ fss) = M.lookupDefault (S.empty) s fss
 setFinal :: State -> SignNum -> CFA -> CFA
 setFinal s k (CFA s0 sl g fss) = CFA s0 sl g (M.insertWith (\ _ ks -> S.insert k ks) s (S.insert k S.empty) fss)
 
-addTransition :: CFA -> (State, Label, SignNum, State) -> (CFA, State)
-addTransition cfa@(CFA s0 sl g fss) (s1, l, k, s2) = case M.lookup s1 g of
+addTransition :: CFA -> (State, Label, SignNum, State) -> (CFA, S.Set State)
+addTransition cfa@(CFA s0 sl g fss) (s1, l@(LabelRange r), k, s2) = case M.lookup s1 g of
     Just node | let mb_node = M.lookup l node, isJust mb_node ->
         let g' = M.adjust (\ node -> M.adjust (\ (ks, s') -> (S.insert k ks, s')) l node) s1 g
-        in  (CFA s0 sl g' fss, (snd . fromJust) mb_node)
-    _ ->
+        in  (CFA s0 sl g' fss, S.insert ((snd . fromJust) mb_node) S.empty)
+    Just node ->
+        let (g', ss, r') = M.foldlWithKey'
+                (\ (g', ss, r') l' (_, s') -> case l' of
+                    LabelChar c | c `elem` r ->
+                        ( M.adjust (\ node -> M.adjust (\ (ks, s') -> (S.insert k ks, s')) l node) s1 g
+                        , S.insert s' ss
+                        , filter (/= c) r'
+                        )
+                    LabelRange r'' | let r''' = intersect r' r'', r''' /= [] ->
+                        ( M.adjust (\ node -> M.insert (LabelRange r''') (S.insert k S.empty, s') node) s1 g'
+                        , S.insert s' ss
+                        , filter (`notElem` r'') r'
+                        )
+                    _ -> (g', ss, r')
+                ) (g, S.empty, r) node
+            (g'', ss') = case r' of
+                "" -> (g', ss)
+                r' ->
+                    ( M.adjust (\ node -> M.insert (LabelRange r') (S.insert k S.empty, s2) node) s1 g'
+                    , S.insert s2 ss
+                    )
+            g''' = M.insertWith (\ _ node -> node) s2 M.empty g'
+-- чиво это тут s2?
+        in  (CFA s0 (max (sl + 1) s2) g''' fss, ss')
+    Nothing ->
+        let g'  = M.insert s1 (M.insert l (S.insert k S.empty, s2) M.empty) g
+            g'' = M.insert s2 M.empty g'
+        in  (CFA s0 (max (sl + 1) s2) g'' fss, S.insert s2 S.empty)
+
+-- ещё ж везде повставлять эту хрень
+
+addTransition cfa@(CFA s0 sl g fss) (s1, l@(LabelChar c), k, s2) = case M.lookup s1 g of
+    Just node | let mb_node = M.lookup l node, isJust mb_node ->
+        let g' = M.adjust (\ node -> M.adjust (\ (ks, s') -> (S.insert k ks, s')) l node) s1 g
+        in  (CFA s0 sl g' fss, S.insert ((snd . fromJust) mb_node) S.empty)
+    Just node ->
+        let s'' = case M.filter (\ (l', (_, s')) -> case l' of { LabelRange r | c `elem` r -> True; _ -> False }) (M.toList node) of
+            [(l', (_, s'))] -> s'
+            []              -> s2
+            _               -> error "multiple ranges"
+            g' = M.adjust (\ node -> M.insert l (S.insert k S.empty, s'') node) s1 g
+        in  (CFA s0 (max (sl + 1) s'') g' fss, S.insert s'' S.empty)
+    Nothing ->
+        let g'  = M.insert s1 (M.insert l (S.insert k S.empty, s2) M.empty) g
+            g'' = M.insert s2 M.empty g'
+        in  (CFA s0 (max (sl + 1) s2) g'' fss, S.insert s2 S.empty)
+{-
         let ks = S.insert k S.empty
             g'  = M.insertWith (\ _ node -> M.insert l (ks, s2) node) s1 (M.insert l (ks, s2) M.empty) g
-            g'' = M.insertWith (\ _ node -> node) s2 (M.empty) g'
-        in  (CFA s0 (max (sl + 1) s2) g'' fss, s2)
+            g'' = M.insertWith (\ _ node -> node) s2 M.empty g'
+        in  (CFA s0 (max (sl + 1) s2) g'' fss, S.insert s2 S.empty)
+-}
 
 
 

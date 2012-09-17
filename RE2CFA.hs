@@ -61,13 +61,26 @@ cfa_add_regexp_prim (cfa, ss) r rt sign = case r of
     Wrapped ralt -> cfa_add_regexp_alt (cfa, ss) ralt rt sign
 -- тут надо осторожно: добавлять ещё все состояния, в которые переходим по обычным дугам
 -- потом будет ещё жопа при добавлении новой дуги
-    Any          -> cfa_add_regexp_atom (cfa, ss) LabelAny sign
+    Any          -> cfa_add_regexp_atom (cfa, ss) (LabelRange ['\x00' .. '\xFF']) sign
+--    Any          -> cfa_add_regexp_atom (cfa, ss) LabelAny sign
 -- что если значение из диапазона совпадает с уже добавленной дугой?
 -- тогда останется только первая дуга
 -- надо addTransition переделывать
 -- может оказаться проще убрать диапазрны, заменить альтернативами
 -- ну то есть времени на генерацию не жалко. Но шоб не намутить.
     Range s      -> cfa_add_regexp_atom (cfa, ss) (LabelRange s) sign
+--        let s' = filter (\ c -> isNothing (M.lookup c )) s
+--        in  cfa_add_regexp_atom (cfa, ss) (LabelRange s') sign
+
+
+{-
+три проблемы
+1) Range ---- диапазоны. Видно придётся их делать на альтернативах.
+2) Any ---- их надо загонять не только в дефолты, но из  всех состояний добавлять дуги.
+3) case sensitivity
+
+Any, Range делать через LabelRange. Вычислять "оставшиеся" символы.
+-}
 
 
 cfa_add_regexp_atom :: (CFA, S.Set State) -> Label -> SignNum -> (CFA, S.Set State)
@@ -75,8 +88,8 @@ cfa_add_regexp_atom (cfa, ss) l sign =
     let s_max = maxStateNumber cfa
     in  S.foldl
             (\ (cfa', ss') s ->
-                     let (cfa'', s') = addTransition cfa' (s, l, sign, s_max)
-                     in  (cfa'', S.insert s' ss')
+                     let (cfa'', ss'') = addTransition cfa' (s, l, sign, s_max)
+                     in  (cfa'', S.union ss'' ss')
             ) (cfa, S.empty) ss
 
 

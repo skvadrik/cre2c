@@ -168,6 +168,20 @@ lex_chain cs =
     in  TokenChain ch : TokenCSqBracket : lex_regexp rest
 
 
+span_chain :: String -> String
+span_chain s =
+    let span_chain' :: String -> String -> String
+        span_chain' s1 ""                 = s1
+        span_chain' s1 (a : '-' : b : s2) = span_chain' ([a .. b] ++ s1) s2
+        span_chain' s1 (a : s2)           = span_chain' (a : s1) s2
+    in  span_chain' "" s
+
+
+lex_range cs =
+    let (ch, rest) = take_escaped_till ']' cs
+    in  TokenChain (span_chain ch) : TokenCSqBracket : lex_regexp rest
+
+
 --------------------------------------------------------------------------------
 parse_regexps :: FilePath -> IO RegexpTable
 parse_regexps fp =

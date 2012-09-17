@@ -62,25 +62,20 @@ data CFA      = CFA
 data Label
     = LabelChar Char
     | LabelRange String
-    | LabelAny
 
 instance Eq Label where
-    LabelAny      == _             = True
-    _             == LabelAny      = True
     LabelChar c1  == LabelChar c2  = c1 == c2
-    LabelChar c   == LabelRange s  = c `elem` s
-    LabelRange s  == LabelChar c   = c `elem` s
+    LabelChar c   == LabelRange s  = False -- c `elem` s
+    LabelRange s  == LabelChar c   = False -- c `elem` s
     LabelRange s1 == LabelRange s2 = s1 == s2
 
 instance Hashable Label where
-    hash LabelAny       = hash ""
     hash (LabelChar c)  = hash [c]
     hash (LabelRange s) = hash s
 
 instance Show Label where
-    show (LabelAny)     = "*"
-    show (LabelChar c)  = show c
-    show (LabelRange s) = tail $ init $ show $ s
+    show (LabelChar c)  = tail $ init $ show c
+    show (LabelRange s) = tail $ init $ show $ head s : '-' : [last s]
 
 ---------------- Common types
 data Rules
