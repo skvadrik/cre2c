@@ -50,6 +50,7 @@ type State    = Int
 type SignNum  = Int
 type SignSet  = S.Set SignNum
 type CFANode  = M.HashMap Label (SignSet, State)
+type DCFANode = M.HashMap Char  (SignSet, State)
 type CFAGraph = M.HashMap State CFANode
 data CFA      = CFA
     { initial_state    :: State

@@ -5,7 +5,7 @@ module CFA2CPP
 
 import qualified Data.HashMap.Strict   as M
 import qualified Data.Set              as S
-import           Data.List                   (intercalate)
+import           Data.List                   (intercalate, foldl')
 import qualified Data.ByteString.Char8 as BS
 import           Numeric                     (showHex)
 import           Data.Char                   (ord)
@@ -24,13 +24,11 @@ cfa2cpp fp cfa prolog epilog conditions codes sign_maxlen =
             (\ code s node -> BS.concat
                 [ code
                 , case s of
-                    s | s == initialState cfa -> code_for_initial_state (initialNode cfa) sign2conds
-                    s | isFinal s cfa         -> code_for_final_state s node (acceptedSignatures s cfa) codes
-                    s                         -> code_for_state s node
+                    s | s == initialState cfa -> code_for_initial_state ((merge_cases . initialNode) cfa) sign2conds
+                    s | isFinal s cfa         -> code_for_final_state s (merge_cases node) (acceptedSignatures s cfa) codes
+                    s                         -> code_for_state s (merge_cases node)
                 ]
-            )
-            (BS.pack "")
-            (cfaGraph cfa)
+            ) (BS.pack "") (cfaGraph cfa)
     in  BS.writeFile fp $ BS.concat
             [ prolog
             , entry
@@ -70,74 +68,28 @@ code_for_entry n sign_maxlen = BS.pack $ concat
 -}
 
 
-code_for_initial_state :: CFANode -> M.HashMap SignNum [Cond] -> Code
+code_for_initial_state :: DCFANode -> M.HashMap SignNum [Cond] -> Code
 code_for_initial_state node0 sign2conds = BS.pack $ concat
     [ "\nswitch (*CURSOR++) {\n\t"
-    , concatMap (\ (l, (ks, s')) ->
-        let code_for_cond_case :: Char -> String
-            code_for_cond_case c = concat
-                [ "\n\tcase "
-                , "0x" ++ showHex (ord c) ""
-                , ":"
-
---                , "\nprintf(\"case0: %X\\n\", "
---                , "0x" ++ showHex (ord c) ""
---                , ");"
-
---                , "\nprintf(\"%p\\n\", MARKER);"
-
-                , "\n\t\tnew_forbidden_count = 0;"
-                , "\n\t\tadjust_marker       = true;"
-                , "\n\t\ttoken               = MARKER;"
-                , code_for_conditions $ M.filterWithKey (\ k _ -> S.member k ks) sign2conds
-                , "\n\t\tfor (int i = new_forbidden_count; i < forbidden_count; i++)"
-                , "\n\t\t\tforbidden_signatures[i] = NUM_SIGN;"
-                , "\n\t\tforbidden_count = new_forbidden_count;"
-                , "\n\t\tif (forbidden_count <"
-                , show $ S.size ks
-                , ")"
-                , "\n\t\t\tgoto m_"
-                , show s'
-                , ";"
-                ]
-        in  case l of
-            LabelChar c  -> code_for_cond_case c
-            LabelRange s -> concatMap code_for_cond_case s
-        ) (M.toList node0)
+    , concatMap (\ (c, (ks, s')) -> concat
+        [ "\n\tcase "
+        , "0x" ++ showHex (ord c) ""
+        , ":"
+        , "\n\t\tnew_forbidden_count = 0;"
+        , "\n\t\tadjust_marker       = true;"
+        , "\n\t\ttoken               = MARKER;"
+        , code_for_conditions $ M.filterWithKey (\ k _ -> S.member k ks) sign2conds
+        , "\n\t\tfor (int i = new_forbidden_count; i < forbidden_count; i++)"
+        , "\n\t\t\tforbidden_signatures[i] = NUM_SIGN;"
+        , "\n\t\tforbidden_count = new_forbidden_count;"
+        , "\n\t\tif (forbidden_count <"
+        , show $ S.size ks
+        , ")"
+        , "\n\t\t\tgoto m_"
+        , show s'
+        , ";"
+        ]) (M.toList node0)
     , "\n\tdefault:"
-{-
-    , case M.lookup LabelAny node0 of
-        Just (ks, s') -> concat
-            [ "\n\t\tif (default_case_enabled) {"
-
---            , "\nprintf(\"def0\\n\");"
-
-            , "\n\t\t\tnew_forbidden_count = 0;"
-            , "\n\t\t\tadjust_marker       = true;"
-            , "\n\t\t\tparsing_default     = true;"
-            , "\n\t\t\ttoken               = MARKER;"
-            , code_for_conditions $ M.filterWithKey (\ k _ -> S.member k ks) sign2conds
-            , "\n\t\t\tfor (int i = new_forbidden_count; i < forbidden_count; i++)"
-            , "\n\t\t\t\tforbidden_signatures[i] = NUM_SIGN;"
-            , "\n\t\t\tforbidden_count = new_forbidden_count;"
-            , "\n\t\t\tif (forbidden_count <"
-            , show $ S.size ks
-            , ")"
-            , "\n\t\t\tgoto m_"
-            , show s'
-            ,  ";"
-            , "\n\t\t} else"
-            , "\n\t\t\tMARKER ++;"
-            , "\n\t\tgoto m_fin;"
-            ]
-        Nothing      -> concat
-            [ "\n\t\tMARKER ++;"
-
---            , "\nprintf(\"def0 - fallout\\n\");"
-
-            , "\n\t\tgoto m_fin;"
-            ]
--}
     , "\n\t\tMARKER ++;"
     , "\n\t\tgoto m_fin;"
     , "\n\t}"
@@ -157,67 +109,40 @@ code_for_conditions = M.foldlWithKey' (\code k conditions -> code ++ case condit
     ) ""
 
 
-code_for_state :: State -> CFANode -> Code
+merge_cases :: CFANode -> DCFANode
+merge_cases node = M.foldlWithKey'
+    (\ n l (ks, s) ->
+        let merge_arc :: DCFANode -> Char -> DCFANode
+            merge_arc n c = M.insertWith (\ _ (ks', s') -> (S.union ks ks', if s == s' then s else error "nondeterministic arcs")) c (ks, s) n
+        in  case l of
+                LabelChar c  -> merge_arc n c
+                LabelRange r -> foldl' merge_arc n r
+    ) M.empty node
+
+
+code_for_state :: State -> DCFANode -> Code
 code_for_state s node = (BS.pack . concat)
     [ "\nm_"
     , show s
     , ":"
---    , "\nprintf(\"%s\\n\", CURSOR);"
     , "\nswitch (*CURSOR++) {"
-    , concatMap (\ (l, (_, s')) ->
-        let code_for_case :: Char -> String
-            code_for_case c = concat
-                [ "\n\tcase "
-                , "0x"
-                , showHex (ord c) ""
-                , ":"
-
---                , "\nprintf(\"case: %X\\n\", "
---                , "0x" ++ showHex (ord c) ""
---                , ");"
-
-                , "\n\t\tgoto m_"
-                , show s'
-                , ";"
-                ]
-        in case l of
-            LabelChar c  -> code_for_case c
-            LabelRange s -> concatMap code_for_case s
-        ) (M.toList node)
+    , concatMap (\ (c, (_, s')) -> concat
+        [ "\n\tcase "
+        , "0x"
+        , showHex (ord c) ""
+        , ":"
+        , "\n\t\tgoto m_"
+        , show s'
+        , ";"
+        ]) (M.toList node)
     , "\n\tdefault:"
-{-
-    , case M.lookup LabelAny node of
-        Just (_, s') -> concat
-            [ "\n\t\tif (default_case_enabled) {"
-            , "\n\t\t\tparsing_default = true;"
-            , "\n\t\t\tgoto m_"
-            , show s'
-            ,  ";"
-            , "\n\t\t}"
-            , "\n\t\tMARKER += adjust_marker;"
-
---            , "\n\t\tprintf(\"def\\n\");"
-
-            , "\n\t\tgoto m_fin;"
-            ]
-
-        Nothing      -> concat
-            [ "\n\t\tMARKER += adjust_marker && !parsing_default;"
-            , "\n\t\tif (parsing_default)"
-            , "\n\t\t\tdefault_case_enabled = false;"
-
---            , "\n\t\tprintf(\"def - fallout\\n\");"
-
-            , "\n\t\tgoto m_fin;"
-            ]
--}
     , "\n\t\tMARKER += adjust_marker;"
     , "\n\t\tgoto m_fin;"
     , "\n\t}"
     ]
 
 
-code_for_final_state :: State -> CFANode -> SignSet -> [Code] -> Code
+code_for_final_state :: State -> DCFANode -> SignSet -> [Code] -> Code
 code_for_final_state s node signs codes = (BS.pack . concat)
     [ "\nm_"
     , show s
@@ -227,58 +152,22 @@ code_for_final_state s node signs codes = (BS.pack . concat)
         , "\n\tif (forbidden_signatures[j] == "
         , show k
         , ")\n\t\tbreak;"
---        , "\nprintf(\"fc = %d\\n\", forbidden_count);"
         , "\nif (j == forbidden_count) {\n\t"
         , BS.unpack $ codes !! k
         , "\n\tMARKER = CURSOR;"
         , "\n\tadjust_marker = false;\n}"
         ]) "" signs
---    , "\nprintf(\"%s\\n\", CURSOR);"
     , "\nswitch (*CURSOR++) {"
-    , concatMap (\ (l, (_, s')) ->
-        let code_for_case :: Char -> String
-            code_for_case c = concat
-                [ "\n\tcase "
-                , "0x"
-                , showHex (ord c) ""
-                , ":"
-
---                , "\nprintf(\"caseF: %X\\n\", "
---                , "0x" ++ showHex (ord c) ""
---                , ");"
-
-                , "\n\t\tgoto m_"
-                , show s'
-                , ";"
-                ]
-        in case l of
-            LabelChar c  -> code_for_case c
-            LabelRange s -> concatMap code_for_case s
-        ) (M.toList node)
+    , concatMap (\ (c, (_, s')) -> concat
+        [ "\n\tcase "
+        , "0x"
+        , showHex (ord c) ""
+        , ":"
+        , "\n\t\tgoto m_"
+        , show s'
+        , ";"
+        ]) (M.toList node)
     , "\n\tdefault:"
-{-
-    , case M.lookup LabelAny node of
-        Just (_, s') -> concat
-            [ "\n\t\tif (default_case_enabled) {"
-            , "\n\t\t\tparsing_default = true;"
-            , "\n\t\t\tgoto m_"
-            , show s'
-            ,  ";"
-            , "\n\t\t} else"
-            , "\n\t\t\tgoto m_fin;"
-
---            , "\n\t\tprintf(\"defF\\n\");"
-
-            ]
-        Nothing      -> concat
-            [ "\n\t\tif (parsing_default)"
-            , "\n\t\t\tdefault_case_enabled = false;"
-
---            , "\n\t\tprintf(\"defF - fallout\\n\");"
-
-            , "\n\t\tgoto m_fin;"
-            ]
--}
     , "\n\t\tgoto m_fin;"
     , "\n\t}"
     ]
