@@ -84,7 +84,7 @@ addTransition cfa@(CFA s0 sl g fss) (s1, l@(LabelRange r), k, s2) = case M.looku
                     ( M.adjust (\ node -> M.insert (LabelRange r') (S.insert k S.empty, s2) node) s1 g'
                     , S.insert s2 ss
                     )
-            g''' = M.insertWith (\ _ node -> node) s2 M.empty g'
+            g''' = M.insertWith (\ _ node -> node) s2 M.empty g''
 -- чиво это тут s2?
         in  (CFA s0 (max (sl + 1) s2) g''' fss, ss')
     Nothing ->
@@ -99,12 +99,13 @@ addTransition cfa@(CFA s0 sl g fss) (s1, l@(LabelChar c), k, s2) = case M.lookup
         let g' = M.adjust (\ node -> M.adjust (\ (ks, s') -> (S.insert k ks, s')) l node) s1 g
         in  (CFA s0 sl g' fss, S.insert ((snd . fromJust) mb_node) S.empty)
     Just node ->
-        let s'' = case M.filter (\ (l', (_, s')) -> case l' of { LabelRange r | c `elem` r -> True; _ -> False }) (M.toList node) of
-            [(l', (_, s'))] -> s'
-            []              -> s2
-            _               -> error "multiple ranges"
-            g' = M.adjust (\ node -> M.insert l (S.insert k S.empty, s'') node) s1 g
-        in  (CFA s0 (max (sl + 1) s'') g' fss, S.insert s'' S.empty)
+        let s'' = case filter (\ (l', (_, s')) -> case l' of { LabelRange r | c `elem` r -> True; _ -> False }) (M.toList node) of
+                [(l', (_, s'))] -> s'
+                []              -> s2
+                _               -> error "multiple ranges"
+            g'  = M.adjust (\ node -> M.insert l (S.insert k S.empty, s'') node) s1 g
+            g'' = M.insertWith (\ _ node -> node) s'' M.empty g'
+        in  (CFA s0 (max (sl + 1) s'') g'' fss, S.insert s'' S.empty)
     Nothing ->
         let g'  = M.insert s1 (M.insert l (S.insert k S.empty, s2) M.empty) g
             g'' = M.insert s2 M.empty g'
