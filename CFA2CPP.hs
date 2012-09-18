@@ -5,7 +5,7 @@ module CFA2CPP
 
 import qualified Data.HashMap.Strict   as M
 import qualified Data.Set              as S
-import           Data.List                   (intercalate, foldl')
+import           Data.List                   (intercalate, foldl', groupBy)
 import qualified Data.ByteString.Char8 as BS
 import           Numeric                     (showHex)
 import           Data.Char                   (ord)
@@ -126,15 +126,18 @@ code_for_state s node = (BS.pack . concat)
     , show s
     , ":"
     , "\nswitch (*CURSOR++) {"
-    , concatMap (\ (c, (_, s')) -> concat
-        [ "\n\tcase "
-        , "0x"
-        , showHex (ord c) ""
-        , ":"
+    , concatMap (\ xs -> concat
+        [ concatMap (\ (c, (_, s')) -> concat
+            [ "\n\tcase "
+            , "0x"
+            , showHex (ord c) ""
+            , ":"
+            ]) xs
         , "\n\t\tgoto m_"
-        , show s'
+        , show $ snd $ snd $ head xs
         , ";"
-        ]) (M.toList node)
+        ]) $ groupBy (\ (_, (_, s1)) (_, (_, s2)) -> s1 == s2) $ M.toList node
+        GROUPBY пашет не как надо
     , "\n\tdefault:"
     , "\n\t\tMARKER += adjust_marker;"
     , "\n\t\tgoto m_fin;"
