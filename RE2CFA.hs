@@ -84,6 +84,15 @@ Any, Range делать через LabelRange. Вычислять "оставш�
 
 
 cfa_add_regexp_atom :: (CFA, S.Set State) -> Label -> SignNum -> (CFA, S.Set State)
+cfa_add_regexp_atom (cfa, ss) l sign = S.foldl
+    (\ (cfa', ss') s ->
+             let s_max         = maxStateNumber cfa'
+                 (cfa'', ss'') = addTransition cfa' (s, l, sign, s_max)
+             in  (cfa'', S.union ss'' ss')
+    ) (cfa, S.empty) ss
+
+{-
+cfa_add_regexp_atom :: (CFA, S.Set State) -> Label -> SignNum -> (CFA, S.Set State)
 cfa_add_regexp_atom (cfa, ss) l sign =
     let s_max = maxStateNumber cfa
     in  S.foldl
@@ -91,6 +100,8 @@ cfa_add_regexp_atom (cfa, ss) l sign =
                      let (cfa'', ss'') = addTransition cfa' (s, l, sign, s_max)
                      in  (cfa'', S.union ss'' ss')
             ) (cfa, S.empty) ss
+-}
+
 
 
 re2cfa :: [RegexpName] -> RegexpTable -> CFA

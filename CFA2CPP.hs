@@ -137,7 +137,7 @@ code_for_state s node = (BS.pack . concat)
         , show $ snd $ snd $ head xs
         , ";"
         ]) $ groupBy (\ (_, (_, s1)) (_, (_, s2)) -> s1 == s2) $ M.toList node
-        GROUPBY пашет не как надо
+--        GROUPBY пашет не как надо
     , "\n\tdefault:"
     , "\n\t\tMARKER += adjust_marker;"
     , "\n\t\tgoto m_fin;"
