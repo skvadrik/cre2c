@@ -46,35 +46,41 @@ data RegexpDef
 type RegexpTable = M.HashMap String Regexp
 
 
-type State    = Int
-type SignNum  = Int
-type SignSet  = S.Set SignNum
-type CFANode  = M.HashMap Label (SignSet, State)
-type DCFANode = M.HashMap Char  (SignSet, State)
-type CFAGraph = M.HashMap State CFANode
-data CFA      = CFA
-    { initial_state    :: State
-    , max_state_number :: State
-    , cfa_graph        :: CFAGraph
-    , final_states     :: M.HashMap State SignSet
+type State     = Int
+type SignNum   = Int
+type SignSet   = S.Set SignNum
+
+type DCFANode      = M.HashMap DCFALabel State
+type DCFAInitNode  = M.HashMap DCFALabel (SignSet, State)
+type DCFAGraph     = M.HashMap State DCFANode
+data DCFA          = DCFA
+    { dcfa_init_state   :: State
+    , dcfa_init_node    :: DCFAInitNode
+    , dcfa_graph        :: DCFAGraph
+    , dcfa_final_states :: M.HashMap State SignSet
     } deriving (Show)
 
+type NCFANode  = [(NCFALabel, SignNum, State)]
+type NCFAGraph = M.HashMap State NCFANode
+data NCFA      = NCFA
+    { ncfa_init_state   :: State
+    , ncfa_max_state    :: State
+    , ncfa_graph        :: NCFAGraph
+    , ncfa_final_states :: M.HashMap State SignSet
+    } deriving (Show)
 
-data Label
+type DCFALabel = Char
+data NCFALabel
     = LabelChar Char
     | LabelRange String
 
-instance Eq Label where
+instance Eq NCFALabel where
     LabelChar c1  == LabelChar c2  = c1 == c2
     LabelChar c   == LabelRange s  = False -- c `elem` s
     LabelRange s  == LabelChar c   = False -- c `elem` s
     LabelRange s1 == LabelRange s2 = s1 == s2
 
-instance Hashable Label where
-    hash (LabelChar c)  = hash [c]
-    hash (LabelRange s) = hash s
-
-instance Show Label where
+instance Show NCFALabel where
     show (LabelChar c)  = tail $ init $ show c
     show (LabelRange s) = tail $ init $ show $ head s : '-' : [last s]
 

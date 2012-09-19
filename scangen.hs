@@ -7,7 +7,7 @@ import qualified Data.HashMap.Strict   as M
 import           Types
 import           CFA
 import           RE2CFA
-import           CFA2CPP
+--import           CFA2CPP
 import           RegexpParser
 import           SourceParser
 
@@ -23,12 +23,12 @@ main = do
     regexp_table            <- parse_regexps fre
 
     let (conds, regexps, codes) = (unzip3 . M.elems) rules
-    let cfa                     = re2cfa regexps regexp_table
+    let dcfa                    = re2dcfa regexps regexp_table
     let sign_maxlen             = 56
 
-    cfa2cpp fdest cfa prolog epilog conds codes sign_maxlen
+--    cfa2cpp fdest cfa prolog epilog conds codes sign_maxlen
 
-    toDot cfa "./cfa.dot"
-    print cfa
+    toDotNCFA dcfa "./cfa.dot"
+    print dcfa
 --    print regexps
 --    print regexp_table
