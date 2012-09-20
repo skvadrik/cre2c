@@ -50,8 +50,8 @@ type State     = Int
 type SignNum   = Int
 type SignSet   = S.Set SignNum
 
-type DCFANode      = M.HashMap DCFALabel State
-type DCFAInitNode  = M.HashMap DCFALabel (SignSet, State)
+type DCFANode      = M.HashMap Label State
+type DCFAInitNode  = M.HashMap Label (SignSet, State)
 type DCFAGraph     = M.HashMap State DCFANode
 data DCFA          = DCFA
     { dcfa_init_state   :: State
@@ -60,7 +60,7 @@ data DCFA          = DCFA
     , dcfa_final_states :: M.HashMap State SignSet
     } deriving (Show)
 
-type NCFANode  = [(NCFALabel, SignNum, State)]
+type NCFANode  = [(Label, SignNum, State)]
 type NCFAGraph = M.HashMap State NCFANode
 data NCFA      = NCFA
     { ncfa_init_state   :: State
@@ -69,18 +69,21 @@ data NCFA      = NCFA
     , ncfa_final_states :: M.HashMap State SignSet
     } deriving (Show)
 
-type DCFALabel = Char
-data NCFALabel
+data Label
     = LabelChar Char
     | LabelRange String
 
-instance Eq NCFALabel where
+instance Eq Label where
     LabelChar c1  == LabelChar c2  = c1 == c2
-    LabelChar c   == LabelRange s  = False -- c `elem` s
-    LabelRange s  == LabelChar c   = False -- c `elem` s
+    LabelChar c   == LabelRange s  = c `elem` s
+    LabelRange s  == LabelChar c   = c `elem` s
     LabelRange s1 == LabelRange s2 = s1 == s2
 
-instance Show NCFALabel where
+instance Hashable Label where
+    hash (LabelChar c)  = hash [c]
+    hash (LabelRange r) = hash r
+
+instance Show Label where
     show (LabelChar c)  = tail $ init $ show c
     show (LabelRange s) = tail $ init $ show $ head s : '-' : [last s]
 

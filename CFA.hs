@@ -29,7 +29,7 @@ module CFA
 
 import qualified Data.HashMap.Strict as M
 import qualified Data.Set            as S
-import           Data.List                (foldl', intersect, find)
+import           Data.List                (foldl', intersect, find, partition, delete, nub)
 import           Control.Monad            (forM_)
 import           Data.Maybe               (isJust, fromJust)
 
@@ -72,114 +72,90 @@ setFinal :: State -> SignNum -> NCFA -> NCFA
 setFinal s k (NCFA s0 sl g fss) = NCFA s0 sl g (M.insertWith (\ _ ks -> S.insert k ks) s (S.insert k S.empty) fss)
 
 
-addTransitionNCFA :: NCFA -> (State, NCFALabel, SignNum, State) -> (NCFA, State)
+addTransitionNCFA :: NCFA -> (State, Label, SignNum, State) -> (NCFA, State)
 addTransitionNCFA ncfa@(NCFA s0 sl g fss) (s1, l, k, s2) =
     let g'  = M.insertWith (\ _ node -> (l, k, s2) : node) s1 [(l, k, s2)] g
     in  (NCFA s0 (max (sl + 1) s2) g' fss, s2)
 
 
-add_monoarc :: (DCFANode, NCFAGraph) -> (NCFALabel, SignNum, State) -> (DCFANode, NCFAGraph)
-add_monoarc (n', g') (LabelChar c, k, s) -> case M.lookup c n' of
-    Nothing       -> (M.insert c (S.insert k S.empty, s) n', g')
-    Just (ks, s') ->
-        ( M.adjust (\ _ -> (S.insert k ks, s')) с n'
-        , M.delete s $ if s == s' then g' else M.adjust (++ M.lookupDefault (error "node absent in ncfa") s g') s' g'
-        )
+------------------------------------------------------------------------------------------------
 
 
-g :: (DCFANode, NCFAGraph) -> (Char, SignNum, State) -> (DCFANode, NCFAGraph)
-g n (c, k, s) -> case M.lookup c n of
-    Nothing       -> n
-    Just (ks, s') ->
-        ( M.adjust (\ _ -> (S.insert k ks, s')) с n'
-        , M.delete s $ if s == s' then g' else M.adjust (++ M.lookupDefault (error "node absent in ncfa") s g') s' g'
-        )
-
-
-f :: DCFANode -> [(NCFALabel, SignNum, State)] -> DCFANode
-f (n', g') (c, k, s) -> case M.lookup c n' of
-    Nothing       -> (M.insert c (S.insert k S.empty, s) n', g')
-    Just (ks, s') ->
-        ( M.adjust (\ _ -> (S.insert k ks, s')) с n'
-        , M.delete s $ if s == s' then g' else M.adjust (++ M.lookupDefault (error "node absent in ncfa") s g') s' g'
-        )
-
-
-add_polyarcs :: (DCFANode, NCFAGraph) -> [(NCFALabel, SignNum, State)] -> (DCFANode, NCFAGraph)
-add_polyarcs (n', g') polyarcs ->
-
-
-multiarcs :: NCFANode -> NCFANode -> NCFANode
-multiarcs xs []       = xs
-multiarcs xs ((LabelChar c, k, s) : ys) =
-    let f (xs, (LabelChar c, k, s) : ys) = foldl'
+get_multiarcs :: Char -> NCFANode -> (Node, NCFANode)
+get_multiarcs c ys =
+    let (xs', ys') = partition
             (\ (l, _, _) -> case l of
                 LabelChar c' -> c == c'
                 LabelRange r -> c `elem` r
             ) ys
-        (xs'', ys'') = 
-
- multiarcs (if foldl' ()  then else xs) ys
-
-
-determine_node :: (NCFANode, NCFAGraph) -> (DCFANode, DCFAGraph)
-determine_node n g =
-    let multiarcs = foldl'
+        (xs'', ys'') = foldl'
             (\ (xs, ys) (l, k, s) -> case l of
-                LabelChar c  -> (foldl' () [] ys ++ xs, 
-                LabelRange r ->
-            ) ([], n) n
-        n' = foldl'
-        (\ n'' (l, k, s) -> 
-        ) M.empty n
+                LabelChar _  -> ((c, k, s) : xs, ys)
+                LabelRange r -> ((c, k, s) : xs, (LabelRange (delete c r), k, s) : ys)
+            ) ([], []) xs'
+    in  (xs'', ys'' ++ ys')
+
+
+type Node = [(Char, SignNum, State)]
+
+
+group_by_label :: [Node] -> NCFANode -> [Node]
+group_by_label xss [] = xss
+group_by_label xss ((l, k, s) : ys) = case l of
+    LabelChar c         ->
+        let (xs', ys') = get_multiarcs c ys
+        in  group_by_label (((c, k, s) : xs') : xss) ys'
+    LabelRange (c : []) ->
+        let (xs', ys') = get_multiarcs c ys
+        in  group_by_label (((c, k, s) : xs') : xss) ys'
+    LabelRange (c : cs) ->
+        let (xs', ys') = get_multiarcs c ys
+        in  group_by_label (((c, k, s) : xs') : xss) ((LabelRange cs, k, s) : ys')
+
+
+group_by_state :: [Node] -> Node -> [Node]
+group_by_state xss [] = xss
+group_by_state xss (y@(_, _, s) : ys) =
+    let (xs', ys') = partition (\ (_, _, s') -> s' == s) ys
+    in  group_by_state ((y : xs') : xss) ys'
+
+
+group_by_sign :: [Node] -> Node -> [Node]
+group_by_sign xss [] = xss
+group_by_sign xss (y@(_, k, _) : ys) =
+    let (xs', ys') = partition (\ (_, k', _) -> k' == k) ys
+    in  group_by_sign ((y : xs') : xss) ys'
+
+
+determine_init_node :: NCFANode -> NCFAGraph -> (DCFAInitNode, NCFAGraph)
+determine_init_node n g =
+    let (multiarcs, ranges, arcs) =
+            ( (\ (xss, (uss, vss), zss) -> (xss, uss, concat (vss ++ zss)))
+            . (\ (xss, (yss, zss)) -> (xss, (unzip . map (partition ((> 1) . length) . group_by_sign [])) yss, zss))
+            . (\ (xss, yss) -> (xss, (partition ((> 1) . length) . group_by_state [] . concat) yss))
+            . partition ((> 1) . length)
+            . group_by_label []
+            ) n
+        n'   = foldl' (\ n (c, k, s) -> M.insert (LabelChar c) (S.insert k S.empty, s) n) M.empty arcs
+        n''  = foldl'
+            (\ n r ->
+                let (cs, ks, ss) = unzip3 r
+                in  M.insert (LabelRange cs) (S.fromList ks, case nub ss of { [s] -> s; _ -> error "multiple end states"}) n
+            ) n' ranges
+        n''' = foldl'
+            (\ n xs@((l, _, _) : _) ->
+                let ks = foldl' (\ ks (_, k, _) -> S.insert k ks) S.empty xs
+                in  M.insert l (ks, 1000) n
+            ) M.empty multiarcs
+    in  (n''', g)
 
 
 determine :: NCFA -> DCFA
 determine ncfa@(NCFA s0 _ g fss) =
-    let n0                   = M.lookupDefault (error "init node absent in ncfa") s0 g
-        (monoarcs, polyarcs) = partition (\ (l, _, _) -> case l of { LabelChar _ -> True; _ -> False }) n0
-        (n0', g')            = foldl' add_monoarc (M.empty, g) monoarcs
-        (n0'', g'')          = add_polyarcs (n0', g') polyarcs
-        g'' = M.delete s0 g'
-    in  DCFA s0 n0 g' fss
-{-
-    Just node | let mb_node = M.lookup l node, isJust mb_node ->
-        let g' = M.adjust (\ node -> M.adjust (\ (ks, s') -> (S.insert k ks, s')) l node) s1 g
-        in  (CFA s0 sl g' fss, S.insert ((snd . fromJust) mb_node) S.empty)
-    Just node -> case l of
-        LabelChar c  ->
-            let s'' = case filter (\ (l', (_, s')) -> case l' of { LabelRange r | c `elem` r -> True; _ -> False }) (M.toList node) of
-                    [(l', (_, s'))] -> s'
-                    []              -> s2
-                    _               -> error "multiple ranges"
-                g'  = M.adjust (\ node -> M.insert l (S.insert k S.empty, s'') node) s1 g
-                g'' = M.insertWith (\ _ node -> node) s'' M.empty g'
-            in  (CFA s0 (max (sl + 1) s'') g'' fss, S.insert s'' S.empty)
-        LabelRange r ->
-            let (g', ss, r') = M.foldlWithKey'
-                    (\ (g', ss, r') l' (_, s') -> case l' of
-                        LabelChar c | c `elem` r ->
-                            ( M.adjust (\ node -> M.adjust (\ (ks, s') -> (S.insert k ks, s')) l node) s1 g
-                            , S.insert s' ss
-                            , filter (/= c) r'
-                            )
-                        LabelRange r'' | let r''' = intersect r' r'', r''' /= [] ->
-                            ( M.adjust (\ node -> M.insert (LabelRange r''') (S.insert k S.empty, s') node) s1 g'
-                            , S.insert s' ss
-                            , filter (`notElem` r'') r'
-                            )
-                        _ -> (g', ss, r')
-                    ) (g, S.empty, r) node
-                (g'', ss') = if r' == [] then (g', ss) else
-                    let g''  = M.adjust (\ node -> M.insert (LabelRange r') (S.insert k S.empty, s2) node) s1 g'
-                        g''' = M.insertWith (\ _ node -> node) s2 M.empty g''
-                    in  (g''', S.insert s2 ss)
-            in  (CFA s0 (max (sl + 1) s2) g'' fss, ss')
-    Nothing ->
-        let g'  = M.insert s1 (M.insert l (S.insert k S.empty, s2) M.empty) g
-            g'' = M.insert s2 M.empty g'
-        in  (CFA s0 (max (sl + 1) s2) g'' fss, S.insert s2 S.empty)
--}
+    let n0        = M.lookupDefault (error "init node absent in ncfa") s0 g
+        (n0', g') = determine_init_node n0 g
+        g''       = M.delete s0 g'
+    in  DCFA s0 n0' M.empty fss
 
 
 toDotNCFA :: NCFA -> FilePath -> IO ()
