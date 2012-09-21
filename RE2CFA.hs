@@ -1,5 +1,5 @@
 module RE2CFA
-    ( re2dcfa
+    ( re2ncfa
     ) where
 
 
@@ -54,7 +54,7 @@ ncfa_add_regexp_iter (ncfa, ss) r rt sign = case r of
 
 ncfa_add_regexp_prim :: (NCFA, S.Set State) -> RegexpPrim -> RegexpTable -> SignNum -> (NCFA, S.Set State)
 ncfa_add_regexp_prim (ncfa, ss) r rt sign = case r of
-    Elementary s -> foldl' (\(d, s) c -> ncfa_add_regexp_atom (d, s) (LabelChar (trace' c)) sign) (ncfa, ss) s
+    Elementary s -> foldl' (\(d, s) c -> ncfa_add_regexp_atom (d, s) (LabelChar c) sign) (ncfa, ss) s
     Name s       ->
         let Regexp ralt = M.lookupDefault undefined s rt
         in  ncfa_add_regexp_alt (ncfa, ss) ralt rt sign
@@ -63,7 +63,7 @@ ncfa_add_regexp_prim (ncfa, ss) r rt sign = case r of
     Range s      -> ncfa_add_regexp_atom (ncfa, ss) (LabelRange s) sign
 
 
-ncfa_add_regexp_atom :: (NCFA, S.Set State) -> NCFALabel -> SignNum -> (NCFA, S.Set State)
+ncfa_add_regexp_atom :: (NCFA, S.Set State) -> Label -> SignNum -> (NCFA, S.Set State)
 ncfa_add_regexp_atom (ncfa, ss) l sign =
     let s_max = maxState ncfa
     in  S.foldl
@@ -73,10 +73,10 @@ ncfa_add_regexp_atom (ncfa, ss) l sign =
             ) (ncfa, S.empty) ss
 
 
-re2dcfa :: [RegexpName] -> RegexpTable -> NCFA
-re2dcfa rs rt =
+re2ncfa :: [RegexpName] -> RegexpTable -> NCFA
+re2ncfa rs rt =
     let ncfa = emptyNCFA
-    in  ncfa2dcfa $ fst $ foldl'
+    in  fst $ foldl'
             (\ (ncfa, ss) (k, r) -> (fst (ncfa_add_regexp (ncfa, ss) (M.lookupDefault undefined r rt) rt k), ss))
             (ncfa, S.insert (initStateNCFA ncfa) S.empty)
             (zip [0 .. length rs - 1] rs)

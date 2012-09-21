@@ -23,12 +23,14 @@ main = do
     regexp_table            <- parse_regexps fre
 
     let (conds, regexps, codes) = (unzip3 . M.elems) rules
-    let dcfa                    = re2dcfa regexps regexp_table
+    let ncfa                    = re2ncfa regexps regexp_table
+    let dcfa                    = determine ncfa
     let sign_maxlen             = 56
 
 --    cfa2cpp fdest cfa prolog epilog conds codes sign_maxlen
 
-    toDotNCFA dcfa "./cfa.dot"
+    toDotNCFA ncfa "./ncfa.dot"
+    toDotDCFA dcfa "./cfa.dot"
     print dcfa
 --    print regexps
 --    print regexp_table

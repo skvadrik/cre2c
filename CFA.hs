@@ -2,8 +2,7 @@ module CFA
     ( NCFA
     , DCFA
 --    , CFANode
-    , NCFALabel
-    , DCFALabel
+    , Label
     , State
     , SignNum
     , SignSet
@@ -90,8 +89,9 @@ get_multiarcs c ys =
             ) ys
         (xs'', ys'') = foldl'
             (\ (xs, ys) (l, k, s) -> case l of
-                LabelChar _  -> ((c, k, s) : xs, ys)
-                LabelRange r -> ((c, k, s) : xs, (LabelRange (delete c r), k, s) : ys)
+                LabelChar _     -> ((c, k, s) : xs, ys)
+                LabelRange [c'] -> ((c, k, s) : xs, ys)
+                LabelRange r    -> ((c, k, s) : xs, (LabelRange (delete c r), k, s) : ys)
             ) ([], []) xs'
     in  (xs'', ys'' ++ ys')
 
@@ -105,12 +105,13 @@ group_by_label xss ((l, k, s) : ys) = case l of
     LabelChar c         ->
         let (xs', ys') = get_multiarcs c ys
         in  group_by_label (((c, k, s) : xs') : xss) ys'
-    LabelRange (c : []) ->
-        let (xs', ys') = get_multiarcs c ys
-        in  group_by_label (((c, k, s) : xs') : xss) ys'
-    LabelRange (c : cs) ->
-        let (xs', ys') = get_multiarcs c ys
-        in  group_by_label (((c, k, s) : xs') : xss) ((LabelRange cs, k, s) : ys')
+    LabelRange r ->
+        let (xss', ys') = foldl'
+                (\ (xss'', ys'') c ->
+                    let (xs', ys') = get_multiarcs c ys''
+                    in  (xs' : xss'', ys')
+                ) (xss, ys) r
+        in  group_by_label xss' ys'
 
 
 group_by_state :: [Node] -> Node -> [Node]
@@ -130,23 +131,23 @@ group_by_sign xss (y@(_, k, _) : ys) =
 determine_init_node :: NCFANode -> NCFAGraph -> (DCFAInitNode, NCFAGraph)
 determine_init_node n g =
     let (multiarcs, ranges, arcs) =
-            ( (\ (xss, (uss, vss), zss) -> (xss, uss, concat (vss ++ zss)))
-            . (\ (xss, (yss, zss)) -> (xss, (unzip . map (partition ((> 1) . length) . group_by_sign [])) yss, zss))
+            ( (\ (xss, (uss, vss), zss) -> (xss, concat uss, (concat . concat) vss ++ zss))
+            . (\ (xss, (yss, zss)) -> (xss, (unzip . (map (partition ((> 1) . length) . group_by_sign []))) yss, concat zss))
             . (\ (xss, yss) -> (xss, (partition ((> 1) . length) . group_by_state [] . concat) yss))
             . partition ((> 1) . length)
             . group_by_label []
             ) n
-        n'   = foldl' (\ n (c, k, s) -> M.insert (LabelChar c) (S.insert k S.empty, s) n) M.empty arcs
+        n'   = foldl' (\ n (c, k, s) -> M.insert (LabelChar c) (S.insert k S.empty, s) n) M.empty $ trace' arcs
         n''  = foldl'
             (\ n r ->
                 let (cs, ks, ss) = unzip3 r
                 in  M.insert (LabelRange cs) (S.fromList ks, case nub ss of { [s] -> s; _ -> error "multiple end states"}) n
             ) n' ranges
         n''' = foldl'
-            (\ n xs@((l, _, _) : _) ->
+            (\ n xs@((c, _, _) : _) ->
                 let ks = foldl' (\ ks (_, k, _) -> S.insert k ks) S.empty xs
-                in  M.insert l (ks, 1000) n
-            ) M.empty multiarcs
+                in  M.insert (LabelChar c) (ks, 1000) n
+            ) n'' multiarcs
     in  (n''', g)
 
 
@@ -155,7 +156,7 @@ determine ncfa@(NCFA s0 _ g fss) =
     let n0        = M.lookupDefault (error "init node absent in ncfa") s0 g
         (n0', g') = determine_init_node n0 g
         g''       = M.delete s0 g'
-    in  DCFA s0 n0' M.empty fss
+    in  DCFA s0 n0' M.empty M.empty--fss
 
 
 toDotNCFA :: NCFA -> FilePath -> IO ()
