@@ -128,8 +128,8 @@ group_by_sign xss (y@(_, k, _) : ys) =
     in  group_by_sign ((y : xs') : xss) ys'
 
 
-determine_init_node :: NCFANode -> NCFAGraph -> (DCFAInitNode, NCFAGraph)
-determine_init_node n g =
+determine_init_node :: NCFANode -> NCFAGraph -> State -> (DCFAInitNode, NCFAGraph)
+determine_init_node n g s_max =
     let (multiarcs, ranges, arcs) =
             ( (\ (xss, (uss, vss), zss) -> (xss, concat uss, (concat . concat) vss ++ zss))
             . (\ (xss, (yss, zss)) -> (xss, (unzip . (map (partition ((> 1) . length) . group_by_sign []))) yss, concat zss))
@@ -143,18 +143,21 @@ determine_init_node n g =
                 let (cs, ks, ss) = unzip3 r
                 in  M.insert (LabelRange cs) (S.fromList ks, case nub ss of { [s] -> s; _ -> error "multiple end states"}) n
             ) n' ranges
-        n''' = foldl'
-            (\ n xs@((c, _, _) : _) ->
-                let ks = foldl' (\ ks (_, k, _) -> S.insert k ks) S.empty xs
-                in  M.insert (LabelChar c) (ks, 1000) n
-            ) n'' multiarcs
+        (n''', sss, s_max') = foldl'
+            (\ (n, sss, i) xs@((c, _, _) : _) ->
+                let (ks, ss) = foldl' (\ (ks, ss) (_, k, s) -> (S.insert k ks, S.insert s ss)) (S.empty, S.empty) xs
+                in  (M.insert (LabelChar c) (ks, i) n, M.insert i ss sss, i + 1)
+            ) (n'', M.empty, s_max) multiarcs
+        g' = M.foldlWithKey'
+            (\ g' s ss -> 
+            ) g sss
     in  (n''', g)
 
 
 determine :: NCFA -> DCFA
-determine ncfa@(NCFA s0 _ g fss) =
+determine ncfa@(NCFA s0 sl g fss) =
     let n0        = M.lookupDefault (error "init node absent in ncfa") s0 g
-        (n0', g') = determine_init_node n0 g
+        (n0', g') = determine_init_node n0 g sl
         g''       = M.delete s0 g'
     in  DCFA s0 n0' M.empty M.empty--fss
 
