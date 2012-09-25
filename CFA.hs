@@ -15,6 +15,7 @@ module CFA
     , maxState
 --    , cfaGraph
     , isFinalDCFA
+    , isFinalNCFA
     , acceptedSignatures
 
     , setFinal
@@ -63,6 +64,10 @@ isFinalDCFA :: State -> DCFA -> Bool
 isFinalDCFA st dcfa = isJust $ M.lookup st (dcfa_final_states dcfa)
 
 
+isFinalNCFA :: State -> NCFA -> Bool
+isFinalNCFA st ncfa = isJust $ M.lookup st (ncfa_final_states ncfa)
+
+
 acceptedSignatures :: State -> DCFA -> SignSet
 acceptedSignatures s (DCFA _ _ _ fss) = M.lookupDefault (S.empty) s fss
 
@@ -109,7 +114,7 @@ group_by_label xss ((l, k, s) : ys) = case l of
         let (xss', ys') = foldl'
                 (\ (xss'', ys'') c ->
                     let (xs', ys') = get_multiarcs c ys''
-                    in  (xs' : xss'', ys')
+                    in  (((c, k, s) : xs') : xss'', ys')
                 ) (xss, ys) r
         in  group_by_label xss' ys'
 
@@ -128,7 +133,7 @@ group_by_sign xss (y@(_, k, _) : ys) =
     in  group_by_sign ((y : xs') : xss) ys'
 
 
-determine_init_node :: NCFANode -> NCFAGraph -> State -> (DCFAInitNode, NCFAGraph, State)
+determine_init_node :: NCFANode -> NCFAGraph -> State -> (DCFAInitNode, NCFAGraph, State, [State])
 determine_init_node n g s_max =
     let (multiarcs, ranges, arcs) =
             ( (\ (xss, (uss, vss), zss) -> (xss, concat uss, (concat . concat) vss ++ zss))
@@ -151,12 +156,16 @@ determine_init_node n g s_max =
         g' = M.foldlWithKey'
             (\ g s ss ->
                 let n = S.foldl' (\ n s' -> M.lookupDefault (error "node absent in ncfa") s' g ++ n) [] ss
-                in  M.insert s n g
+-- это неправильно v
+                    g' = S.foldl' (\ g s -> M.delete s g) g ss
+                in  M.insert s n g'
+--                in  M.insert s n g
             ) g sss
-    in  (n''', g', s_max')
+        ss   = S.toList $ foldl' (\ ss (_, _, s) -> S.insert s ss) S.empty n
+    in  (n''', g', s_max', trace' ss)
 
 
-determine_node :: NCFANode -> NCFAGraph -> State -> (DCFANode, NCFAGraph, State)
+determine_node :: NCFANode -> NCFAGraph -> State -> (DCFANode, NCFAGraph, State, [State])
 determine_node n g s_max =
     let (multiarcs, ranges, arcs) =
             ( (\ (xss, (uss, vss), zss) -> (xss, concat uss, (concat . concat) vss ++ zss))
@@ -174,27 +183,38 @@ determine_node n g s_max =
         (n''', sss, s_max') = foldl'
             (\ (n, sss, i) xs@((c, _, _) : _) ->
                 let ss = foldl' (\ ss (_, _, s) -> S.insert s ss) S.empty xs
-                in  (M.insert (LabelChar c) i n, M.insert i ss sss, i + 1)
+                in  (M.insert (LabelChar c) i n, M.insert i (trace' ss) sss, i + 1)
             ) (n'', M.empty, s_max) multiarcs
         g' = M.foldlWithKey'
             (\ g s ss ->
                 let n = S.foldl' (\ n s' -> M.lookupDefault (error "node absent in ncfa") s' g ++ n) [] ss
-                in  M.insert s n g
+-- это неправильно v
+                    g' = S.foldl' (\ g s -> M.delete s g) g ss
+                in  M.insert s n g'
+--                in  M.insert s n g
             ) g sss
-    in  (n''', g', s_max')
+        ss   = S.toList $ foldl' (\ ss (_, _, s) -> S.insert s ss) S.empty n
+    in  (n''', g', s_max', trace' ss)
+
+
+f :: (NCFAGraph, DCFAGraph, State, [State]) -> DCFAGraph
+f (ng, dg, _, _) | ng == M.empty = dg
+f (_, dg, _, ss) | ss == []      = undefined -- dg
+f (ng, dg, s_max, ss)            = f $ foldl'
+    (\ (ng, gd, s_max, ss) s ->
+        let n = M.lookupDefault [] s ng
+--        let n = M.lookupDefault (error ("Node Absent In NCFA: " ++ show s)) s ng
+            (n', ng', s_max', ss') = if n == [] then (M.empty, ng, s_max, ss) else determine_node n ng s_max
+        in  (M.delete s ng', M.insert s n' dg, s_max', trace'' "-- " (ss' ++ ss))
+    ) (ng, dg, s_max, []) ss
 
 
 determine :: NCFA -> DCFA
 determine ncfa@(NCFA s0 sl g fss) =
-    let n0               = M.lookupDefault (error "init node absent in ncfa") s0 g
-        (n0', g', s_max') = determine_init_node n0 g sl
-        g''              = M.delete s0 g'
-        (dg, g''', s_max'') = M.foldlWithKey'
-            (\ (dg, ng, s_max) s n ->
-                let (n', ng', s_max') = determine_node n ng s_max
-                    ng'' = M.delete s ng
-                in  (M.insert s n' dg, ng'', s_max')
-            ) (M.empty, g'', s_max') g''
+    let n0                = M.lookupDefault (error "init node absent in ncfa") s0 g
+        (n0', g', s_max', ss) = determine_init_node n0 g sl
+        g''               = M.delete s0 g'
+        dg                = f (g'', M.empty, s_max', ss)
     in  DCFA s0 n0' dg M.empty--fss
 
 
