@@ -128,7 +128,7 @@ group_by_sign xss (y@(_, k, _) : ys) =
     in  group_by_sign ((y : xs') : xss) ys'
 
 
-determine_init_node :: NCFANode -> NCFAGraph -> State -> (DCFAInitNode, NCFAGraph)
+determine_init_node :: NCFANode -> NCFAGraph -> State -> (DCFAInitNode, NCFAGraph, State)
 determine_init_node n g s_max =
     let (multiarcs, ranges, arcs) =
             ( (\ (xss, (uss, vss), zss) -> (xss, concat uss, (concat . concat) vss ++ zss))
@@ -137,7 +137,7 @@ determine_init_node n g s_max =
             . partition ((> 1) . length)
             . group_by_label []
             ) n
-        n'   = foldl' (\ n (c, k, s) -> M.insert (LabelChar c) (S.insert k S.empty, s) n) M.empty $ trace' arcs
+        n'   = foldl' (\ n (c, k, s) -> M.insert (LabelChar c) (S.insert k S.empty, s) n) M.empty arcs
         n''  = foldl'
             (\ n r ->
                 let (cs, ks, ss) = unzip3 r
@@ -149,17 +149,53 @@ determine_init_node n g s_max =
                 in  (M.insert (LabelChar c) (ks, i) n, M.insert i ss sss, i + 1)
             ) (n'', M.empty, s_max) multiarcs
         g' = M.foldlWithKey'
-            (\ g' s ss -> 
+            (\ g s ss ->
+                let n = S.foldl' (\ n s' -> M.lookupDefault (error "node absent in ncfa") s' g ++ n) [] ss
+                in  M.insert s n g
             ) g sss
-    in  (n''', g)
+    in  (n''', g', s_max')
+
+
+determine_node :: NCFANode -> NCFAGraph -> State -> (DCFANode, NCFAGraph, State)
+determine_node n g s_max =
+    let (multiarcs, ranges, arcs) =
+            ( (\ (xss, (uss, vss), zss) -> (xss, concat uss, (concat . concat) vss ++ zss))
+            . (\ (xss, (yss, zss)) -> (xss, (unzip . (map (partition ((> 1) . length) . group_by_sign []))) yss, concat zss))
+            . (\ (xss, yss) -> (xss, (partition ((> 1) . length) . group_by_state [] . concat) yss))
+            . partition ((> 1) . length)
+            . group_by_label []
+            ) n
+        n'   = foldl' (\ n (c, k, s) -> M.insert (LabelChar c) s n) M.empty arcs
+        n''  = foldl'
+            (\ n r ->
+                let (cs, ks, ss) = unzip3 r
+                in  M.insert (LabelRange cs) (case nub ss of { [s] -> s; _ -> error "multiple end states"}) n
+            ) n' ranges
+        (n''', sss, s_max') = foldl'
+            (\ (n, sss, i) xs@((c, _, _) : _) ->
+                let ss = foldl' (\ ss (_, _, s) -> S.insert s ss) S.empty xs
+                in  (M.insert (LabelChar c) i n, M.insert i ss sss, i + 1)
+            ) (n'', M.empty, s_max) multiarcs
+        g' = M.foldlWithKey'
+            (\ g s ss ->
+                let n = S.foldl' (\ n s' -> M.lookupDefault (error "node absent in ncfa") s' g ++ n) [] ss
+                in  M.insert s n g
+            ) g sss
+    in  (n''', g', s_max')
 
 
 determine :: NCFA -> DCFA
 determine ncfa@(NCFA s0 sl g fss) =
-    let n0        = M.lookupDefault (error "init node absent in ncfa") s0 g
-        (n0', g') = determine_init_node n0 g sl
-        g''       = M.delete s0 g'
-    in  DCFA s0 n0' M.empty M.empty--fss
+    let n0               = M.lookupDefault (error "init node absent in ncfa") s0 g
+        (n0', g', s_max') = determine_init_node n0 g sl
+        g''              = M.delete s0 g'
+        (dg, g''', s_max'') = M.foldlWithKey'
+            (\ (dg, ng, s_max) s n ->
+                let (n', ng', s_max') = determine_node n ng s_max
+                    ng'' = M.delete s ng
+                in  (M.insert s n' dg, ng'', s_max')
+            ) (M.empty, g'', s_max') g''
+    in  DCFA s0 n0' dg M.empty--fss
 
 
 toDotNCFA :: NCFA -> FilePath -> IO ()

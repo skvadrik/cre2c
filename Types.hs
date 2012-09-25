@@ -5,6 +5,8 @@ import qualified Data.HashMap.Strict   as M
 import qualified Data.Set              as S
 import qualified Data.ByteString.Char8 as BS
 import           Data.Hashable
+import           Data.Char                   (ord)
+import           Numeric                     (showHex)
 
 import Debug.Trace
 trace' a = trace (show a) a
@@ -84,7 +86,7 @@ instance Hashable Label where
     hash (LabelRange r) = hash r
 
 instance Show Label where
-    show (LabelChar c)  = tail $ init $ show c
+    show (LabelChar c)  = showHex (ord c) ""
     show (LabelRange s) = tail $ init $ show $ head s : '-' : [last s]
 
 ---------------- Common types
