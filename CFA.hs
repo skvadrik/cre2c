@@ -100,6 +100,8 @@ get_multiarcs c ys =
             ) ([], []) xs'
     in  (xs'', ys'' ++ ys')
 
+-- здесь нельзя вычислять, какие состояния надо удалять, потому что здесь нет дуг, ведущих из других состояний
+
 
 type Node = [(Char, SignNum, State)]
 
@@ -158,19 +160,8 @@ determine_init_node n g s_max =
                 let n = S.foldl' (\ n s' -> M.lookupDefault (error ("!! node absent in ncfa: " ++ show s')) s' g ++ n) [] ss
                 in  M.insert s n g
             ) g sss
-        (g'', sss') = M.foldlWithKey'
-            (\ (g, sss) s ss ->
-                let (g', ss') =  S.foldl'
-                        (\ (g, ss) s ->
-                            if filter (\ (_, s') -> s == s') (M.elems n'') /= []
-                            then (g, ss)
-                            else (M.delete (trace'' "deleting node " s) g, S.delete s ss)
-                        ) (g, ss) ss
-                in  (g', if ss' == S.empty then M.delete s sss else sss)
-            ) (g', sss) sss
-        ss   = foldl' (\ ss (_, _, s) -> S.insert s ss) S.empty n
-        ss'  = S.union ss (S.fromList (M.keys sss))
-    in  (n''', g'', s_max', ss')
+        ss   = M.foldl' (\ ss (_, s) -> S.insert s ss) S.empty n'''
+    in  (n''', g', s_max', ss)
 
 
 determine_node :: NCFANode -> NCFAGraph -> State -> (DCFANode, NCFAGraph, State, S.Set State)
@@ -196,22 +187,10 @@ determine_node n g s_max =
         g' = M.foldlWithKey'
             (\ g s ss ->
                 let n = S.foldl' (\ n s' -> M.lookupDefault [] s' g ++ n) [] ss
---                let n = S.foldl' (\ n s' -> M.lookupDefault (error ("node absent in ncfa: " ++ show s')) s' g ++ n) [] ss
                 in  M.insert s n g
             ) g sss
-        (g'', sss') = M.foldlWithKey'
-            (\ (g, sss) s ss ->
-                let (g', ss') =  S.foldl'
-                        (\ (g, ss) s ->
-                            if True--filter (== s) (trace'' (show s ++ ": ") (((\ (_, _, ss) -> ss) . unzip3 . concat . M.elems) g)) /= []
-                            then (g, ss)
-                            else (M.delete (trace'' "deleting node " s) g, S.delete s ss)
-                        ) (g, ss) ss
-                in  (g', if ss' == S.empty then M.delete s sss else sss)
-            ) (g', sss) sss
-        ss   = foldl' (\ ss (_, _, s) -> S.insert s ss) S.empty n
-        ss'  = S.union ss (S.fromList (M.keys sss'))
-    in  (n''', g'', s_max', ss')
+        ss   = M.foldl' (\ ss s -> S.insert s ss) S.empty n'''
+    in  (n''', g', s_max', ss)
 
 
 f :: (NCFAGraph, DCFAGraph, State, S.Set State) -> DCFAGraph
