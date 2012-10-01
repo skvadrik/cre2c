@@ -87,6 +87,7 @@ instance Hashable Label where
 
 instance Show Label where
     show (LabelChar c)  = showHex (ord c) ""
+--    show (LabelRange s) = tail $ init $ show s
     show (LabelRange s) = tail $ init $ show $ head s : '-' : [last s]
 
 ---------------- Common types
