@@ -147,7 +147,7 @@ group_multiarcs_by_state xss =
                     ) (S.empty, S.empty) xss
             in  (LabelRange r, ks, ss)
 
-    in  (map g . trace'' "*" . f [] . trace'' "***") xss'
+    in  (map g . f []) xss'
 
 
 group_by_state :: [Node] -> Node -> [Node]

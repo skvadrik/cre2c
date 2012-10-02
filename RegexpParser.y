@@ -142,8 +142,8 @@ lex_int cs =
             '}' : cs' -> TokenInt (read num) : TokenCParenthesis : lex_regexp cs'
 
 
-take_escaped_till :: Char -> String -> (String, String)
-take_escaped_till c s =
+break_escaped :: Char -> String -> (String, String)
+break_escaped c s =
     let f :: DL.DList Char -> String -> (DL.DList Char, String)
         f tok ""                = (tok, "")
         f tok ('\\' : x : xs)   = f (DL.snoc (DL.snoc tok '\\') x) xs
@@ -154,18 +154,29 @@ take_escaped_till c s =
 
 
 lex_dqchain cs =
-    let (ch, rest) = take_escaped_till '"' cs
+    let (ch, rest) = break_escaped '"' cs
     in  TokenChain ch : TokenDQuote : lex_regexp rest
 
 
 lex_qchain cs =
-    let (ch, rest) = take_escaped_till '\'' cs
+    let (ch, rest) = break_escaped '\'' cs
     in  TokenChain ch : TokenQuote : lex_regexp rest
 
 
 lex_chain cs =
-    let (ch, rest) = take_escaped_till ']' cs
-    in  TokenChain ch : TokenCSqBracket : lex_regexp rest
+    let (ch, rest) = break_escaped ']' cs
+    in  TokenChain (span_range ch) : TokenCSqBracket : lex_regexp rest
+
+
+span_range :: String -> String
+span_range "" = ""
+span_range s  =
+    let (s1, s2) = break_escaped '-' s
+    in  case s2 of
+            ""     -> s1
+            c : cs -> if s1 == ""
+                then '-' : c : span_range cs
+                else [last s1 .. c] ++ span_range cs
 
 
 span_chain :: String -> String
@@ -178,7 +189,7 @@ span_chain s =
 
 
 lex_range cs =
-    let (ch, rest) = take_escaped_till ']' cs
+    let (ch, rest) = break_escaped ']' cs
     in  TokenChain (span_chain ch) : TokenCSqBracket : lex_regexp rest
 
 
