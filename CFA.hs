@@ -182,13 +182,6 @@ determine_init_node n g s_max =
         (n''', sss, s_max') = foldl'
             (\ (n, sss, i) (l, ks, ss) -> (M.insert l (ks, i) n, M.insert i ss sss, i + 1)
             ) (n'', M.empty, s_max) multiarcs
-{-
-        (n''', sss, s_max') = foldl'
-            (\ (n, sss, i) xs@((c, _, _) : _) ->
-                let (ks, ss) = foldl' (\ (ks, ss) (_, k, s) -> (S.insert k ks, S.insert s ss)) (S.empty, S.empty) xs
-                in  (M.insert (LabelChar c) (ks, i) n, M.insert i ss sss, i + 1)
-            ) (n'', M.empty, s_max) multiarcs
--}
         g' = M.foldlWithKey'
             (\ g s ss ->
                 let n = S.foldl' (\ n s' -> M.lookupDefault [] s' g ++ n) [] ss
@@ -216,13 +209,6 @@ determine_node n g s_max =
         (n''', sss, s_max') = foldl'
             (\ (n, sss, i) (l, _, ss) -> (M.insert l i n, M.insert i ss sss, i + 1)
             ) (n'', M.empty, s_max) multiarcs
-{-
-        (n''', sss, s_max') = foldl'
-            (\ (n, sss, i) xs@((c, _, _) : _) ->
-                let ss = foldl' (\ ss (_, _, s) -> S.insert s ss) S.empty xs
-                in  (M.insert (LabelChar c) i n, M.insert i ss sss, i + 1)
-            ) (n'', M.empty, s_max) multiarcs
--}
         g' = M.foldlWithKey'
             (\ g s ss ->
                 let n = S.foldl' (\ n s' -> M.lookupDefault [] s' g ++ n) [] ss

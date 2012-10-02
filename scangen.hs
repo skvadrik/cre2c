@@ -29,8 +29,8 @@ main = do
 
 --    cfa2cpp fdest cfa prolog epilog conds codes sign_maxlen
 
-    toDotNCFA ncfa "./ncfa.dot"
-    toDotDCFA dcfa "./cfa.dot"
+--    toDotNCFA ncfa "./ncfa.dot"
+--    toDotDCFA dcfa "./cfa.dot"
     print dcfa
 --    print regexps
 --    print regexp_table

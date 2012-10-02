@@ -130,7 +130,7 @@ lex_regexp ('{'  : cs) = TokenOParenthesis : lex_int cs
 lex_regexp ('}'  : cs) = TokenCParenthesis : lex_regexp cs
 lex_regexp ('"'  : cs) = TokenDQuote       : lex_dqchain cs
 lex_regexp ('\'' : cs) = TokenQuote        : lex_qchain cs
-lex_regexp ('['  : cs) = TokenOSqBracket   : lex_chain cs
+lex_regexp ('['  : cs) = TokenOSqBracket   : lex_range cs
 lex_regexp ('|'  : cs) = TokenVSlash       : lex_regexp cs
 lex_regexp (';'  : cs) = TokenSemicolon    : lexer cs
 
@@ -163,34 +163,18 @@ lex_qchain cs =
     in  TokenChain ch : TokenQuote : lex_regexp rest
 
 
-lex_chain cs =
-    let (ch, rest) = break_escaped ']' cs
-    in  TokenChain (span_range ch) : TokenCSqBracket : lex_regexp rest
-
-
 span_range :: String -> String
-span_range "" = ""
-span_range s  =
-    let (s1, s2) = break_escaped '-' s
-    in  case s2 of
-            ""     -> s1
-            c : cs -> if s1 == ""
-                then '-' : c : span_range cs
-                else [last s1 .. c] ++ span_range cs
-
-
-span_chain :: String -> String
-span_chain s =
-    let span_chain' :: String -> String -> String
-        span_chain' s1 ""                 = s1
-        span_chain' s1 (a : '-' : b : s2) = span_chain' ([a .. b] ++ s1) s2
-        span_chain' s1 (a : s2)           = span_chain' (a : s1) s2
-    in  span_chain' "" s
+span_range s =
+    let span_range' :: String -> String -> String
+        span_range' s1 ""                 = s1
+        span_range' s1 (a : '-' : b : s2) = span_range' ([a .. b] ++ s1) s2
+        span_range' s1 (a : s2)           = span_range' (a : s1) s2
+    in  span_range' "" s
 
 
 lex_range cs =
     let (ch, rest) = break_escaped ']' cs
-    in  TokenChain (span_chain ch) : TokenCSqBracket : lex_regexp rest
+    in  TokenChain (span_range ch) : TokenCSqBracket : lex_regexp rest
 
 
 --------------------------------------------------------------------------------
