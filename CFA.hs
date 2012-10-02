@@ -85,6 +85,8 @@ addTransitionNCFA ncfa@(NCFA s0 sl g fss) (s1, l, k, s2) =
 ------------------------------------------------------------------------------------------------
 
 
+-- тутачки нада схитрить с диапазонами, иначе жопа
+-- надо вычислять наибольшие пересекающиеся диапазоны
 get_multiarcs :: Char -> NCFANode -> (Node, NCFANode)
 get_multiarcs c ys =
     let (xs', ys') = partition
@@ -100,16 +102,16 @@ get_multiarcs c ys =
             ) ([], []) xs'
     in  (xs'', ys'' ++ ys')
 
--- здесь нельзя вычислять, какие состояния надо удалять, потому что здесь нет дуг, ведущих из других состояний
-
 
 type Node = [(Char, SignNum, State)]
 
 
+-- либо тут пытаться грамотно вычислять разбиение на непересекающиеся подмножества
+-- либо дальше потом группировать
 group_by_label :: [Node] -> NCFANode -> [Node]
 group_by_label xss [] = xss
 group_by_label xss ((l, k, s) : ys) = case l of
-    LabelChar c         ->
+    LabelChar c  ->
         let (xs', ys') = get_multiarcs c ys
         in  group_by_label (((c, k, s) : xs') : xss) ys'
     LabelRange r ->
@@ -119,6 +121,33 @@ group_by_label xss ((l, k, s) : ys) = case l of
                     in  (((c, k, s) : xs') : xss'', ys')
                 ) (xss, ys) r
         in  group_by_label xss' ys'
+
+
+type MultiArc = (Label, SignSet, S.Set State)
+
+group_multiarcs_by_state :: [Node] -> [MultiArc]
+group_multiarcs_by_state xss =
+    let xss' = map (\ xs -> ((S.fromList . (\ (_, _, ss) -> ss) . unzip3) xs, xs)) xss
+
+        f :: [[Node]] -> [(S.Set State, Node)] -> [[Node]]
+        f xsss []                 = xsss
+        f xsss ((ss, ys) : yss) =
+            let (xss, yss') = partition (\ (ss', _) -> ss' == ss) yss
+                xss'        = (snd . unzip) xss
+            in  f ((ys : xss') : xsss) yss'
+
+        g :: [Node] -> MultiArc
+        g (xs@((c, _, _) : _) : []) =
+            let (ks, ss) = foldl' (\ (ks, ss) (_, k, s) -> (S.insert k ks, S.insert s ss)) (S.empty, S.empty) xs
+            in  (LabelChar c, ks, ss)
+        g xss =
+            let r        = map (\ ((c, _, _) : _) -> c) xss
+                (ks, ss) = foldl'
+                    (\ (ks, ss) xs -> foldl' (\ (ks, ss) (_, k, s) -> (S.insert k ks, S.insert s ss)) (ks, ss) xs
+                    ) (S.empty, S.empty) xss
+            in  (LabelRange r, ks, ss)
+
+    in  (map g . trace'' "*" . f [] . trace'' "***") xss'
 
 
 group_by_state :: [Node] -> Node -> [Node]
@@ -139,8 +168,8 @@ determine_init_node :: NCFANode -> NCFAGraph -> State -> (DCFAInitNode, NCFAGrap
 determine_init_node n g s_max =
     let (multiarcs, ranges, arcs) =
             ( (\ (xss, (uss, vss), zss) -> (xss, concat uss, (concat . concat) vss ++ zss))
-            . (\ (xss, (yss, zss)) -> (xss, (unzip . (map (partition ((> 1) . length) . group_by_sign []))) yss, concat zss))
-            . (\ (xss, yss) -> (xss, (partition ((> 1) . length) . group_by_state [] . concat) yss))
+            . (\ (xss, (yss, zss))      -> (xss, (unzip . (map (partition ((> 1) . length) . group_by_sign []))) yss, concat zss))
+            . (\ (xss, yss)             -> (group_multiarcs_by_state xss, (partition ((> 1) . length) . group_by_state [] . concat) yss))
             . partition ((> 1) . length)
             . group_by_label []
             ) n
@@ -151,13 +180,18 @@ determine_init_node n g s_max =
                 in  M.insert (LabelRange cs) (S.fromList ks, case nub ss of { [s] -> s; _ -> error "multiple end states"}) n
             ) n' ranges
         (n''', sss, s_max') = foldl'
+            (\ (n, sss, i) (l, ks, ss) -> (M.insert l (ks, i) n, M.insert i ss sss, i + 1)
+            ) (n'', M.empty, s_max) multiarcs
+{-
+        (n''', sss, s_max') = foldl'
             (\ (n, sss, i) xs@((c, _, _) : _) ->
                 let (ks, ss) = foldl' (\ (ks, ss) (_, k, s) -> (S.insert k ks, S.insert s ss)) (S.empty, S.empty) xs
                 in  (M.insert (LabelChar c) (ks, i) n, M.insert i ss sss, i + 1)
             ) (n'', M.empty, s_max) multiarcs
+-}
         g' = M.foldlWithKey'
             (\ g s ss ->
-                let n = S.foldl' (\ n s' -> M.lookupDefault (error ("!! node absent in ncfa: " ++ show s')) s' g ++ n) [] ss
+                let n = S.foldl' (\ n s' -> M.lookupDefault [] s' g ++ n) [] ss
                 in  M.insert s n g
             ) g sss
         ss   = M.foldl' (\ ss (_, s) -> S.insert s ss) S.empty n'''
@@ -168,8 +202,8 @@ determine_node :: NCFANode -> NCFAGraph -> State -> (DCFANode, NCFAGraph, State,
 determine_node n g s_max =
     let (multiarcs, ranges, arcs) =
             ( (\ (xss, (uss, vss), zss) -> (xss, concat uss, (concat . concat) vss ++ zss))
-            . (\ (xss, (yss, zss)) -> (xss, (unzip . (map (partition ((> 1) . length) . group_by_sign []))) yss, concat zss))
-            . (\ (xss, yss) -> (xss, (partition ((> 1) . length) . group_by_state [] . concat) yss))
+            . (\ (xss, (yss, zss))      -> (xss, (unzip . (map (partition ((> 1) . length) . group_by_sign []))) yss, concat zss))
+            . (\ (xss, yss)             -> (group_multiarcs_by_state xss, (partition ((> 1) . length) . group_by_state [] . concat) yss))
             . partition ((> 1) . length)
             . group_by_label []
             ) n
@@ -180,10 +214,15 @@ determine_node n g s_max =
                 in  M.insert (LabelRange cs) (case nub ss of { [s] -> s; _ -> error "multiple end states"}) n
             ) n' ranges
         (n''', sss, s_max') = foldl'
+            (\ (n, sss, i) (l, _, ss) -> (M.insert l i n, M.insert i ss sss, i + 1)
+            ) (n'', M.empty, s_max) multiarcs
+{-
+        (n''', sss, s_max') = foldl'
             (\ (n, sss, i) xs@((c, _, _) : _) ->
                 let ss = foldl' (\ ss (_, _, s) -> S.insert s ss) S.empty xs
                 in  (M.insert (LabelChar c) i n, M.insert i ss sss, i + 1)
             ) (n'', M.empty, s_max) multiarcs
+-}
         g' = M.foldlWithKey'
             (\ g s ss ->
                 let n = S.foldl' (\ n s' -> M.lookupDefault [] s' g ++ n) [] ss
@@ -194,15 +233,14 @@ determine_node n g s_max =
 
 
 f :: (NCFAGraph, DCFAGraph, State, S.Set State) -> DCFAGraph
-f (ng, dg, _, _) | ng == M.empty = dg
-f (_, dg, _, ss) | ss == S.empty = dg -- error "no states"
+f (_, dg, _, ss) | ss == S.empty = dg
 f (ng, dg, s_max, ss)            = f $ S.foldl'
     (\ (ng, dg, s_max, ss) s ->
         let n = M.lookupDefault [] s ng
         in  if n /= []
                 then
                     let (n', ng', s_max', ss') = determine_node n ng s_max
-                    in  (M.delete (trace'' "** deleting node " s) ng', M.insert s n' dg, s_max', S.union ss' ss)
+                    in  (M.delete s ng', M.insert s n' dg, s_max', S.union ss' ss)
                 else (ng, dg, s_max, ss)
     ) (ng, dg, s_max, S.empty) ss
 
@@ -267,7 +305,9 @@ toDotDCFA (DCFA s0 node0 g fss) fp = do
             , " [label=\""
             , show l
             , show $ S.toList ks
-            , "\"]\n"
+            , case l of
+                LabelRange _ -> "\", style=bold, color=red]\n"
+                _            -> "\"]\n"
             ]
     forM_ (M.toList g) $
         \ (s, node) -> forM_ (M.toList node) $
@@ -278,6 +318,8 @@ toDotDCFA (DCFA s0 node0 g fss) fp = do
                 , show s'
                 , " [label=\""
                 , show l
-                , "\"]\n"
+                , case l of
+                    LabelRange _ -> "\", style=bold, color=red]\n"
+                    _            -> "\"]\n"
                 ]
     appendFile fp "}\n"

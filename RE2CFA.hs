@@ -43,13 +43,15 @@ ncfa_add_regexp_iter (ncfa, ss) r rt sign = case r of
         let rcat = foldl' (\ rc _ -> Cat (IterFromPrim rprim) rc) ((CatFromIter . IterFromPrim) rprim)  [1 .. n]
         in  ncfa_add_regexp_cat (ncfa, ss) rcat rt sign
     IterRange rprim n m ->
-        let rcat        = foldl' (\ rc _ -> Cat (IterFromPrim rprim) rc) ((CatFromIter . IterFromPrim) rprim)  [1 .. n]
-            (ncfa', ss') = ncfa_add_regexp_cat (ncfa, ss) rcat rt sign
-        in  foldl'
-            (\ (ncfa'', ss'') _ ->
-                let (ncfa''', ss''') = ncfa_add_regexp_prim (ncfa'', ss'') rprim rt sign
-                in  (ncfa''', S.union ss'' ss''')
-            ) (ncfa', ss') [n .. m - 1]
+        let rcat               = foldl' (\ rc _ -> Cat (IterFromPrim rprim) rc) ((CatFromIter . IterFromPrim) rprim)  [1 .. n - 1]
+            (ncfa', ss')       = ncfa_add_regexp_cat (ncfa, ss) rcat rt sign
+            ss''               = if n == 0 then S.union ss ss' else ss'
+            (ncfa'', _, ss''') = foldl'
+                (\ (ncfa, ss, xs) _ ->
+                    let (ncfa', ss') = ncfa_add_regexp_prim (ncfa, ss) rprim rt sign
+                    in  (ncfa', ss', S.union ss' xs)
+                ) (ncfa', ss', ss'') [n .. m - 1]
+        in  (ncfa'', ss''')
 
 
 ncfa_add_regexp_prim :: (NCFA, S.Set State) -> RegexpPrim -> RegexpTable -> SignNum -> (NCFA, S.Set State)
