@@ -88,81 +88,37 @@ addTransitionNCFA ncfa@(NCFA s0 sl g fss) (s1, l, k, s2) =
 
 ------------------------------------------------------------------------------------------------
 
-
--- тутачки нада схитрить с диапазонами, иначе жопа
--- надо вычислять наибольшие пересекающиеся диапазоны
-get_multiarcs :: Char -> NCFANode -> (Node, NCFANode)
-get_multiarcs c ys =
-    let (xs', ys') = partition
-            (\ (l, _, _) -> case l of
-                LabelChar c' -> c == c'
-                LabelRange r -> c `elem` r
-            ) ys
-        (xs'', ys'') = foldl'
-            (\ (xs, ys) (l, k, s) -> case l of
-                LabelChar _     -> ((c, k, s) : xs, ys)
-                LabelRange [c'] -> ((c, k, s) : xs, ys)
-                LabelRange r    -> ((c, k, s) : xs, (LabelRange (delete c r), k, s) : ys)
-            ) ([], []) xs'
-    in  (xs'', ys'' ++ ys')
-
-
 type Node = [(Char, SignNum, State)]
-
-
--- либо тут пытаться грамотно вычислять разбиение на непересекающиеся подмножества
--- либо дальше потом группировать
-group_by_label :: [Node] -> NCFANode -> [Node]
-group_by_label xss [] = xss
-group_by_label xss ((l, k, s) : ys) = case l of
-    LabelChar c  ->
-        let (xs', ys') = get_multiarcs c ys
-        in  group_by_label (((c, k, s) : xs') : xss) ys'
-    LabelRange r ->
-        let (xss', ys') = foldl'
-                (\ (xss'', ys'') c ->
-                    let (xs', ys') = get_multiarcs c ys''
-                    in  (((c, k, s) : xs') : xss'', ys')
-                ) (xss, ys) r
-        in  group_by_label xss' ys'
-
-
-type MultiArc     = (Label, S.Set State)
-type InitMultiArc = (Label, SignSet, S.Set State)
+type MultiArc = (Label, SignSet, S.Set State)
 
 
 hashAndCombine :: Hashable h => Int -> h -> Int
 hashAndCombine acc h = acc `combine` hash h
 
---instance (Hashable a, Ord a) => Hashable (S.Set a) where
---    hash = hash . S.toAscList
 instance (Hashable a) => Hashable (S.Set a) where
     hash = S.foldl' hashAndCombine 0
 
 
-group_init_multiarcs_by_state :: [Node] -> [InitMultiArc]
-group_init_multiarcs_by_state xss =
-    let xss'   = map ((\ (c : cs, ks, ss) -> (S.fromList ss, (c, S.fromList ks))) . unzip3) xss
-        xss''  = foldl'
-             (\ m (ss, (c, ks)) -> M.insertWith
-                  (\ _ (r, ks') -> (c : r, S.union ks ks')
-                  ) ss ([c], ks) m
-             ) M.empty xss'
-        xss''' = (map (\ (ss, (r, ks)) -> (case r of { [c] -> LabelChar c; _ -> LabelRange r }, ks, ss)) . M.toList) xss''
-    in  xss'''
-
-
-group_multiarcs_by_state :: [Node] -> [MultiArc]
-group_multiarcs_by_state xss =
-    let xss'   = map ((\ (c : cs, _, ss) -> (S.fromList ss, c)) . unzip3) xss
---    let xss'   = force $ map ((\ (c : cs, _, ss) -> (S.fromList ss, c)) . unzip3) xss
-        xss''  = foldl'
-             (\ m (ss, c) -> M.insertWith
-                  (\ _ r -> c : r
-                  ) ss [c] m
-             ) M.empty xss'
-        xss''' = (map (\ (ss, r) -> (case r of { [c] -> LabelChar c; _ -> LabelRange r }, ss)) . M.toList) xss''
-    in  xss'''
+group_by_label :: NCFANode -> ([MultiArc], Node)
+group_by_label n =
+    let f :: (SignNum, State) -> M.HashMap Char ([SignNum], [State]) -> Char -> M.HashMap Char ([SignNum], [State])
+        f (k, s) n c = M.insertWith
+            (\ _ (ks, ss) -> (k : ks, s : ss)
+            ) c ([k], [s]) n
+        n' = foldl'
+            (\ n (l, k, s) -> case l of
+                LabelChar c  -> f (k, s) n c
+                LabelRange r -> foldl' (f (k, s)) n r
+            ) M.empty n
+        (multiarcs, arcs) = M.foldlWithKey'
+            (\ (xs, ys) c (ks@(k : ks'), ss@(s : ss')) -> if ss' == []
+                then (xs, (c, k, s) : ys)
+                else
+                    let ks' = S.fromList ks
+                    in  (M.insertWith (\ _ (r, ks'') -> (c : r, S.union ks' ks'')) (S.fromList ss) ([c], ks') xs, ys)
+            ) (M.empty, []) n'
+        multiarcs' = (map (\ (ss, (r, ks)) -> (case r of { [c] -> LabelChar c; _ -> LabelRange r }, ks, ss)) . M.toList) multiarcs
+    in  (multiarcs', arcs)
 
 
 group_by_state :: [Node] -> Node -> [Node]
@@ -184,9 +140,8 @@ determine_init_node n g s_max =
     let (multiarcs, ranges, arcs) =
             ( (\ (xss, (uss, vss), zss) -> (xss, concat uss, (concat . concat) vss ++ zss))
             . (\ (xss, (yss, zss))      -> (xss, (unzip . (map (partition ((> 1) . length) . group_by_sign []))) yss, concat zss))
-            . (\ (xss, yss)             -> (group_init_multiarcs_by_state xss, (partition ((> 1) . length) . group_by_state [] . concat) yss))
-            . partition ((> 1) . length)
-            . group_by_label []
+            . (\ (xss, yss)             -> (xss, (partition ((> 1) . length) . group_by_state []) yss))
+            . group_by_label
             ) n
         n'   = foldl' (\ n (c, k, s) -> M.insert (LabelChar c) (S.insert k S.empty, s) n) M.empty arcs
         n''  = foldl'
@@ -211,9 +166,8 @@ determine_node n g s_max =
     let (multiarcs, ranges, arcs) =
             ( (\ (xss, (uss, vss), zss) -> (xss, concat uss, (concat . concat) vss ++ zss))
             . (\ (xss, (yss, zss))      -> (xss, (unzip . (map (partition ((> 1) . length) . group_by_sign []))) yss, concat zss))
-            . (\ (xss, yss)             -> (group_multiarcs_by_state xss, (partition ((> 1) . length) . group_by_state [] . concat) yss))
-            . partition ((> 1) . length)
-            . group_by_label []
+            . (\ (xss, yss)             -> (xss, (partition ((> 1) . length) . group_by_state []) yss))
+            . group_by_label
             ) n
         n'   = foldl' (\ n (c, k, s) -> M.insert (LabelChar c) s n) M.empty arcs
         n''  = foldl'
@@ -222,7 +176,7 @@ determine_node n g s_max =
                 in  M.insert (LabelRange cs) (case nub ss of { [s] -> s; _ -> error "multiple end states"}) n
             ) n' ranges
         (n''', sss, s_max') = foldl'
-            (\ (n, sss, i) (l, ss) -> (M.insert l i n, M.insert i ss sss, i + 1)
+            (\ (n, sss, i) (l, _, ss) -> (M.insert l i n, M.insert i ss sss, i + 1)
             ) (n'', M.empty, s_max) multiarcs
         g' = M.foldlWithKey'
             (\ g s ss ->
