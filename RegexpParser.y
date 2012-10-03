@@ -8,6 +8,7 @@ import qualified Data.HashMap.Strict as M
 import           Data.Char
 import           Control.Applicative       ((<$>))
 import qualified Data.DList          as DL
+import           Data.List                 (partition)
 
 import           Types
 
@@ -128,7 +129,7 @@ lex_regexp ('('  : cs) = TokenOBracket     : lex_regexp cs
 lex_regexp (')'  : cs) = TokenCBracket     : lex_regexp cs
 lex_regexp ('{'  : cs) = TokenOParenthesis : lex_int cs
 lex_regexp ('}'  : cs) = TokenCParenthesis : lex_regexp cs
-lex_regexp ('"'  : cs) = TokenDQuote       : lex_dqchain cs
+lex_regexp ('"'  : cs) = lex_dqchain cs
 lex_regexp ('\'' : cs) = TokenQuote        : lex_qchain cs
 lex_regexp ('['  : cs) = TokenOSqBracket   : lex_range cs
 lex_regexp ('|'  : cs) = TokenVSlash       : lex_regexp cs
@@ -155,7 +156,10 @@ break_escaped c s =
 
 lex_dqchain cs =
     let (ch, rest) = break_escaped '"' cs
-    in  TokenChain ch : TokenDQuote : lex_regexp rest
+        (s1, s2)   = partition isAlpha ch
+        xs         = concatMap (\ c -> TokenOSqBracket : TokenChain [toLower c, toUpper c] : TokenCSqBracket : []) s1
+        ys         = TokenDQuote : TokenChain s2 : TokenDQuote : lex_regexp rest
+    in  xs ++ ys
 
 
 lex_qchain cs =
