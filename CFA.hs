@@ -99,91 +99,60 @@ instance (Hashable a) => Hashable (S.Set a) where
     hash = S.foldl' hashAndCombine 0
 
 
-group_by_label :: NCFANode -> ([MultiArc], Node)
-group_by_label n =
+to_label :: String -> Label
+to_label [c] = LabelChar c
+to_label r   = LabelRange r
+
+
+determine_init_node :: NCFANode -> NCFAGraph -> State -> (DCFAInitNode, NCFAGraph, State, S.Set State)
+determine_init_node n g s_max =
     let f :: (SignNum, State) -> M.HashMap Char ([SignNum], [State]) -> Char -> M.HashMap Char ([SignNum], [State])
-        f (k, s) n c = M.insertWith
-            (\ _ (ks, ss) -> (k : ks, s : ss)
-            ) c ([k], [s]) n
+        f (k, s) n c = M.insertWith (\ _ (ks, ss) -> (k : ks, s : ss)) c ([k], [s]) n
         n' = foldl'
             (\ n (l, k, s) -> case l of
                 LabelChar c  -> f (k, s) n c
                 LabelRange r -> foldl' (f (k, s)) n r
             ) M.empty n
-        (multiarcs, arcs) = M.foldlWithKey'
+        (xs, ys) = M.foldlWithKey'
             (\ (xs, ys) c (ks@(k : ks'), ss@(s : ss')) -> if ss' == []
-                then (xs, (c, k, s) : ys)
+                then (xs, M.insertWith (\ _ r -> c : r) (k, s) [c] ys)
                 else
                     let ks' = S.fromList ks
                     in  (M.insertWith (\ _ (r, ks'') -> (c : r, S.union ks' ks'')) (S.fromList ss) ([c], ks') xs, ys)
-            ) (M.empty, []) n'
-        multiarcs' = (map (\ (ss, (r, ks)) -> (case r of { [c] -> LabelChar c; _ -> LabelRange r }, ks, ss)) . M.toList) multiarcs
-    in  (multiarcs', arcs)
-
-
-group_by_state :: [Node] -> Node -> [Node]
-group_by_state xss [] = xss
-group_by_state xss (y@(_, _, s) : ys) =
-    let (xs', ys') = partition (\ (_, _, s') -> s' == s) ys
-    in  group_by_state ((y : xs') : xss) ys'
-
-
-group_by_sign :: [Node] -> Node -> [Node]
-group_by_sign xss [] = xss
-group_by_sign xss (y@(_, k, _) : ys) =
-    let (xs', ys') = partition (\ (_, k', _) -> k' == k) ys
-    in  group_by_sign ((y : xs') : xss) ys'
-
-
-determine_init_node :: NCFANode -> NCFAGraph -> State -> (DCFAInitNode, NCFAGraph, State, S.Set State)
-determine_init_node n g s_max =
-    let (multiarcs, ranges, arcs) =
-            ( (\ (xss, (uss, vss), zss) -> (xss, concat uss, (concat . concat) vss ++ zss))
-            . (\ (xss, (yss, zss))      -> (xss, (unzip . (map (partition ((> 1) . length) . group_by_sign []))) yss, concat zss))
-            . (\ (xss, yss)             -> (xss, (partition ((> 1) . length) . group_by_state []) yss))
-            . group_by_label
-            ) n
-        n'   = foldl' (\ n (c, k, s) -> M.insert (LabelChar c) (S.insert k S.empty, s) n) M.empty arcs
-        n''  = foldl'
-            (\ n r ->
-                let (cs, ks, ss) = unzip3 r
-                in  M.insert (LabelRange cs) (S.fromList ks, case nub ss of { [s] -> s; _ -> error "multiple end states"}) n
-            ) n' ranges
-        (n''', sss, s_max') = foldl'
-            (\ (n, sss, i) (l, ks, ss) -> (M.insert l (ks, i) n, M.insert i ss sss, i + 1)
-            ) (n'', M.empty, s_max) multiarcs
+            ) (M.empty, M.empty) n'
+        n'' = M.foldlWithKey' (\ n (k, s) r -> M.insert (to_label r) (S.insert k S.empty, s) n) M.empty ys
+        (n''', sss, s_max') = M.foldlWithKey' (\ (n, sss, i) ss (r, ks) -> (M.insert (to_label r) (ks, i) n, M.insert i ss sss, i + 1)) (n'', M.empty, s_max) xs
         g' = M.foldlWithKey'
             (\ g s ss ->
                 let n = S.foldl' (\ n s' -> M.lookupDefault [] s' g ++ n) [] ss
                 in  M.insert s n g
             ) g sss
-        ss   = M.foldl' (\ ss (_, s) -> S.insert s ss) S.empty n'''
+        ss = M.foldl' (\ ss (_, s) -> S.insert s ss) S.empty n'''
     in  (n''', g', s_max', ss)
 
 
 determine_node :: NCFANode -> NCFAGraph -> State -> (DCFANode, NCFAGraph, State, S.Set State)
 determine_node n g s_max =
-    let (multiarcs, ranges, arcs) =
-            ( (\ (xss, (uss, vss), zss) -> (xss, concat uss, (concat . concat) vss ++ zss))
-            . (\ (xss, (yss, zss))      -> (xss, (unzip . (map (partition ((> 1) . length) . group_by_sign []))) yss, concat zss))
-            . (\ (xss, yss)             -> (xss, (partition ((> 1) . length) . group_by_state []) yss))
-            . group_by_label
-            ) n
-        n'   = foldl' (\ n (c, k, s) -> M.insert (LabelChar c) s n) M.empty arcs
-        n''  = foldl'
-            (\ n r ->
-                let (cs, ks, ss) = unzip3 r
-                in  M.insert (LabelRange cs) (case nub ss of { [s] -> s; _ -> error "multiple end states"}) n
-            ) n' ranges
-        (n''', sss, s_max') = foldl'
-            (\ (n, sss, i) (l, _, ss) -> (M.insert l i n, M.insert i ss sss, i + 1)
-            ) (n'', M.empty, s_max) multiarcs
+    let f :: (SignNum, State) -> M.HashMap Char ([SignNum], [State]) -> Char -> M.HashMap Char ([SignNum], [State])
+        f (k, s) n c = M.insertWith (\ _ (ks, ss) -> (k : ks, s : ss)) c ([k], [s]) n
+        n' = foldl'
+            (\ n (l, k, s) -> case l of
+                LabelChar c  -> f (k, s) n c
+                LabelRange r -> foldl' (f (k, s)) n r
+            ) M.empty n
+        (xs, ys) = M.foldlWithKey'
+            (\ (xs, ys) c (ks@(k : ks'), ss@(s : ss')) -> if ss' == []
+                then (xs, M.insertWith (\ _ r -> c : r) (k, s) [c] ys)
+                else (M.insertWith (\ _ r -> c : r) (S.fromList ss) [c] xs, ys)
+            ) (M.empty, M.empty) n'
+        n'' = M.foldlWithKey' (\ n (_, s) r -> M.insert (to_label r) s n) M.empty ys
+        (n''', sss, s_max') = M.foldlWithKey' (\ (n, sss, i) ss r -> (M.insert (to_label r) i n, M.insert i ss sss, i + 1)) (n'', M.empty, s_max) xs
         g' = M.foldlWithKey'
             (\ g s ss ->
                 let n = S.foldl' (\ n s' -> M.lookupDefault [] s' g ++ n) [] ss
                 in  M.insert s n g
             ) g sss
-        ss   = M.foldl' (\ ss s -> S.insert s ss) S.empty n'''
+        ss = M.foldl' (\ ss s -> S.insert s ss) S.empty n'''
     in  (n''', g', s_max', ss)
 
 
