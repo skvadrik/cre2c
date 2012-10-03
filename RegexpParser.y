@@ -143,6 +143,19 @@ lex_int cs =
             '}' : cs' -> TokenInt (read num) : TokenCParenthesis : lex_regexp cs'
 
 
+{-
+break_escaped :: Char -> String -> (String, String)
+break_escaped c s =
+    let f :: String -> String -> (String, String)
+        f tok ""                = (tok, "")
+        f tok ('\\' : x : xs)   = f (tok ++ ('\\' : [x])) xs
+        f tok (x : xs) | x == c = (tok ++ "\"", xs)
+        f tok (x : xs)          = f (tok ++ [x]) xs
+        (tok, rest) = f "\"" s
+    in  (read tok, rest)
+-}
+
+
 break_escaped :: Char -> String -> (String, String)
 break_escaped c s =
     let f :: DL.DList Char -> String -> (DL.DList Char, String)

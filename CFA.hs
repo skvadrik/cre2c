@@ -29,9 +29,10 @@ module CFA
 
 import qualified Data.HashMap.Strict as M
 import qualified Data.Set            as S
-import           Data.List                (foldl', intersect, find, partition, delete, nub)
+import           Data.List                (foldl', intersect, find, partition, delete, nub, sort)
 import           Control.Monad            (forM_)
 import           Data.Maybe               (isJust, fromJust)
+import           Data.Hashable
 
 import           Types
 
@@ -124,9 +125,23 @@ group_by_label xss ((l, k, s) : ys) = case l of
 
 
 type MultiArc = (Label, SignSet, S.Set State)
+instance (Hashable a, Ord a) => Hashable (S.Set a) where
+    hash = hash . sort . S.toList
+
 
 group_multiarcs_by_state :: [Node] -> [MultiArc]
 group_multiarcs_by_state xss =
+
+    let xss'   = map ((\ (c : cs, ks, ss) -> (S.fromList ss, (c, S.fromList ks))) . unzip3) xss
+        xss''  = foldl'
+             (\ m (ss, (c, ks)) -> M.insertWith
+                  (\ _ (r, ks') -> (c : r, S.union ks ks')
+                  ) ss ([c], ks) m
+             ) M.empty xss'
+        xss''' = (map (\ (ss, (r, ks)) -> (case r of { [c] -> LabelChar c; _ -> LabelRange r }, ks, ss)) . M.toList) xss''
+    in  xss'''
+
+{-
     let xss' = map (\ xs -> ((S.fromList . (\ (_, _, ss) -> ss) . unzip3) xs, xs)) xss
 
         f :: [[Node]] -> [(S.Set State, Node)] -> [[Node]]
@@ -148,6 +163,7 @@ group_multiarcs_by_state xss =
             in  (LabelRange r, ks, ss)
 
     in  (map g . f []) xss'
+-}
 
 
 group_by_state :: [Node] -> Node -> [Node]
