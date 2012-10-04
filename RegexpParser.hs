@@ -463,10 +463,12 @@ break_escaped c s =
 
 lex_dqchain cs =
     let (ch, rest) = break_escaped '"' cs
-        (s1, s2)   = partition isAlpha ch
-        xs         = concatMap (\ c -> TokenOSqBracket : TokenChain [toLower c, toUpper c] : TokenCSqBracket : []) s1
-        ys         = TokenDQuote : TokenChain s2 : TokenDQuote : lex_regexp rest
-    in  xs ++ ys
+        f :: String -> [Token]
+        f "" = []
+        f s = case break isAlpha s of
+            (s1, s2) | s1 /= "" -> TokenDQuote : TokenChain s1 : TokenDQuote : f s2
+            (s1, c : s2)        -> TokenOSqBracket : TokenChain [toLower c, toUpper c] : TokenCSqBracket : f s2
+    in f ch ++ lex_regexp rest
 
 
 lex_qchain cs =

@@ -3,7 +3,6 @@
 module CFA
     ( NCFA
     , DCFA
---    , CFANode
     , Label
     , State
     , SignNum
@@ -15,10 +14,11 @@ module CFA
     , initStateDCFA
     , initNodeDCFA
     , maxState
---    , cfaGraph
+    , dcfaGraph
     , isFinalDCFA
     , isFinalNCFA
     , acceptedSignatures
+    , finalStates
 
     , setFinal
     , addTransitionNCFA
@@ -35,7 +35,7 @@ import           Data.List                (foldl', intersect, find, partition, d
 import           Control.Monad            (forM_)
 import           Data.Maybe               (isJust, fromJust)
 import           Data.Hashable
-import           Control.DeepSeq          (force)
+import           Control.DeepSeq
 
 import           Types
 
@@ -65,15 +65,19 @@ dcfaGraph = dcfa_graph
 
 
 isFinalDCFA :: State -> DCFA -> Bool
-isFinalDCFA st dcfa = isJust $ M.lookup st (dcfa_final_states dcfa)
+isFinalDCFA st (DCFA _ _ _ fss) = isJust $ M.lookup st fss
 
 
 isFinalNCFA :: State -> NCFA -> Bool
-isFinalNCFA st ncfa = isJust $ M.lookup st (ncfa_final_states ncfa)
+isFinalNCFA st (NCFA _ _ _ fss) = isJust $ M.lookup st fss
 
 
 acceptedSignatures :: State -> DCFA -> SignSet
 acceptedSignatures s (DCFA _ _ _ fss) = M.lookupDefault (S.empty) s fss
+
+
+finalStates :: DCFA -> M.HashMap State SignSet
+finalStates (DCFA _ _ _ fss) = fss
 
 
 setFinal :: State -> SignNum -> NCFA -> NCFA
@@ -82,7 +86,7 @@ setFinal s k (NCFA s0 sl g fss) = NCFA s0 sl g (M.insertWith (\ _ ks -> S.insert
 
 addTransitionNCFA :: NCFA -> (State, Label, SignNum, State) -> (NCFA, State)
 addTransitionNCFA ncfa@(NCFA s0 sl g fss) (s1, l, k, s2) =
-    let g'  = M.insertWith (\ _ node -> (l, k, s2) : node) s1 [(l, k, s2)] g
+    let g' = M.insertWith (\ _ node -> (l, k, s2) : node) s1 [(l, k, s2)] g
     in  (NCFA s0 (max (sl + 1) s2) g' fss, s2)
 
 
@@ -104,8 +108,8 @@ to_label [c] = LabelChar c
 to_label r   = LabelRange r
 
 
-determine_init_node :: NCFANode -> NCFAGraph -> State -> (DCFAInitNode, NCFAGraph, State, S.Set State)
-determine_init_node n g s_max =
+determine_init_node :: NCFANode -> NCFAGraph -> M.HashMap State SignSet -> State -> (DCFAInitNode, NCFAGraph, M.HashMap State SignSet, State, S.Set State)
+determine_init_node n g fss s_max =
     let f :: (SignNum, State) -> M.HashMap Char ([SignNum], [State]) -> Char -> M.HashMap Char ([SignNum], [State])
         f (k, s) n c = M.insertWith (\ _ (ks, ss) -> (k : ks, s : ss)) c ([k], [s]) n
         n' = foldl'
@@ -115,12 +119,12 @@ determine_init_node n g s_max =
             ) M.empty n
         (xs, ys) = M.foldlWithKey'
             (\ (xs, ys) c (ks@(k : ks'), ss@(s : ss')) -> if ss' == []
-                then (xs, M.insertWith (\ _ r -> c : r) (k, s) [c] ys)
+                then (xs, M.insertWith (\ _ (r, ks'') -> (c : r, S.insert k ks'')) s ([c], S.insert k S.empty) ys)
                 else
                     let ks' = S.fromList ks
                     in  (M.insertWith (\ _ (r, ks'') -> (c : r, S.union ks' ks'')) (S.fromList ss) ([c], ks') xs, ys)
             ) (M.empty, M.empty) n'
-        n'' = M.foldlWithKey' (\ n (k, s) r -> M.insert (to_label r) (S.insert k S.empty, s) n) M.empty ys
+        n'' = M.foldlWithKey' (\ n s (r, ks) -> M.insert (to_label r) (ks, s) n) M.empty ys
         (n''', sss, s_max') = M.foldlWithKey' (\ (n, sss, i) ss (r, ks) -> (M.insert (to_label r) (ks, i) n, M.insert i ss sss, i + 1)) (n'', M.empty, s_max) xs
         g' = M.foldlWithKey'
             (\ g s ss ->
@@ -128,11 +132,21 @@ determine_init_node n g s_max =
                 in  M.insert s n g
             ) g sss
         ss = M.foldl' (\ ss (_, s) -> S.insert s ss) S.empty n'''
-    in  (n''', g', s_max', ss)
+        fss' = M.foldlWithKey'
+            (\ fss i ss ->
+                let (ks, fss') = S.foldl' (\ (ks, fss) s -> (S.union (M.lookupDefault S.empty s fss) ks, M.delete s fss)) (S.empty, fss) ss
+                in  if ks == S.empty then fss' else M.insert i ks fss'
+            ) fss sss
+    in  (n''', g', fss', s_max', ss)
 
 
-determine_node :: NCFANode -> NCFAGraph -> State -> (DCFANode, NCFAGraph, State, S.Set State)
-determine_node n g s_max =
+instance NFData Label where
+    rnf (LabelChar c)  = rnf c
+    rnf (LabelRange r) = rnf r
+
+
+determine_node :: NCFANode -> NCFAGraph -> M.HashMap State SignSet -> State -> (DCFANode, NCFAGraph, M.HashMap State SignSet, State, S.Set State)
+determine_node n g fss s_max =
     let f :: (SignNum, State) -> M.HashMap Char ([SignNum], [State]) -> Char -> M.HashMap Char ([SignNum], [State])
         f (k, s) n c = M.insertWith (\ _ (ks, ss) -> (k : ks, s : ss)) c ([k], [s]) n
         n' = foldl'
@@ -142,40 +156,45 @@ determine_node n g s_max =
             ) M.empty n
         (xs, ys) = M.foldlWithKey'
             (\ (xs, ys) c (ks@(k : ks'), ss@(s : ss')) -> if ss' == []
-                then (xs, M.insertWith (\ _ r -> c : r) (k, s) [c] ys)
+                then (xs, M.insertWith (\ _ r -> c : r) s [c] ys)
                 else (M.insertWith (\ _ r -> c : r) (S.fromList ss) [c] xs, ys)
             ) (M.empty, M.empty) n'
-        n'' = M.foldlWithKey' (\ n (_, s) r -> M.insert (to_label r) s n) M.empty ys
-        (n''', sss, s_max') = M.foldlWithKey' (\ (n, sss, i) ss r -> (M.insert (to_label r) i n, M.insert i ss sss, i + 1)) (n'', M.empty, s_max) xs
+        n'' = M.foldlWithKey' (\ n s r -> M.insert (to_label r) s n) M.empty ys
+        (n''', sss, s_max') = M.foldlWithKey' (\ (n, sss, !i) ss r -> (M.insert (to_label r) i n, M.insert i ss sss, i + 1)) (n'', M.empty, s_max) xs
         g' = M.foldlWithKey'
             (\ g s ss ->
                 let n = S.foldl' (\ n s' -> M.lookupDefault [] s' g ++ n) [] ss
                 in  M.insert s n g
             ) g sss
         ss = M.foldl' (\ ss s -> S.insert s ss) S.empty n'''
-    in  (n''', g', s_max', ss)
+        fss' = M.foldlWithKey'
+            (\ fss i ss ->
+                let (ks, fss') = S.foldl' (\ (ks, fss) s -> (S.union (trace'' "**" (M.lookupDefault S.empty (trace'' "--" s) fss)) (trace'' "ksss" ks), M.delete s fss)) (S.empty, fss) ss
+                in  if (trace'' "ks " ks) == S.empty then fss' else M.insert (trace'' "==" i) ks fss'
+            ) fss sss
+    in  (n''', g', fss', s_max', ss)
 
 
-f :: (NCFAGraph, DCFAGraph, State, S.Set State) -> DCFAGraph
-f (_, dg, _, ss) | ss == S.empty = dg
-f (ng, dg, s_max, ss)            = f $ S.foldl'
-    (\ (ng, dg, s_max, ss) s ->
+f :: (NCFAGraph, DCFAGraph, M.HashMap State SignSet, State, S.Set State) -> (DCFAGraph, M.HashMap State SignSet)
+f (_, dg, fss,  _, ss) | ss == S.empty = (dg, fss)
+f (ng, dg, fss, s_max, ss)             = f $ S.foldl'
+    (\ (ng, dg, fss, s_max, ss) s ->
         let n = M.lookupDefault [] s ng
         in  if n /= []
                 then
-                    let (n', ng', s_max', ss') = determine_node n ng s_max
-                    in  (M.delete s ng', M.insert s n' dg, s_max', S.union ss' ss)
-                else (ng, dg, s_max, ss)
-    ) (ng, dg, s_max, S.empty) ss
+                    let (n', ng', fss', s_max', ss') = determine_node n ng fss s_max
+                    in  (M.delete s ng', M.insert s n' dg, fss', s_max', S.union ss' ss)
+                else (ng, dg, fss, s_max, ss)
+    ) (ng, dg, fss, s_max, S.empty) ss
 
 
 determine :: NCFA -> DCFA
 determine ncfa@(NCFA s0 sl g fss) =
-    let n0                = M.lookupDefault (error "init node absent in ncfa") s0 g
-        (n0', g', s_max', ss) = determine_init_node n0 g sl
-        g''               = M.delete s0 g'
-        dg                = f (g'', M.empty, s_max', ss)
-    in  DCFA s0 n0' dg fss
+    let n0                          = M.lookupDefault (error "init node absent in ncfa") s0 g
+        (n0', g', fss', s_max', ss) = determine_init_node n0 g fss sl
+        g''                         = M.delete s0 g'
+        (dg, fss'')                 = f (g'', M.empty, fss', s_max', ss)
+    in  DCFA s0 n0' dg fss''
 
 
 toDotNCFA :: NCFA -> FilePath -> IO ()

@@ -15,24 +15,33 @@ import           Types
 import           CFA
 
 
-cfa2cpp :: FilePath -> CFA -> Code -> Code -> [[Cond]] -> [Code] -> Int -> IO ()
-cfa2cpp fp cfa prolog epilog conditions codes sign_maxlen =
+cfa2cpp :: FilePath -> DCFA -> Code -> Code -> [[Cond]] -> [Code] -> Int -> IO ()
+cfa2cpp fp dcfa prolog epilog conditions codes sign_maxlen =
     let n          = length codes
         entry      = code_for_entry n sign_maxlen
         sign2conds = M.fromList $ zip [0 .. n - 1] conditions
+        g          = dcfaGraph dcfa
+        init_state = code_for_initial_state (initNodeDCFA dcfa) sign2conds
         states     = M.foldlWithKey'
             (\ code s node -> BS.concat
                 [ code
                 , case s of
-                    s | s == initialState cfa -> code_for_initial_state ((merge_cases . initialNode) cfa) sign2conds
-                    s | isFinal s cfa         -> code_for_final_state s (merge_cases node) (acceptedSignatures s cfa) codes
-                    s                         -> code_for_state s (merge_cases node)
+                    s | isFinalDCFA s dcfa -> BS.empty
+                    s                      -> code_for_state s node
                 ]
-            ) (BS.pack "") (cfaGraph cfa)
+            ) (BS.empty) g
+        final_states = M.foldlWithKey'
+            (\ code s node -> BS.concat
+                [ code
+                , code_for_final_state s (M.lookupDefault M.empty s g) (acceptedSignatures s dcfa) codes
+                ]
+            ) (BS.empty) (finalStates dcfa)
     in  BS.writeFile fp $ BS.concat
             [ prolog
             , entry
+            , init_state
             , states
+            , final_states
             , epilog
             ]
 
@@ -68,13 +77,13 @@ code_for_entry n sign_maxlen = BS.pack $ concat
 -}
 
 
-code_for_initial_state :: DCFANode -> M.HashMap SignNum [Cond] -> Code
+code_for_initial_state :: DCFAInitNode -> M.HashMap SignNum [Cond] -> Code
 code_for_initial_state node0 sign2conds = BS.pack $ concat
     [ "\nswitch (*CURSOR++) {\n\t"
-    , concatMap (\ (c, (ks, s')) -> concat
-        [ "\n\tcase "
-        , "0x" ++ showHex (ord c) ""
-        , ":"
+    , concatMap (\ (l, (ks, s')) -> concat
+        [ let code_for_case c = concat [ "\n\tcase 0x", showHex (ord c) "", ":"] in case l of
+            LabelChar c  -> code_for_case c
+            LabelRange r -> concatMap code_for_case r
         , "\n\t\tnew_forbidden_count = 0;"
         , "\n\t\tadjust_marker       = true;"
         , "\n\t\ttoken               = MARKER;"
@@ -109,35 +118,20 @@ code_for_conditions = M.foldlWithKey' (\code k conditions -> code ++ case condit
     ) ""
 
 
-merge_cases :: CFANode -> DCFANode
-merge_cases node = M.foldlWithKey'
-    (\ n l (ks, s) ->
-        let merge_arc :: DCFANode -> Char -> DCFANode
-            merge_arc n c = M.insertWith (\ _ (ks', s') -> (S.union ks ks', if s == s' then s else error "nondeterministic arcs")) c (ks, s) n
-        in  case l of
-                LabelChar c  -> merge_arc n c
-                LabelRange r -> foldl' merge_arc n r
-    ) M.empty node
-
-
 code_for_state :: State -> DCFANode -> Code
 code_for_state s node = (BS.pack . concat)
     [ "\nm_"
     , show s
     , ":"
     , "\nswitch (*CURSOR++) {"
-    , concatMap (\ xs -> concat
-        [ concatMap (\ (c, (_, s')) -> concat
-            [ "\n\tcase "
-            , "0x"
-            , showHex (ord c) ""
-            , ":"
-            ]) xs
+    , concatMap (\ (l, s') -> concat
+        [ let code_for_case c = concat [ "\n\tcase 0x", showHex (ord c) "", ":"] in case l of
+            LabelChar c  -> code_for_case c
+            LabelRange r -> concatMap code_for_case r
         , "\n\t\tgoto m_"
-        , show $ snd $ snd $ head xs
+        , show s'
         , ";"
-        ]) $ groupBy (\ (_, (_, s1)) (_, (_, s2)) -> s1 == s2) $ M.toList node
---        GROUPBY пашет не как надо
+        ]) $ M.toList node
     , "\n\tdefault:"
     , "\n\t\tMARKER += adjust_marker;"
     , "\n\t\tgoto m_fin;"
@@ -161,15 +155,14 @@ code_for_final_state s node signs codes = (BS.pack . concat)
         , "\n\tadjust_marker = false;\n}"
         ]) "" signs
     , "\nswitch (*CURSOR++) {"
-    , concatMap (\ (c, (_, s')) -> concat
-        [ "\n\tcase "
-        , "0x"
-        , showHex (ord c) ""
-        , ":"
+    , concatMap (\ (l, s') -> concat
+        [ let code_for_case c = concat [ "\n\tcase 0x", showHex (ord c) "", ":"] in case l of
+            LabelChar c  -> code_for_case c
+            LabelRange r -> concatMap code_for_case r
         , "\n\t\tgoto m_"
         , show s'
         , ";"
-        ]) (M.toList node)
+        ]) $ M.toList node
     , "\n\tdefault:"
     , "\n\t\tgoto m_fin;"
     , "\n\t}"

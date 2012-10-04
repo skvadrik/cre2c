@@ -7,7 +7,7 @@ import qualified Data.HashMap.Strict   as M
 import           Types
 import           CFA
 import           RE2CFA
---import           CFA2CPP
+import           CFA2CPP
 import           RegexpParser
 import           SourceParser
 
@@ -27,10 +27,10 @@ main = do
     let dcfa                    = determine ncfa
     let sign_maxlen             = 56
 
---    cfa2cpp fdest cfa prolog epilog conds codes sign_maxlen
+    cfa2cpp fdest dcfa prolog epilog conds codes sign_maxlen
 
---    toDotNCFA ncfa "./ncfa.dot"
---    toDotDCFA dcfa "./cfa.dot"
-    print dcfa
+    toDotNCFA ncfa "./ncfa.dot"
+    toDotDCFA dcfa "./cfa.dot"
+--    print dcfa
 --    print regexps
 --    print regexp_table
