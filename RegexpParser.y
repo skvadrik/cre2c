@@ -8,7 +8,7 @@ import qualified Data.HashMap.Strict as M
 import           Data.Char
 import           Control.Applicative       ((<$>))
 import qualified Data.DList          as DL
-import           Data.List                 (partition)
+import           Data.List                 (foldl')
 
 import           Types
 
@@ -143,35 +143,26 @@ lex_int cs =
             '}' : cs' -> TokenInt (read num) : TokenCParenthesis : lex_regexp cs'
 
 
-{-
-break_escaped :: Char -> String -> (String, String)
-break_escaped c s =
-    let f :: String -> String -> (String, String)
-        f tok ""                = (tok, "")
-        f tok ('\\' : x : xs)   = f (tok ++ ('\\' : [x])) xs
-        f tok (x : xs) | x == c = (tok ++ "\"", xs)
-        f tok (x : xs)          = f (tok ++ [x]) xs
-        (tok, rest) = f "\"" s
-    in  (read tok, rest)
--}
-
-
 break_escaped :: Char -> String -> (String, String)
 break_escaped c s =
     let f :: DL.DList Char -> String -> (DL.DList Char, String)
-        f tok ""                = (tok, "")
-        f tok ('\\' : x : xs)   = f (DL.snoc (DL.snoc tok '\\') x) xs
-        f tok (x : xs) | x == c = (DL.snoc tok '"', xs)
-        f tok (x : xs)          = f (DL.snoc tok x) xs
+        f tok ""                        = (tok, "")
+        f tok ('\\' : x : xs) | x == c  = f (DL.snoc (DL.snoc tok '\\') x) xs
+        f tok (x : xs) | x == c         = (DL.snoc tok '"', xs)
+        f tok (x : xs)                  = f (DL.snoc tok x) xs
         (tok, rest) = f (DL.fromList ['"']) s
     in  ((read . DL.toList) tok, rest)
+
+
+is_alpha :: Char -> Bool
+is_alpha c = (c > '\x40' && c <= '\x5A') || (c > '\x60' && c <= '\x7A')
 
 
 lex_dqchain cs =
     let (ch, rest) = break_escaped '"' cs
         f :: String -> [Token]
         f "" = []
-        f s = case break isAlpha s of
+        f s = case break is_alpha s of
             (s1, s2) | s1 /= "" -> TokenDQuote : TokenChain s1 : TokenDQuote : f s2
             (s1, c : s2)        -> TokenOSqBracket : TokenChain [toLower c, toUpper c] : TokenCSqBracket : f s2
     in f ch ++ lex_regexp rest

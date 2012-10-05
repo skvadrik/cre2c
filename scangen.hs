@@ -24,12 +24,12 @@ main = do
 
     let (conds, regexps, codes) = (unzip3 . M.elems) rules
     let ncfa                    = re2ncfa regexps regexp_table
+--    toDotNCFA ncfa "./ncfa.dot"
     let dcfa                    = determine ncfa
     let sign_maxlen             = 56
 
     cfa2cpp fdest dcfa prolog epilog conds codes sign_maxlen
 
-    toDotNCFA ncfa "./ncfa.dot"
     toDotDCFA dcfa "./cfa.dot"
 --    print dcfa
 --    print regexps

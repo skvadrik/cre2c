@@ -5,11 +5,9 @@ module CFA2CPP
 
 import qualified Data.HashMap.Strict   as M
 import qualified Data.Set              as S
-import           Data.List                   (intercalate, foldl', groupBy)
+import           Data.List                   (intercalate, foldl')
 import qualified Data.ByteString.Char8 as BS
-import           Numeric                     (showHex)
-import           Data.Char                   (ord)
---import qualified Data.DList            as DL
+import           Text.Printf                 (printf)
 
 import           Types
 import           CFA
@@ -69,19 +67,11 @@ code_for_entry n sign_maxlen = BS.pack $ concat
     ]
 
 
-{-
-три проблемы
-1) Range ---- диапазоны. Видно придётся их делать на альтернативах.
-2) Any ---- их надо загонять не только в дефолты, но из  всех состояний добавлять дуги.
-3) case sensitivity
--}
-
-
 code_for_initial_state :: DCFAInitNode -> M.HashMap SignNum [Cond] -> Code
 code_for_initial_state node0 sign2conds = BS.pack $ concat
     [ "\nswitch (*CURSOR++) {\n\t"
     , concatMap (\ (l, (ks, s')) -> concat
-        [ let code_for_case c = concat [ "\n\tcase 0x", showHex (ord c) "", ":"] in case l of
+        [ let code_for_case c = printf "\n\tcase 0x%X:" c in case l of
             LabelChar c  -> code_for_case c
             LabelRange r -> concatMap code_for_case r
         , "\n\t\tnew_forbidden_count = 0;"
@@ -125,7 +115,7 @@ code_for_state s node = (BS.pack . concat)
     , ":"
     , "\nswitch (*CURSOR++) {"
     , concatMap (\ (l, s') -> concat
-        [ let code_for_case c = concat [ "\n\tcase 0x", showHex (ord c) "", ":"] in case l of
+        [ let code_for_case c = printf "\n\tcase 0x%X:" c in case l of
             LabelChar c  -> code_for_case c
             LabelRange r -> concatMap code_for_case r
         , "\n\t\tgoto m_"
@@ -156,7 +146,7 @@ code_for_final_state s node signs codes = (BS.pack . concat)
         ]) "" signs
     , "\nswitch (*CURSOR++) {"
     , concatMap (\ (l, s') -> concat
-        [ let code_for_case c = concat [ "\n\tcase 0x", showHex (ord c) "", ":"] in case l of
+        [ let code_for_case c = printf "\n\tcase 0x%X:" c in case l of
             LabelChar c  -> code_for_case c
             LabelRange r -> concatMap code_for_case r
         , "\n\t\tgoto m_"
