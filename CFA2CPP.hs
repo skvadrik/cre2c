@@ -5,7 +5,7 @@ module CFA2CPP
 
 import qualified Data.HashMap.Strict   as M
 import qualified Data.Set              as S
-import           Data.List                   (intercalate, foldl')
+import           Data.List                   (intercalate, foldl', sort)
 import qualified Data.ByteString.Char8 as BS
 import           Text.Printf                 (printf)
 
@@ -113,19 +113,23 @@ code_for_state s node = (BS.pack . concat)
     [ "\nm_"
     , show s
     , ":"
-    , "\nswitch (*CURSOR++) {"
-    , concatMap (\ (l, s') -> concat
-        [ let code_for_case c = printf "\n\tcase 0x%X:" c in case l of
-            LabelChar c  -> code_for_case c
-            LabelRange r -> concatMap code_for_case r
-        , "\n\t\tgoto m_"
-        , show s'
-        , ";"
-        ]) $ M.toList node
-    , "\n\tdefault:"
-    , "\n\t\tMARKER += adjust_marker;"
-    , "\n\t\tgoto m_fin;"
-    , "\n\t}"
+    , case M.toList node of
+        [(LabelRange r, s)] | S.fromList r == S.fromList ['\x00' .. '\xFF'] -> "\nCURSOR++;\ngoto m_" ++ show s ++ ";"
+        n -> concat
+            [ "\nswitch (*CURSOR++) {"
+            , concatMap (\ (l, s') -> concat
+                [ let code_for_case c = printf "\n\tcase 0x%X:" c in case l of
+                    LabelChar c  -> code_for_case c
+                    LabelRange r -> concatMap code_for_case r
+                , "\n\t\tgoto m_"
+                , show s'
+                , ";"
+                ]) n
+            , "\n\tdefault:"
+            , "\n\t\tMARKER += adjust_marker;"
+            , "\n\t\tgoto m_fin;"
+            , "\n\t}"
+            ]
     ]
 
 
