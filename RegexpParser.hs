@@ -423,8 +423,8 @@ lex_regexp ('('  : cs) = TokenOBracket     : lex_regexp cs
 lex_regexp (')'  : cs) = TokenCBracket     : lex_regexp cs
 lex_regexp ('{'  : cs) = TokenOParenthesis : lex_int cs
 lex_regexp ('}'  : cs) = TokenCParenthesis : lex_regexp cs
-lex_regexp ('"'  : cs) = lex_dqchain cs
-lex_regexp ('\'' : cs) = TokenQuote        : lex_qchain cs
+lex_regexp ('"'  : cs) = TokenDQuote       : lex_dqchain cs
+lex_regexp ('\'' : cs) = lex_qchain cs
 lex_regexp ('['  : cs) = TokenOSqBracket   : lex_range cs
 lex_regexp ('|'  : cs) = TokenVSlash       : lex_regexp cs
 lex_regexp (';'  : cs) = TokenSemicolon    : lexer cs
@@ -452,19 +452,19 @@ is_alpha :: Char -> Bool
 is_alpha c = (c > '\x40' && c <= '\x5A') || (c > '\x60' && c <= '\x7A')
 
 
-lex_dqchain cs =
-    let (ch, rest) = break_escaped '"' cs
+lex_qchain cs =
+    let (ch, rest) = break_escaped '\'' cs
         f :: String -> [Token]
         f "" = []
         f s = case break is_alpha s of
-            (s1, s2) | s1 /= "" -> TokenDQuote : TokenChain s1 : TokenDQuote : f s2
+            (s1, s2) | s1 /= "" -> TokenQuote : TokenChain s1 : TokenQuote : f s2
             (s1, c : s2)        -> TokenOSqBracket : TokenChain [toLower c, toUpper c] : TokenCSqBracket : f s2
     in f ch ++ lex_regexp rest
 
 
-lex_qchain cs =
-    let (ch, rest) = break_escaped '\'' cs
-    in  TokenChain ch : TokenQuote : lex_regexp rest
+lex_dqchain cs =
+    let (ch, rest) = break_escaped '"' cs
+    in  TokenChain ch : TokenDQuote : lex_regexp rest
 
 
 span_range :: String -> String
