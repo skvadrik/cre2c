@@ -54,11 +54,9 @@ code_for_entry n sign_maxlen = BS.pack $ concat
     , "\nint  forbidden_count;"
     , "\nbool adjust_marker;"
     , "\nint  j;"
-    , "\n\ngoto m_start;\n\n"
-
+    , "\ngoto m_start;"
     , "\n\n\nm_fin:"
     , "\nCURSOR = MARKER;"
-
     , "\n\n\nm_start:"
     , "\nif (LIMIT - CURSOR < SIGN_MAXLEN) FILL();\n\n"
     ]
@@ -120,7 +118,7 @@ code_for_state s node = (BS.pack . concat)
                 [ let code_for_case c = printf "\n\tcase 0x%X:" c in case l of
                     LabelChar c  -> code_for_case c
                     LabelRange r -> concatMap code_for_case r
-                , "\n\t\tgoto m_"
+                , "\tgoto m_"
                 , show s'
                 , ";"
                 ]) n
@@ -148,17 +146,23 @@ code_for_final_state s node signs codes = (BS.pack . concat)
         , "\nadjust_marker = false;\n"
         ]) "" signs
     , "\nswitch (*CURSOR++) {"
-    , concatMap (\ (l, s') -> concat
-        [ let code_for_case c = printf "\n\tcase 0x%X:" c in case l of
-            LabelChar c  -> code_for_case c
-            LabelRange r -> concatMap code_for_case r
-        , "\n\t\tgoto m_"
-        , show s'
-        , ";"
-        ]) $ M.toList node
-    , "\n\tdefault:"
-    , "\n\t\tgoto m_fin;"
-    , "\n\t}"
+    , case M.toList node of
+        [(LabelRange r, s)] | S.fromList r == S.fromList ['\x00' .. '\xFF'] -> "\nCURSOR++;\ngoto m_" ++ show s ++ ";"
+        n -> concat
+            [ "\nswitch (*CURSOR++) {"
+            , concatMap (\ (l, s') -> concat
+                [ let code_for_case c = printf "\n\tcase 0x%X:" c in case l of
+                    LabelChar c  -> code_for_case c
+                    LabelRange r -> concatMap code_for_case r
+                , "\tgoto m_"
+                , show s'
+                , ";"
+                ]) n
+            , "\n\tdefault:"
+            , "\n\t\tMARKER += adjust_marker;"
+            , "\n\t\tgoto m_fin;"
+            , "\n\t}"
+            ]
     ]
 
 
