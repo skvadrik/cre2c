@@ -17,7 +17,7 @@ cfa2cpp :: FilePath -> DCFA -> Code -> Code -> [[Cond]] -> [Code] -> Int -> IO (
 cfa2cpp fp dcfa prolog epilog conditions codes sign_maxlen =
     let n          = length codes
         entry      = code_for_entry n sign_maxlen
-        sign2conds = M.fromList $ zip [0 .. n - 1] conditions
+        sign2conds = (M.fromList . zip [0 .. n - 1]) conditions
         g          = dcfaGraph dcfa
         init_state = code_for_initial_state (initNodeDCFA dcfa) sign2conds
         states     = M.foldlWithKey'
@@ -50,11 +50,8 @@ code_for_entry n sign_maxlen = BS.pack $ concat
     , show n
     , "\n#define SIGN_MAXLEN "
     , show sign_maxlen
-    , "\n\nbool forbidden_signatures[NUM_SIGN];"
-    , "\nfor (int i = 0; i < NUM_SIGN; i++)"
-    , "\n\tforbidden_signatures[i] = NUM_SIGN;"
+    , "\n\nint forbidden_signatures[NUM_SIGN];"
     , "\nint  forbidden_count;"
-    , "\nint  new_forbidden_count;"
     , "\nbool adjust_marker;"
     , "\nint  j;"
     , "\n\ngoto m_start;\n\n"
@@ -66,6 +63,7 @@ code_for_entry n sign_maxlen = BS.pack $ concat
     , "\nif (LIMIT - CURSOR < SIGN_MAXLEN) FILL();\n\n"
     ]
 
+-- remove useless defaults
 
 code_for_initial_state :: DCFAInitNode -> M.HashMap SignNum [Cond] -> Code
 code_for_initial_state node0 sign2conds = BS.pack $ concat
@@ -74,17 +72,18 @@ code_for_initial_state node0 sign2conds = BS.pack $ concat
         [ let code_for_case c = printf "\n\tcase 0x%X:" c in case l of
             LabelChar c  -> code_for_case c
             LabelRange r -> concatMap code_for_case r
-        , "\n\t\tnew_forbidden_count = 0;"
-        , "\n\t\tadjust_marker       = true;"
-        , "\n\t\ttoken               = MARKER;"
-        , code_for_conditions $ M.filterWithKey (\ k _ -> S.member k ks) sign2conds
-        , "\n\t\tfor (int i = new_forbidden_count; i < forbidden_count; i++)"
-        , "\n\t\t\tforbidden_signatures[i] = NUM_SIGN;"
-        , "\n\t\tforbidden_count = new_forbidden_count;"
-        , "\n\t\tif (forbidden_count <"
-        , show $ S.size ks
-        , ")"
-        , "\n\t\t\tgoto m_"
+        , "\n\t\tadjust_marker   = true;"
+        , "\n\t\ttoken           = MARKER;"
+        , "\n\t\tforbidden_count = 0;"
+        , let conds = M.filterWithKey (\ k conds -> conds /= [] && S.member k ks) sign2conds in if conds /= M.empty
+            then concat
+                [ code_for_conditions conds
+                , "\n\t\tif (forbidden_count <"
+                , show $ S.size ks
+                , ")"
+                , "\n\t\t\tgoto m_"
+                ]
+            else "\n\t\tgoto m_"
         , show s'
         , ";"
         ]) (M.toList node0)
@@ -97,11 +96,11 @@ code_for_initial_state node0 sign2conds = BS.pack $ concat
 
 code_for_conditions :: M.HashMap SignNum [Cond] -> String
 code_for_conditions = M.foldlWithKey' (\code k conditions -> code ++ case conditions of
-    [] -> ""
+    [] -> error "impossible"
     _  -> concat
         [ "\n\t\tif (!("
         , intercalate " && " conditions
-        , "))\n\t\tforbidden_signatures[new_forbidden_count++] = "
+        , "))\n\t\t\tforbidden_signatures[forbidden_count++] = "
         , show k
         , ";"
         ]
@@ -143,10 +142,10 @@ code_for_final_state s node signs codes = (BS.pack . concat)
         , "\n\tif (forbidden_signatures[j] == "
         , show k
         , ")\n\t\tbreak;"
-        , "\nif (j == forbidden_count) {\n\t"
+        , "\nif (j == forbidden_count) \n\t"
         , BS.unpack $ codes !! k
-        , "\n\tMARKER = CURSOR;"
-        , "\n\tadjust_marker = false;\n}"
+        , "\nMARKER = CURSOR;"
+        , "\nadjust_marker = false;\n"
         ]) "" signs
     , "\nswitch (*CURSOR++) {"
     , concatMap (\ (l, s') -> concat
