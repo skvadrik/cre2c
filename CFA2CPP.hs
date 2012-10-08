@@ -145,7 +145,6 @@ code_for_final_state s node signs codes = (BS.pack . concat)
         , "\nMARKER = CURSOR;"
         , "\nadjust_marker = false;\n"
         ]) "" signs
-    , "\nswitch (*CURSOR++) {"
     , case M.toList node of
         [(LabelRange r, s)] | S.fromList r == S.fromList ['\x00' .. '\xFF'] -> "\nCURSOR++;\ngoto m_" ++ show s ++ ";"
         n -> concat
