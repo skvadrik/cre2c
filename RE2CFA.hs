@@ -61,7 +61,7 @@ ncfa_add_regexp_prim :: (NCFA, S.Set State) -> RegexpPrim -> RegexpTable -> Sign
 ncfa_add_regexp_prim (ncfa, ss) r rt sign = case r of
     Elementary s -> foldl' (\(d, s) c -> ncfa_add_regexp_atom (d, s) (LabelChar c) sign) (ncfa, ss) s
     Name s       ->
-        let Regexp ralt = M.lookupDefault undefined s rt
+        let Regexp ralt = M.lookupDefault (error ("undefined regexp: " ++ show r)) s rt
         in  ncfa_add_regexp_alt (ncfa, ss) ralt rt sign
     Wrapped ralt -> ncfa_add_regexp_alt (ncfa, ss) ralt rt sign
     Any          -> ncfa_add_regexp_atom (ncfa, ss) (LabelRange ['\x00' .. '\xFF']) sign
@@ -82,6 +82,6 @@ re2ncfa :: [RegexpName] -> RegexpTable -> NCFA
 re2ncfa rs rt =
     let ncfa = emptyNCFA
     in  fst $ foldl'
-            (\ (ncfa, ss) (k, r) -> (fst (ncfa_add_regexp (ncfa, ss) (M.lookupDefault undefined r rt) rt k), ss))
+            (\ (ncfa, ss) (k, r) -> (fst (ncfa_add_regexp (ncfa, ss) (M.lookupDefault (error ("undefined regexp: " ++ show r)) r rt) rt k), ss))
             (ncfa, S.insert (initStateNCFA ncfa) S.empty)
             (zip [0 .. length rs - 1] rs)

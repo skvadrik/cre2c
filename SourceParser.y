@@ -94,7 +94,7 @@ lex_code :: String -> [Token]
 lex_code cs =
     let lex_code' :: Int -> DL.DList Char -> String -> (DL.DList Char, String)
         lex_code' 0 tok rest         = (DL.cons '{' tok, rest)
-        lex_code' i tok ""           = undefined
+        lex_code' i tok ""           = error "invalid code block in regexp definition"
         lex_code' i tok ('{' : rest) = lex_code' (i + 1) (DL.snoc tok '{') rest
         lex_code' i tok ('}' : rest) = lex_code' (i - 1) (DL.snoc tok '}') rest
         lex_code' i tok (c   : rest) = lex_code' i       (DL.snoc tok c)   rest
