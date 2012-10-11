@@ -52,7 +52,7 @@ initStateDCFA :: DCFA -> State
 initStateDCFA = dcfa_init_state
 
 
-initNodeDCFA :: DCFA -> DCFAInitNode
+initNodeDCFA :: DCFA -> DCFANode
 initNodeDCFA = dcfa_init_node
 
 
@@ -108,10 +108,8 @@ to_label [c] = LabelChar c
 to_label r   = LabelRange r
 
 
---determine_init_node :: NCFANode -> NCFAGraph -> State -> (DCFAInitNode, NCFAGraph, State, S.Set State)
---determine_init_node n g s_max =
-determine_init_node :: NCFANode -> NCFAGraph -> M.HashMap State SignSet -> M.HashMap State SignSet -> State -> (DCFAInitNode, NCFAGraph, M.HashMap State SignSet, State, S.Set State)
-determine_init_node n g fss_old fss s_max =
+determine_node :: NCFANode -> NCFAGraph -> M.HashMap State SignSet -> M.HashMap State SignSet -> State -> (DCFANode, NCFAGraph, M.HashMap State SignSet, State, S.Set State)
+determine_node n g fss_old fss s_max =
     let f :: (SignNum, State) -> M.HashMap Char ([SignNum], [State]) -> Char -> M.HashMap Char ([SignNum], [State])
         f (k, s) n c = M.insertWith (\ _ (ks, ss) -> (k : ks, s : ss)) c ([k], [s]) n
         n' = foldl'
@@ -147,36 +145,6 @@ instance NFData Label where
     rnf (LabelRange r) = rnf r
 
 
-determine_node :: NCFANode -> NCFAGraph -> M.HashMap State SignSet -> M.HashMap State SignSet -> State -> (DCFANode, NCFAGraph, M.HashMap State SignSet, State, S.Set State)
-determine_node n g fss_old fss s_max =
-    let f :: (SignNum, State) -> M.HashMap Char ([SignNum], [State]) -> Char -> M.HashMap Char ([SignNum], [State])
-        f (k, s) n c = M.insertWith (\ _ (ks, ss) -> (k : ks, s : ss)) c ([k], [s]) n
-        n' = foldl'
-            (\ n (l, k, s) -> case l of
-                LabelChar c  -> f (k, s) n c
-                LabelRange r -> foldl' (f (k, s)) n r
-            ) M.empty n
-        (xs, ys) = M.foldlWithKey'
-            (\ (xs, ys) c (ks@(k : ks'), ss@(s : ss')) -> if ss' == []
-                then (xs, M.insertWith (\ _ r -> c : r) s [c] ys)
-                else (M.insertWith (\ _ r -> c : r) (S.fromList ss) [c] xs, ys)
-            ) (M.empty, M.empty) n'
-        n'' = M.foldlWithKey' (\ n s r -> M.insert (to_label r) s n) M.empty ys
-        (n''', sss, s_max') = M.foldlWithKey' (\ (n, sss, !i) ss r -> (M.insert (to_label r) i n, M.insert i ss sss, i + 1)) (n'', M.empty, s_max) xs
-        g' = M.foldlWithKey'
-            (\ g s ss ->
-                let n = S.foldl' (\ n s' -> M.lookupDefault [] s' g ++ n) [] ss
-                in  M.insert s n g
-            ) g sss
-        ss = M.foldl' (\ ss s -> S.insert s ss) S.empty n'''
-        fss' = M.foldlWithKey'
-            (\ fss i ss ->
-                let ks = S.foldl' (\ ks s -> S.union (M.lookupDefault S.empty s fss_old) ks) S.empty ss
-                in  if ks == S.empty then fss else M.insert i ks fss
-            ) fss sss
-    in  (n''', g', fss', s_max', ss)
-
-
 f :: (NCFAGraph, DCFAGraph, M.HashMap State SignSet, M.HashMap State SignSet, State, S.Set State) -> (DCFAGraph, M.HashMap State SignSet)
 f (_, dg, fss_old, fss,  _, ss) | ss == S.empty = (dg, fss)
 f (ng, dg, fss_old, fss, s_max, ss)             = f $ S.foldl'
@@ -193,7 +161,7 @@ f (ng, dg, fss_old, fss, s_max, ss)             = f $ S.foldl'
 determine :: NCFA -> DCFA
 determine ncfa@(NCFA s0 sl g fss) =
     let n0                          = M.lookupDefault (error "init node absent in ncfa") s0 g
-        (n0', g', fss', s_max', ss) = determine_init_node n0 g fss M.empty sl
+        (n0', g', fss', s_max', ss) = determine_node n0 g fss M.empty sl
         g''                         = M.delete s0 g'
         (dg, fss'')                 = f (g'', M.empty, fss, fss', s_max', ss)
     in  DCFA s0 n0' dg fss''
@@ -256,7 +224,7 @@ toDotDCFA (DCFA s0 node0 g fss) fp = do
             ]
     forM_ (M.toList g) $
         \ (s, node) -> forM_ (M.toList node) $
-            \ (l, s') -> appendFile fp $ concat
+            \ (l, (ks, s')) -> appendFile fp $ concat
                 [ "\t"
                 , show s
                 , " -> "
@@ -266,5 +234,6 @@ toDotDCFA (DCFA s0 node0 g fss) fp = do
                 , case l of
                     LabelRange _ -> "\", style=bold, color=red]\n"
                     _            -> "\"]\n"
+                , show $ S.toList ks
                 ]
     appendFile fp "}\n"

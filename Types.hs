@@ -52,12 +52,11 @@ type State     = Int
 type SignNum   = Int
 type SignSet   = S.Set SignNum
 
-type DCFANode      = M.HashMap Label State
-type DCFAInitNode  = M.HashMap Label (SignSet, State)
+type DCFANode      = M.HashMap Label (SignSet, State)
 type DCFAGraph     = M.HashMap State DCFANode
 data DCFA          = DCFA
     { dcfa_init_state   :: State
-    , dcfa_init_node    :: DCFAInitNode
+    , dcfa_init_node    :: DCFANode
     , dcfa_graph        :: DCFAGraph
     , dcfa_final_states :: M.HashMap State SignSet
     } deriving (Show)
