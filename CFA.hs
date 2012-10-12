@@ -92,16 +92,6 @@ addTransitionNCFA ncfa@(NCFA s0 sl g fss) (s1, l, k, s2) =
 
 ------------------------------------------------------------------------------------------------
 
-type Node = [(Char, SignNum, State)]
-type MultiArc = (Label, SignSet, S.Set State)
-
-
-hashAndCombine :: Hashable h => Int -> h -> Int
-hashAndCombine acc h = acc `combine` hash h
-
-instance (Hashable a) => Hashable (S.Set a) where
-    hash = S.foldl' hashAndCombine 0
-
 
 to_label :: String -> Label
 to_label [c] = LabelChar c

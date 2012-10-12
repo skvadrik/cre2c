@@ -22,9 +22,9 @@ main = do
     (prolog, rules, epilog) <- parse_source fsrc
     regexp_table            <- parse_regexps fre
 
-    let (conds, regexps, codes) = (unzip3 . M.elems) rules
-    let ncfa                    = re2ncfa regexps regexp_table
-    let dcfa                    = determine ncfa
-    let sign_maxlen             = 56
+    let (regexps, conds2code) = (unzip . M.toList) rules
+    let ncfa                  = re2ncfa regexps regexp_table
+    let dcfa                  = determine ncfa
+    let sign_maxlen           = 56
 
-    cfa2cpp fdest dcfa prolog epilog conds codes sign_maxlen
+    cfa2cpp fdest dcfa prolog epilog conds2code sign_maxlen

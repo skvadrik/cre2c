@@ -8,6 +8,8 @@ import qualified Data.ByteString.Char8 as BS
 import qualified Data.DList            as DL
 import           Control.Applicative         ((<$>))
 import           Data.Char
+import           Data.List                   (foldl')
+import qualified Data.Set              as S
 
 import           Types
 
@@ -275,13 +277,25 @@ parse_source fp =
         conds2list (OneCond c)      = [c]
         conds2list (ManyConds c cs) = c : conds2list cs
 
-        rules2table :: Rules -> [([Cond], RegexpName, Code)]
-        rules2table (OneRule   (SimpleRule           name code))       = [([],                  name, code)]
-        rules2table (OneRule   (ComplexRule condlist name code))       = [(conds2list condlist, name, code)]
-        rules2table (ManyRules (SimpleRule           name code) rules) = ([],                  name, code) : rules2table rules
-        rules2table (ManyRules (ComplexRule condlist name code) rules) = (conds2list condlist, name, code) : rules2table rules
+        rules2table :: Rules -> [(RegexpName, ([Cond], Code))]
+        rules2table (OneRule   (SimpleRule           name code))       = [(name, ([], code))]
+        rules2table (OneRule   (ComplexRule condlist name code))       = [(name, (conds2list condlist, code))]
+        rules2table (ManyRules (SimpleRule           name code) rules) = (name, ([], code)) : rules2table rules
+        rules2table (ManyRules (ComplexRule condlist name code) rules) = (name, (conds2list condlist, code)) : rules2table rules
 
-    in  (\ (Source code1 rules code2) -> (code1, (M.fromList . (\ rt -> zip [0 .. length rt] rt) . rules2table) rules, code2))
+    in  (\ (Source code1 rules code2) ->
+            ( code1
+            , (foldl'
+                (\ rules (name, (conds, code)) -> M.insertWith
+                    (\ _ xs -> M.insertWith (\ _ code' -> BS.concat [BS.pack "{ ", code, code', BS.pack " }"]) (S.fromList conds) code xs)
+                    name
+                    (M.insert (S.fromList conds) code M.empty)
+                    rules
+                ) M.empty
+            ) (rules2table rules)
+            , code2
+            )
+        )
         . parser
         . lexer
         <$> readFile fp

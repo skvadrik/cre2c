@@ -86,7 +86,6 @@ instance Hashable Label where
 
 instance Show Label where
     show (LabelChar c)  = showHex (ord c) ""
---    show (LabelRange s) = tail $ init $ show s
     show (LabelRange s) = tail $ init $ show $ head s : '-' : [last s]
 
 ---------------- Common types
@@ -109,6 +108,16 @@ type RegexpName
 type Code
     = BS.ByteString
 type RuleTable
-    = M.HashMap Int ([Cond], RegexpName, Code)
+    = M.HashMap RegexpName (M.HashMap (S.Set Cond) Code)
 type SignTable
     = M.HashMap String [BS.ByteString]
+
+
+type Node = [(Char, SignNum, State)]
+type MultiArc = (Label, SignSet, S.Set State)
+
+hashAndCombine :: Hashable h => Int -> h -> Int
+hashAndCombine acc h = acc `combine` hash h
+
+instance (Hashable a) => Hashable (S.Set a) where
+    hash = S.foldl' hashAndCombine 0

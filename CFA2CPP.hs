@@ -13,26 +13,25 @@ import           Types
 import           CFA
 
 
-cfa2cpp :: FilePath -> DCFA -> Code -> Code -> [[Cond]] -> [Code] -> Int -> IO ()
-cfa2cpp fp dcfa prolog epilog conditions codes sign_maxlen =
-    let n          = length codes
+cfa2cpp :: FilePath -> DCFA -> Code -> Code -> [M.HashMap (S.Set Cond) Code] -> Int -> IO ()
+cfa2cpp fp dcfa prolog epilog conds2code sign_maxlen =
+    let n          = length conds2code
         entry      = code_for_entry n sign_maxlen
-        sign2conds = (M.fromList . zip [0 .. n - 1]) conditions
         g          = dcfaGraph dcfa
         s0         = initStateDCFA dcfa
-        init_state = code_for_state s0 True (isFinalDCFA s0 dcfa) (initNodeDCFA dcfa) sign2conds (acceptedSignatures s0 dcfa) codes
+        init_state = code_for_state s0 True (isFinalDCFA s0 dcfa) (initNodeDCFA dcfa) conds2code (acceptedSignatures s0 dcfa)
         states     = M.foldlWithKey'
             (\ code s node -> BS.concat
                 [ code
                 , case s of
                     s | isFinalDCFA s dcfa -> BS.empty
-                    s                      -> code_for_state s False False node sign2conds S.empty []
+                    s                      -> code_for_state s False False node conds2code S.empty
                 ]
             ) (BS.empty) g
         final_states = M.foldlWithKey'
             (\ code s node -> BS.concat
                 [ code
-                , code_for_state s (s == s0) True (M.lookupDefault M.empty s g) sign2conds (acceptedSignatures s dcfa) codes
+                , code_for_state s (s == s0) True (M.lookupDefault M.empty s g) conds2code (acceptedSignatures s dcfa)
                 ]
             ) (BS.empty) (finalStates dcfa)
     in  BS.writeFile fp $ BS.concat
@@ -72,12 +71,12 @@ code_for_conditions conds = intercalate " || "
     )
 
 
-code_for_state :: State -> Bool -> Bool -> DCFANode -> M.HashMap SignNum [Cond] -> SignSet -> [Code] -> Code
-code_for_state s is_init is_final node sign2conds signs codes = (BS.pack . concat)
+code_for_state :: State -> Bool -> Bool -> DCFANode -> [M.HashMap (S.Set Cond) Code] -> SignSet -> Code
+code_for_state s is_init is_final node conds2code signs = (BS.pack . concat)
     [ "\nm_"
     , show s
     , ":"
-    , if is_final then code_for_final_state sign2conds signs codes (node == M.empty) else ""
+    , if is_final then code_for_final_state conds2code signs (node == M.empty) else ""
     , case M.toList node of
         [] -> "\n\tgoto m_fin;"
         [(LabelRange r, (_, s))] | S.fromList r == S.fromList ['\x00' .. '\xFF'] -> concat
@@ -94,7 +93,7 @@ code_for_state s is_init is_final node sign2conds signs codes = (BS.pack . conca
                     LabelRange r -> concatMap code_for_case r
                 , if is_init || is_final then "\n\ttoken = MARKER;" else ""
                 , if is_init then "\n\tadjust_marker = true;" else ""
-                , let conds = M.filterWithKey (\ k conds -> S.member k ks) sign2conds in case partition (== []) (M.elems conds) of
+                , let conds = S.foldl' (\ conds k -> (map S.toList . M.keys) (conds2code !! k) ++ conds) [] ks in case partition (== []) conds of
                     (conds', conds'') | conds' == [] -> concat
                         [ "\n\t\tif ("
                         , code_for_conditions conds''
@@ -119,25 +118,26 @@ code_for_state s is_init is_final node sign2conds signs codes = (BS.pack . conca
     ]
 
 
-code_for_final_state :: M.HashMap SignNum [Cond] -> SignSet -> [Code] -> Bool -> String
-code_for_final_state sign2conds signs codes is_empty_node = concatMap
-    (\ k -> let conds = M.lookupDefault [] k sign2conds in
-        if not is_empty_node && conds /= []
-            then concat
-                [ "\nif ("
-                , code_for_conditions [conds]
-                , ") {\n\t"
-                , BS.unpack $ codes !! k
-                , "\n\tMARKER = CURSOR;"
-                , "\n\tadjust_marker = false;"
-                , "\n}"
-                ]
-            else concat
-                [ "\n\t"
-                , BS.unpack $ codes !! k
-                , "\n\tMARKER = CURSOR;"
-                , if not is_empty_node then "\n\tadjust_marker = false;" else ""
-                ]
-    ) (S.toList signs)
+code_for_final_state :: [M.HashMap (S.Set Cond) Code] -> SignSet -> Bool -> String
+code_for_final_state conds2code signs is_empty_node =
+    let conds2code' = S.foldl' (\ conds k -> M.toList (conds2code !! k) ++ conds) [] signs in concatMap
+        (\ (conds, code) ->
+            if not is_empty_node && conds /= S.empty
+                then concat
+                    [ "\nif ("
+                    , code_for_conditions [S.toList conds]
+                    , ") {\n\t"
+                    , BS.unpack code
+                    , "\n\tMARKER = CURSOR;"
+                    , "\n\tadjust_marker = false;"
+                    , "\n}"
+                    ]
+                else concat
+                    [ "\n\t"
+                    , BS.unpack code
+                    , "\n\tMARKER = CURSOR;"
+                    , if not is_empty_node then "\n\tadjust_marker = false;" else ""
+                    ]
+        ) conds2code'
 
 
