@@ -17,27 +17,27 @@ cfa2cpp :: FilePath -> DCFA -> Code -> Code -> [M.HashMap (S.Set Cond) Code] -> 
 cfa2cpp fp dcfa prolog epilog conds2code sign_maxlen =
     let n          = length conds2code
         entry      = code_for_entry n sign_maxlen
-        g          = dcfaGraph dcfa
-        s0         = initStateDCFA dcfa
-        init_state = code_for_state s0 True (isFinalDCFA s0 dcfa) (initNodeDCFA dcfa) conds2code (acceptedSignatures s0 dcfa)
+        g          = dcfa_graph dcfa
+        s0         = dcfa_init_state dcfa
+--        init_state = code_for_state s0 True (dcfa_is_final s0 dcfa) (dcfa_init_node dcfa) conds2code (dcfa_accepted s0 dcfa)
         states     = M.foldlWithKey'
             (\ code s node -> BS.concat
                 [ code
                 , case s of
-                    s | isFinalDCFA s dcfa -> BS.empty
-                    s                      -> code_for_state s False False node conds2code S.empty
+                    s | dcfa_is_final s dcfa -> BS.empty
+                    s                        -> code_for_state s (s == s0) False node conds2code S.empty
                 ]
             ) BS.empty g
         final_states = M.foldlWithKey'
             (\ code s node -> BS.concat
                 [ code
-                , code_for_state s (s == s0) True (M.lookupDefault M.empty s g) conds2code (acceptedSignatures s dcfa)
+                , code_for_state s (s == s0) True (M.lookupDefault M.empty s g) conds2code (dcfa_accepted s dcfa)
                 ]
-            ) BS.empty (finalStates dcfa)
+            ) BS.empty (dcfa_final_states dcfa)
     in  BS.writeFile fp $ BS.concat
             [ prolog
             , entry
-            , init_state
+--            , init_state
             , states
             , final_states
             , epilog
@@ -56,6 +56,7 @@ code_for_entry n sign_maxlen = BS.pack $ concat
     , "\nCURSOR = MARKER;"
     , "\n\n\nm_start:"
     , "\nif (LIMIT - CURSOR < SIGN_MAXLEN) FILL();\n\n"
+    , "\ngoto m_0;"
     ]
 
 
@@ -65,7 +66,7 @@ code_for_conditions =
     in  intercalate " || " . map f
 
 
-code_for_state :: State -> Bool -> Bool -> DCFANode -> [M.HashMap (S.Set Cond) Code] -> SignSet -> Code
+code_for_state :: State -> Bool -> Bool -> DCFANode -> [M.HashMap (S.Set Cond) Code] -> S.Set Id -> Code
 code_for_state s is_init is_final node conds2code signs = (BS.pack . concat)
     [ "\nm_"
     , show s
@@ -112,7 +113,7 @@ code_for_state s is_init is_final node conds2code signs = (BS.pack . concat)
     ]
 
 
-code_for_final_state :: [M.HashMap (S.Set Cond) Code] -> SignSet -> Bool -> String
+code_for_final_state :: [M.HashMap (S.Set Cond) Code] -> S.Set Id -> Bool -> String
 code_for_final_state conds2code signs is_empty_node =
     let conds2code' = S.foldl' (\ conds k -> M.toList (conds2code !! k) ++ conds) [] signs in concatMap
         (\ (conds, code) ->

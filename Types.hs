@@ -48,26 +48,24 @@ data RegexpDef
 type RegexpTable = M.HashMap String Regexp
 
 
-type State     = Int
-type SignNum   = Int
-type SignSet   = S.Set SignNum
+type State = Int
+type Id    = Int
 
-type DCFANode      = M.HashMap Label (SignSet, State)
+type DCFANode      = M.HashMap Label (S.Set Id, State)
 type DCFAGraph     = M.HashMap State DCFANode
 data DCFA          = DCFA
     { dcfa_init_state   :: State
-    , dcfa_init_node    :: DCFANode
     , dcfa_graph        :: DCFAGraph
-    , dcfa_final_states :: M.HashMap State SignSet
+    , dcfa_final_states :: M.HashMap State (S.Set Id)
     } deriving (Show)
 
-type NCFANode  = [(Label, SignNum, State)]
+type NCFANode  = [(Label, Id, State)]
 type NCFAGraph = M.HashMap State NCFANode
 data NCFA      = NCFA
     { ncfa_init_state   :: State
     , ncfa_max_state    :: State
     , ncfa_graph        :: NCFAGraph
-    , ncfa_final_states :: M.HashMap State SignSet
+    , ncfa_final_states :: M.HashMap State (S.Set Id)
     } deriving (Show)
 
 data Label
@@ -113,8 +111,8 @@ type SignTable
     = M.HashMap String [BS.ByteString]
 
 
-type Node = [(Char, SignNum, State)]
-type MultiArc = (Label, SignSet, S.Set State)
+type Node = [(Char, Id, State)]
+type MultiArc = (Label, S.Set Id, S.Set State)
 
 hashAndCombine :: Hashable h => Int -> h -> Int
 hashAndCombine acc h = acc `combine` hash h

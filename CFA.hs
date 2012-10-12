@@ -1,91 +1,48 @@
 {-# LANGUAGE BangPatterns #-}
 
 module CFA
-    ( NCFA
-    , DCFA
-    , Label
-    , State
-    , SignNum
-    , SignSet
+    ( ncfa_empty
 
-    , emptyNCFA
+    , dcfa_is_final
+    , dcfa_accepted
 
-    , initStateNCFA
-    , initStateDCFA
-    , initNodeDCFA
-    , maxState
-    , dcfaGraph
-    , isFinalDCFA
-    , isFinalNCFA
-    , acceptedSignatures
-    , finalStates
+    , ncfa_set_final
+    , ncfa_add_transition
 
-    , setFinal
-    , addTransitionNCFA
     , determine
 
-    , toDotNCFA
-    , toDotDCFA
+    , ncfa_to_dot
+    , dcfa_to_dot
     ) where
 
 
 import qualified Data.HashMap.Strict as M
 import qualified Data.Set            as S
-import           Data.List                (foldl', intersect, find, partition, delete, nub, sort)
+import           Data.List                (foldl')
 import           Control.Monad            (forM_)
-import           Data.Maybe               (isJust, fromJust)
-import           Data.Hashable
-import           Control.DeepSeq
+import           Data.Maybe               (isJust)
 
 import           Types
 
 
-emptyNCFA :: NCFA
-emptyNCFA = NCFA 0 1 M.empty M.empty
+ncfa_empty :: NCFA
+ncfa_empty = NCFA 0 1 M.empty M.empty
 
 
-initStateNCFA :: NCFA -> State
-initStateNCFA = ncfa_init_state
+dcfa_is_final :: State -> DCFA -> Bool
+dcfa_is_final s (DCFA _ _ fss) = isJust $ M.lookup s fss
 
 
-initStateDCFA :: DCFA -> State
-initStateDCFA = dcfa_init_state
+dcfa_accepted :: State -> DCFA -> S.Set Id
+dcfa_accepted s (DCFA _ _ fss) = M.lookupDefault S.empty s fss
 
 
-initNodeDCFA :: DCFA -> DCFANode
-initNodeDCFA = dcfa_init_node
+ncfa_set_final :: State -> Id -> NCFA -> NCFA
+ncfa_set_final s k (NCFA s0 sl g fss) = NCFA s0 sl g (M.insertWith (\ _ ks -> S.insert k ks) s (S.insert k S.empty) fss)
 
 
-maxState :: NCFA -> State
-maxState = ncfa_max_state
-
-
-dcfaGraph :: DCFA -> DCFAGraph
-dcfaGraph = dcfa_graph
-
-
-isFinalDCFA :: State -> DCFA -> Bool
-isFinalDCFA st (DCFA _ _ _ fss) = isJust $ M.lookup st fss
-
-
-isFinalNCFA :: State -> NCFA -> Bool
-isFinalNCFA st (NCFA _ _ _ fss) = isJust $ M.lookup st fss
-
-
-acceptedSignatures :: State -> DCFA -> SignSet
-acceptedSignatures s (DCFA _ _ _ fss) = M.lookupDefault S.empty s fss
-
-
-finalStates :: DCFA -> M.HashMap State SignSet
-finalStates (DCFA _ _ _ fss) = fss
-
-
-setFinal :: State -> SignNum -> NCFA -> NCFA
-setFinal s k (NCFA s0 sl g fss) = NCFA s0 sl g (M.insertWith (\ _ ks -> S.insert k ks) s (S.insert k S.empty) fss)
-
-
-addTransitionNCFA :: NCFA -> (State, Label, SignNum, State) -> (NCFA, State)
-addTransitionNCFA ncfa@(NCFA s0 sl g fss) (s1, l, k, s2) =
+ncfa_add_transition :: NCFA -> (State, Label, Id, State) -> (NCFA, State)
+ncfa_add_transition ncfa@(NCFA s0 sl g fss) (s1, l, k, s2) =
     let g' = M.insertWith (\ _ node -> (l, k, s2) : node) s1 [(l, k, s2)] g
     in  (NCFA s0 (max (sl + 1) s2) g' fss, s2)
 
@@ -98,9 +55,9 @@ to_label [c] = LabelChar c
 to_label r   = LabelRange r
 
 
-determine_node :: NCFANode -> NCFAGraph -> M.HashMap State SignSet -> M.HashMap State SignSet -> State -> (DCFANode, NCFAGraph, M.HashMap State SignSet, State, S.Set State)
+determine_node :: NCFANode -> NCFAGraph -> M.HashMap State (S.Set Id) -> M.HashMap State (S.Set Id) -> State -> (DCFANode, NCFAGraph, M.HashMap State (S.Set Id), State, S.Set State)
 determine_node n g fss_old fss s_max =
-    let f :: (SignNum, State) -> M.HashMap Char ([SignNum], [State]) -> Char -> M.HashMap Char ([SignNum], [State])
+    let f :: (Id, State) -> M.HashMap Char ([Id], [State]) -> Char -> M.HashMap Char ([Id], [State])
         f (k, s) n c = M.insertWith (\ _ (ks, ss) -> (k : ks, s : ss)) c ([k], [s]) n
         n' = foldl'
             (\ n (l, k, s) -> case l of
@@ -130,12 +87,7 @@ determine_node n g fss_old fss s_max =
     in  (n''', g', fss', s_max', ss)
 
 
-instance NFData Label where
-    rnf (LabelChar c)  = rnf c
-    rnf (LabelRange r) = rnf r
-
-
-f :: (NCFAGraph, DCFAGraph, M.HashMap State SignSet, M.HashMap State SignSet, State, S.Set State) -> (DCFAGraph, M.HashMap State SignSet)
+f :: (NCFAGraph, DCFAGraph, M.HashMap State (S.Set Id), M.HashMap State (S.Set Id), State, S.Set State) -> (DCFAGraph, M.HashMap State (S.Set Id))
 f (_, dg, fss_old, fss,  _, ss) | ss == S.empty = (dg, fss)
 f (ng, dg, fss_old, fss, s_max, ss)             = f $ S.foldl'
     (\ (ng, dg, fss_old, fss, s_max, ss) s ->
@@ -149,16 +101,13 @@ f (ng, dg, fss_old, fss, s_max, ss)             = f $ S.foldl'
 
 
 determine :: NCFA -> DCFA
-determine ncfa@(NCFA s0 sl g fss) =
-    let n0                          = M.lookupDefault (error "init node absent in ncfa") s0 g
-        (n0', g', fss', s_max', ss) = determine_node n0 g fss M.empty sl
-        g''                         = M.delete s0 g'
-        (dg, fss'')                 = f (g'', M.empty, fss, fss', s_max', ss)
-    in  DCFA s0 n0' dg fss''
+determine ncfa@(NCFA s0 s_max g fss) =
+    let (dg, fss') = f (g, M.empty, fss, M.empty, s_max, S.insert s0 S.empty)
+    in  DCFA s0 dg fss'
 
 
-toDotNCFA :: NCFA -> FilePath -> IO ()
-toDotNCFA (NCFA _ _ g fss) fp = do
+ncfa_to_dot :: NCFA -> FilePath -> IO ()
+ncfa_to_dot (NCFA _ _ g fss) fp = do
     writeFile  fp "digraph CFA {\n"
     appendFile fp "\trankdir = LR\n\tnode [shape=\"circle\"]\n"
     forM_ (M.keys fss) $
@@ -186,8 +135,8 @@ toDotNCFA (NCFA _ _ g fss) fp = do
     appendFile fp "}\n"
 
 
-toDotDCFA :: DCFA -> FilePath -> IO ()
-toDotDCFA (DCFA s0 node0 g fss) fp = do
+dcfa_to_dot :: DCFA -> FilePath -> IO ()
+dcfa_to_dot (DCFA s0 g fss) fp = do
     writeFile  fp "digraph CFA {\n"
     appendFile fp "\trankdir = LR\n\tnode [shape=\"circle\"]\n"
     forM_ (M.keys fss) $
@@ -198,19 +147,6 @@ toDotDCFA (DCFA s0 node0 g fss) fp = do
             , show i
             , show (M.lookupDefault undefined i fss)
             , "\"]\n"
-            ]
-    forM_ (M.toList node0) $
-        \ (l, (ks, s')) -> appendFile fp $ concat
-            [ "\t"
-            , show s0
-            , " -> "
-            , show s'
-            , " [label=\""
-            , show l
-            , show $ S.toList ks
-            , case l of
-                LabelRange _ -> "\", style=bold, color=red]\n"
-                _            -> "\"]\n"
             ]
     forM_ (M.toList g) $
         \ (s, node) -> forM_ (M.toList node) $
