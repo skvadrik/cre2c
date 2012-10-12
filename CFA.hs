@@ -73,7 +73,7 @@ isFinalNCFA st (NCFA _ _ _ fss) = isJust $ M.lookup st fss
 
 
 acceptedSignatures :: State -> DCFA -> SignSet
-acceptedSignatures s (DCFA _ _ _ fss) = M.lookupDefault (S.empty) s fss
+acceptedSignatures s (DCFA _ _ _ fss) = M.lookupDefault S.empty s fss
 
 
 finalStates :: DCFA -> M.HashMap State SignSet

@@ -4,6 +4,7 @@ module RegexpGenerator
 
 
 import Control.Monad.Random as R
+import Control.Monad             (replicateM)
 import System.Random
 import Data.Char
 
@@ -69,7 +70,7 @@ weighted_chars = map (\c -> (c, 5)) special_chars ++ map (\c -> (c, 1)) common_c
 
 newRegexp :: Int -> IO String
 newRegexp n = do
-    random_string <- evalRandIO . sequence . replicate n . R.fromList $ weighted_chars
+    random_string <- evalRandIO . replicateM n . fromList $ weighted_chars
     return $ gen_regexp $ concat
         [ "\"a\""
         , random_string

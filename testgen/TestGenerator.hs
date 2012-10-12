@@ -6,7 +6,6 @@ module TestGenerator
 
 
 import           System.Environment          (getArgs)
-import           RegexpParser
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.HashMap.Strict   as M
 import           Control.Monad               (forM)
@@ -35,7 +34,7 @@ sign_from_rcat r ss stbl = case r of
 sign_from_riter :: RegexpIter -> [BS.ByteString] -> SignTable -> [BS.ByteString]
 sign_from_riter r ss stbl = case r of
     IterFromPrim rprim     -> sign_from_rprim rprim ss stbl
-    IterRepeat   rprim n   -> let ss' = sign_from_rprim rprim ss stbl in map (\s' -> ((BS.concat . replicate n) s')) ss'
+    IterRepeat   rprim n   -> let ss' = sign_from_rprim rprim ss stbl in map (BS.concat . replicate n) ss'
     IterRange    rprim n m -> let ss' = sign_from_rprim rprim ss stbl in concatMap (\s' -> map (\k -> (BS.concat . replicate k) s') [n .. m]) ss'
 
 
@@ -54,8 +53,8 @@ sign_from_rprim r ss stbl = case r of
 
 new_test :: [Regexp] -> RegexpTable -> (BS.ByteString, [SignNum], Int)
 new_test rs rt =
-    let predefined_signs = M.map (\ r -> gen_signatures_from_regexp r (M.empty)) rt
-        signs            = M.fromList $ zip [1 .. length rs] $ map (\r -> gen_signatures_from_regexp r predefined_signs) rs
+    let predefined_signs = M.map (`gen_signatures_from_regexp` M.empty) rt
+        signs            = M.fromList $ zip [1 .. length rs] $ map (`gen_signatures_from_regexp` predefined_signs) rs
         sign_maxlen      = maximum $ map BS.length $ concat $ M.elems signs
     in  (( BS.concat . map BS.concat . M.elems) signs
         , concatMap (\(sign_num, sign_list) -> replicate (length sign_list) (sign_num - 1)) (M.toList signs)
@@ -67,7 +66,7 @@ newTest :: FilePath -> Int -> Int -> IO ()
 newTest fp regexp_count regexp_length = do
     regexp_strings <- forM [1 .. regexp_count] (\_ -> newRegexp regexp_length)
     let regexps = map parseRegexp regexp_strings
-    let (test_string, stats, sign_maxlen) = new_test regexps (M.empty)
+    let (test_string, stats, sign_maxlen) = new_test regexps M.empty
     let code = BS.concat
             [ (BS.pack . concat)
                 [ "\n#include <stdio.h>"
@@ -125,7 +124,7 @@ main :: IO ()
 main = do
     args <- getArgs
     (fp, n, l) <- case args of
-        [a, b, c] -> return (a, (read b) :: Int, (read c) :: Int)
+        [a, b, c] -> return (a, read b :: Int, read c :: Int)
         _         -> error "usage: ./TestGenerator.hs <destination file> <number of regexps> <regexp average length>"
 
     newTest fp n l

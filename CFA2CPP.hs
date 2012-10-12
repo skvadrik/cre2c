@@ -27,13 +27,13 @@ cfa2cpp fp dcfa prolog epilog conds2code sign_maxlen =
                     s | isFinalDCFA s dcfa -> BS.empty
                     s                      -> code_for_state s False False node conds2code S.empty
                 ]
-            ) (BS.empty) g
+            ) BS.empty g
         final_states = M.foldlWithKey'
             (\ code s node -> BS.concat
                 [ code
                 , code_for_state s (s == s0) True (M.lookupDefault M.empty s g) conds2code (acceptedSignatures s dcfa)
                 ]
-            ) (BS.empty) (finalStates dcfa)
+            ) BS.empty (finalStates dcfa)
     in  BS.writeFile fp $ BS.concat
             [ prolog
             , entry
@@ -50,7 +50,7 @@ code_for_entry n sign_maxlen = BS.pack $ concat
     , show n
     , "\n#define SIGN_MAXLEN "
     , show sign_maxlen
-    , "\nbool adjust_marker;"
+    , "\nbool adjust_marker = true;"
     , "\ngoto m_start;"
     , "\n\n\nm_fin:"
     , "\nCURSOR = MARKER;"
@@ -60,15 +60,9 @@ code_for_entry n sign_maxlen = BS.pack $ concat
 
 
 code_for_conditions :: [[Cond]] -> String
-code_for_conditions conds = intercalate " || "
-    (map
-        (\ conditions -> concat
-            [ "("
-            , intercalate " && " conditions
-            , ")"
-            ]
-        ) conds
-    )
+code_for_conditions =
+    let f xs = concat ["(", intercalate " && " xs, ")"]
+    in  intercalate " || " . map f
 
 
 code_for_state :: State -> Bool -> Bool -> DCFANode -> [M.HashMap (S.Set Cond) Code] -> SignSet -> Code
@@ -88,7 +82,7 @@ code_for_state s is_init is_final node conds2code signs = (BS.pack . concat)
         n -> concat
             [ "\nswitch (*CURSOR++) {"
             , concatMap (\ (l, (ks, s')) -> concat
-                [ let code_for_case c = printf "\n\tcase 0x%X:" c in case l of
+                [ let code_for_case = printf "\n\tcase 0x%X:" in case l of
                     LabelChar c  -> code_for_case c
                     LabelRange r -> concatMap code_for_case r
                 , if is_init || is_final then "\n\ttoken = MARKER;" else ""
