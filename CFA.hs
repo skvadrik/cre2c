@@ -42,7 +42,7 @@ ncfa_set_final s k (NCFA s0 sl g fss) = NCFA s0 sl g (M.insertWith (\ _ ks -> S.
 
 
 ncfa_add_transition :: NCFA -> (State, Label, Id, State) -> (NCFA, State)
-ncfa_add_transition ncfa@(NCFA s0 sl g fss) (s1, l, k, s2) =
+ncfa_add_transition (NCFA s0 sl g fss) (s1, l, k, s2) =
     let g' = M.insertWith (\ _ node -> (l, k, s2) : node) s1 [(l, k, s2)] g
     in  (NCFA s0 (max (sl + 1) s2) g' fss, s2)
 
@@ -65,7 +65,7 @@ determine_node n g fss_old fss s_max =
                 LabelRange r -> foldl' (f (k, s)) n r
             ) M.empty n
         (xs, ys) = M.foldlWithKey'
-            (\ (xs, ys) c (ks@(k : ks'), ss@(s : ss')) -> if ss' == []
+            (\ (xs, ys) c (ks@(k : _), ss@(s : ss')) -> if ss' == []
                 then (xs, M.insertWith (\ _ (r, ks'') -> (c : r, S.insert k ks'')) s ([c], S.insert k S.empty) ys)
                 else
                     let ks' = S.fromList ks
@@ -87,23 +87,28 @@ determine_node n g fss_old fss s_max =
     in  (n''', g', fss', s_max', ss)
 
 
-f :: (NCFAGraph, DCFAGraph, M.HashMap State (S.Set Id), M.HashMap State (S.Set Id), State, S.Set State) -> (DCFAGraph, M.HashMap State (S.Set Id))
-f (_, dg, fss_old, fss,  _, ss) | ss == S.empty = (dg, fss)
-f (ng, dg, fss_old, fss, s_max, ss)             = f $ S.foldl'
+determine' :: (NCFAGraph, DCFAGraph, M.HashMap State (S.Set Id), M.HashMap State (S.Set Id), State, S.Set State) -> (DCFAGraph, M.HashMap State (S.Set Id))
+determine' (_, dg, _, fss,  _, ss) | ss == S.empty = (dg, fss)
+determine' (ng, dg, fss_old, fss, s_max, ss)       = determine' $ S.foldl'
     (\ (ng, dg, fss_old, fss, s_max, ss) s ->
         let n = M.lookupDefault [] s ng
         in  if n /= []
                 then
                     let (n', ng', fss', s_max', ss') = determine_node n ng fss_old fss s_max
                     in  (M.delete s ng', M.insert s n' dg, fss_old, fss', s_max', S.union ss' ss)
-                else (ng, dg, fss_old, case M.lookup s fss_old of {Just ss -> M.insert s ss fss; _ -> fss}, s_max, ss)
+                else
+                    let fss' = case M.lookup s fss_old of
+                            Just ss -> M.insert s ss fss
+                            Nothing -> fss
+                    in  (ng, dg, fss_old, fss', s_max, ss)
     ) (ng, dg, fss_old, fss, s_max, S.empty) ss
 
 
 determine :: NCFA -> DCFA
-determine ncfa@(NCFA s0 s_max g fss) =
-    let (dg, fss') = f (g, M.empty, fss, M.empty, s_max, S.insert s0 S.empty)
+determine (NCFA s0 s_max g fss) =
+    let (dg, fss') = determine' (g, M.empty, fss, M.empty, s_max, S.insert s0 S.empty)
     in  DCFA s0 dg fss'
+
 
 
 ncfa_to_dot :: NCFA -> FilePath -> IO ()
@@ -136,7 +141,7 @@ ncfa_to_dot (NCFA _ _ g fss) fp = do
 
 
 dcfa_to_dot :: DCFA -> FilePath -> IO ()
-dcfa_to_dot (DCFA s0 g fss) fp = do
+dcfa_to_dot (DCFA _ g fss) fp = do
     writeFile  fp "digraph CFA {\n"
     appendFile fp "\trankdir = LR\n\tnode [shape=\"circle\"]\n"
     forM_ (M.keys fss) $

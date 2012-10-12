@@ -5,7 +5,7 @@ module CFA2CPP
 
 import qualified Data.HashMap.Strict   as M
 import qualified Data.Set              as S
-import           Data.List                   (intercalate, foldl', partition)
+import           Data.List                   (intercalate, partition)
 import qualified Data.ByteString.Char8 as BS
 import           Text.Printf                 (printf)
 
@@ -19,7 +19,6 @@ cfa2cpp fp dcfa prolog epilog conds2code sign_maxlen =
         entry      = code_for_entry n sign_maxlen
         g          = dcfa_graph dcfa
         s0         = dcfa_init_state dcfa
---        init_state = code_for_state s0 True (dcfa_is_final s0 dcfa) (dcfa_init_node dcfa) conds2code (dcfa_accepted s0 dcfa)
         states     = M.foldlWithKey'
             (\ code s node -> BS.concat
                 [ code
@@ -29,15 +28,14 @@ cfa2cpp fp dcfa prolog epilog conds2code sign_maxlen =
                 ]
             ) BS.empty g
         final_states = M.foldlWithKey'
-            (\ code s node -> BS.concat
+            (\ code s accepted -> BS.concat
                 [ code
-                , code_for_state s (s == s0) True (M.lookupDefault M.empty s g) conds2code (dcfa_accepted s dcfa)
+                , code_for_state s (s == s0) True (M.lookupDefault M.empty s g) conds2code accepted
                 ]
             ) BS.empty (dcfa_final_states dcfa)
     in  BS.writeFile fp $ BS.concat
             [ prolog
             , entry
---            , init_state
             , states
             , final_states
             , epilog
@@ -80,7 +78,7 @@ code_for_state s is_init is_final node conds2code signs = (BS.pack . concat)
             , show s
             , ";"
             ]
-        n -> concat
+        _ -> concat
             [ "\nswitch (*CURSOR++) {"
             , concatMap (\ (l, (ks, s')) -> concat
                 [ let code_for_case = printf "\n\tcase 0x%X:" in case l of

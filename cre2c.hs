@@ -4,7 +4,6 @@
 import           System.Environment         (getArgs)
 import qualified Data.HashMap.Strict   as M
 
-import           Types
 import           CFA
 import           RE2CFA
 import           CFA2CPP

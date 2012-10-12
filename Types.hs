@@ -8,10 +8,6 @@ import           Data.Hashable
 import           Data.Char                   (ord)
 import           Numeric                     (showHex)
 
-import Debug.Trace
-trace' a = trace (show a) a
-trace'' s a = trace (s ++ show a) a
-
 
 ---------------- regexp types
 data Regexp
