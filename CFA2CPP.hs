@@ -84,7 +84,7 @@ code_for_state s is_init is_final node conds2code signs = (BS.pack . concat)
                 [ let code_for_case = printf "\n\tcase 0x%X:" in case l of
                     LabelChar c  -> code_for_case c
                     LabelRange r -> concatMap code_for_case r
-                , if is_init || is_final then "\n\ttoken = MARKER;" else ""
+                , if is_init || is_final then "\n\ttoken = adjust_marker ? MARKER : token;" else ""
                 , if is_init then "\n\tadjust_marker = true;" else ""
                 , let conds = S.foldl' (\ conds k -> (map S.toList . M.keys) (conds2code !! k) ++ conds) [] ks in case partition (== []) conds of
                     (conds', conds'') | conds' == [] -> concat
