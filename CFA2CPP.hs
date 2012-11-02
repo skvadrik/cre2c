@@ -13,8 +13,8 @@ import           Types
 import           CFA
 
 
-cfa2cpp :: FilePath -> DCFA -> Code -> Code -> [M.HashMap (S.Set Cond) Code] -> Int -> IO ()
-cfa2cpp fp dcfa prolog epilog conds2code sign_maxlen =
+cfa2cpp :: DCFA -> Code -> [M.HashMap (S.Set Cond) Code] -> Int -> Code
+cfa2cpp dcfa prolog conds2code sign_maxlen =
     let n          = length conds2code
         entry      = code_for_entry n sign_maxlen
         g          = dcfa_graph dcfa
@@ -33,12 +33,11 @@ cfa2cpp fp dcfa prolog epilog conds2code sign_maxlen =
                 , code_for_state s (s == s0) True (M.lookupDefault M.empty s g) conds2code accepted
                 ]
             ) BS.empty (dcfa_final_states dcfa)
-    in  BS.writeFile fp $ BS.concat
+    in  BS.concat
             [ prolog
             , entry
             , states
             , final_states
-            , epilog
             ]
 
 

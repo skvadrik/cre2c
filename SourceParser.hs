@@ -13,7 +13,7 @@ import qualified Data.Set              as S
 
 import           Types
 
--- parser produced by Happy Version 1.18.9
+-- parser produced by Happy Version 1.18.10
 
 data HappyAbsSyn t4 t5 t6 t7
 	= HappyTerminal (Token)
@@ -23,111 +23,122 @@ data HappyAbsSyn t4 t5 t6 t7
 	| HappyAbsSyn6 t6
 	| HappyAbsSyn7 t7
 
-action_0 (9) = happyShift action_2
+action_0 (9) = happyShift action_4
 action_0 (4) = happyGoto action_3
 action_0 _ = happyFail
 
 action_1 (9) = happyShift action_2
 action_1 _ = happyFail
 
-action_2 (14) = happyShift action_4
+action_2 (14) = happyShift action_5
 action_2 _ = happyFail
 
 action_3 (16) = happyAccept
 action_3 _ = happyFail
 
-action_4 (8) = happyShift action_8
-action_4 (5) = happyGoto action_5
-action_4 (6) = happyGoto action_6
-action_4 (7) = happyGoto action_7
-action_4 _ = happyFail
+action_4 (14) = happyShift action_5
+action_4 _ = happyReduce_2
 
-action_5 (15) = happyShift action_14
+action_5 (8) = happyShift action_9
+action_5 (5) = happyGoto action_6
+action_5 (6) = happyGoto action_7
+action_5 (7) = happyGoto action_8
 action_5 _ = happyFail
 
-action_6 (8) = happyShift action_8
-action_6 (5) = happyGoto action_13
-action_6 (6) = happyGoto action_6
-action_6 (7) = happyGoto action_7
-action_6 _ = happyReduce_2
+action_6 (15) = happyShift action_15
+action_6 _ = happyFail
 
-action_7 (10) = happyShift action_12
-action_7 _ = happyFail
+action_7 (8) = happyShift action_9
+action_7 (5) = happyGoto action_14
+action_7 (6) = happyGoto action_7
+action_7 (7) = happyGoto action_8
+action_7 _ = happyReduce_3
 
-action_8 (8) = happyShift action_10
-action_8 (13) = happyShift action_11
-action_8 (7) = happyGoto action_9
-action_8 _ = happyReduce_6
+action_8 (10) = happyShift action_13
+action_8 _ = happyFail
 
+action_9 (8) = happyShift action_11
+action_9 (13) = happyShift action_12
+action_9 (7) = happyGoto action_10
 action_9 _ = happyReduce_7
 
-action_10 (8) = happyShift action_10
-action_10 (7) = happyGoto action_9
-action_10 _ = happyReduce_6
+action_10 _ = happyReduce_8
 
-action_11 (11) = happyShift action_17
-action_11 _ = happyFail
+action_11 (8) = happyShift action_11
+action_11 (7) = happyGoto action_10
+action_11 _ = happyReduce_7
 
-action_12 (8) = happyShift action_16
+action_12 (11) = happyShift action_18
 action_12 _ = happyFail
 
-action_13 _ = happyReduce_3
+action_13 (8) = happyShift action_17
+action_13 _ = happyFail
 
-action_14 (9) = happyShift action_15
-action_14 _ = happyFail
+action_14 _ = happyReduce_4
 
-action_15 _ = happyReduce_1
+action_15 (9) = happyShift action_4
+action_15 (4) = happyGoto action_16
+action_15 _ = happyFail
 
-action_16 (13) = happyShift action_19
-action_16 _ = happyFail
+action_16 _ = happyReduce_1
 
-action_17 (9) = happyShift action_18
+action_17 (13) = happyShift action_20
 action_17 _ = happyFail
 
-action_18 (12) = happyShift action_21
+action_18 (9) = happyShift action_19
 action_18 _ = happyFail
 
-action_19 (11) = happyShift action_20
+action_19 (12) = happyShift action_22
 action_19 _ = happyFail
 
-action_20 (9) = happyShift action_22
+action_20 (11) = happyShift action_21
 action_20 _ = happyFail
 
-action_21 _ = happyReduce_4
+action_21 (9) = happyShift action_23
+action_21 _ = happyFail
 
-action_22 (12) = happyShift action_23
-action_22 _ = happyFail
+action_22 _ = happyReduce_5
 
-action_23 _ = happyReduce_5
+action_23 (12) = happyShift action_24
+action_23 _ = happyFail
+
+action_24 _ = happyReduce_6
 
 happyReduce_1 = happyReduce 5 4 happyReduction_1
-happyReduction_1 ((HappyTerminal (TokenCode happy_var_5)) `HappyStk`
+happyReduction_1 ((HappyAbsSyn4  happy_var_5) `HappyStk`
 	_ `HappyStk`
 	(HappyAbsSyn5  happy_var_3) `HappyStk`
 	_ `HappyStk`
 	(HappyTerminal (TokenCode happy_var_1)) `HappyStk`
 	happyRest)
 	 = HappyAbsSyn4
-		 (Source happy_var_1 happy_var_3 happy_var_5
+		 (Source    happy_var_1 happy_var_3 happy_var_5
 	) `HappyStk` happyRest
 
-happyReduce_2 = happySpecReduce_1  5 happyReduction_2
-happyReduction_2 (HappyAbsSyn6  happy_var_1)
-	 =  HappyAbsSyn5
-		 (OneRule   happy_var_1
+happyReduce_2 = happySpecReduce_1  4 happyReduction_2
+happyReduction_2 (HappyTerminal (TokenCode happy_var_1))
+	 =  HappyAbsSyn4
+		 (SourceEnd happy_var_1
 	)
 happyReduction_2 _  = notHappyAtAll 
 
-happyReduce_3 = happySpecReduce_2  5 happyReduction_3
-happyReduction_3 (HappyAbsSyn5  happy_var_2)
+happyReduce_3 = happySpecReduce_1  5 happyReduction_3
+happyReduction_3 (HappyAbsSyn6  happy_var_1)
+	 =  HappyAbsSyn5
+		 (OneRule   happy_var_1
+	)
+happyReduction_3 _  = notHappyAtAll 
+
+happyReduce_4 = happySpecReduce_2  5 happyReduction_4
+happyReduction_4 (HappyAbsSyn5  happy_var_2)
 	(HappyAbsSyn6  happy_var_1)
 	 =  HappyAbsSyn5
 		 (ManyRules happy_var_1 happy_var_2
 	)
-happyReduction_3 _ _  = notHappyAtAll 
+happyReduction_4 _ _  = notHappyAtAll 
 
-happyReduce_4 = happyReduce 5 6 happyReduction_4
-happyReduction_4 (_ `HappyStk`
+happyReduce_5 = happyReduce 5 6 happyReduction_5
+happyReduction_5 (_ `HappyStk`
 	(HappyTerminal (TokenCode happy_var_4)) `HappyStk`
 	_ `HappyStk`
 	_ `HappyStk`
@@ -137,8 +148,8 @@ happyReduction_4 (_ `HappyStk`
 		 (SimpleRule  happy_var_1 happy_var_4
 	) `HappyStk` happyRest
 
-happyReduce_5 = happyReduce 7 6 happyReduction_5
-happyReduction_5 (_ `HappyStk`
+happyReduce_6 = happyReduce 7 6 happyReduction_6
+happyReduction_6 (_ `HappyStk`
 	(HappyTerminal (TokenCode happy_var_6)) `HappyStk`
 	_ `HappyStk`
 	_ `HappyStk`
@@ -150,20 +161,20 @@ happyReduction_5 (_ `HappyStk`
 		 (ComplexRule happy_var_1 happy_var_3 happy_var_6
 	) `HappyStk` happyRest
 
-happyReduce_6 = happySpecReduce_1  7 happyReduction_6
-happyReduction_6 (HappyTerminal (TokenName happy_var_1))
+happyReduce_7 = happySpecReduce_1  7 happyReduction_7
+happyReduction_7 (HappyTerminal (TokenName happy_var_1))
 	 =  HappyAbsSyn7
 		 (OneCond   happy_var_1
 	)
-happyReduction_6 _  = notHappyAtAll 
+happyReduction_7 _  = notHappyAtAll 
 
-happyReduce_7 = happySpecReduce_2  7 happyReduction_7
-happyReduction_7 (HappyAbsSyn7  happy_var_2)
+happyReduce_8 = happySpecReduce_2  7 happyReduction_8
+happyReduction_8 (HappyAbsSyn7  happy_var_2)
 	(HappyTerminal (TokenName happy_var_1))
 	 =  HappyAbsSyn7
 		 (ManyConds happy_var_1 happy_var_2
 	)
-happyReduction_7 _ _  = notHappyAtAll 
+happyReduction_8 _ _  = notHappyAtAll 
 
 happyNewToken action sts stk [] =
 	action 16 16 notHappyAtAll (HappyState action) sts stk []
@@ -210,7 +221,8 @@ happySeq = happyDontSeq
 
 
 data Source
-    = Source Code Rules Code
+    = Source    Code Rules Source
+    | SourceEnd Code
 
 data Token
     = TokenEq
@@ -237,12 +249,12 @@ lexer cs =
         lex_entry_code code ('\n' : '/' : '*' : 's' : 't' : 'a' : 'r' : 't' : ':' : cs) = (code, cs)
         lex_entry_code code (c : cs) = lex_entry_code (DL.snoc code c) cs
         (code, rest) = lex_entry_code DL.empty cs
-    in  TokenCode ((BS.pack . DL.toList) code) : TokenStart : lex_rules rest
+    in  TokenCode ((BS.pack . DL.toList) code) : (if rest == "" then [] else TokenStart : lex_rules rest)
 
 
 lex_rules :: String -> [Token]
 lex_rules [] = []
-lex_rules ('\n' : 'e' : 'n' : 'd' : '*' : '/' : cs) = TokenEnd : [TokenCode (BS.pack cs)]
+lex_rules ('\n' : 'e' : 'n' : 'd' : '*' : '/' : cs) = TokenEnd : lexer cs -- [TokenCode (BS.pack cs)]
 lex_rules (c : cs)
     | isSpace c = lex_rules cs
     | isAlpha c = lex_name (c : cs)
@@ -271,7 +283,7 @@ lex_name cs =
 
 
 --------------------------------------------------------------------------------
-parse_source :: FilePath -> IO (Code, RuleTable, Code)
+parse_source :: FilePath -> IO ChunkList
 parse_source fp =
     let conds2list :: CondList -> [Cond]
         conds2list (OneCond c)      = [c]
@@ -283,22 +295,23 @@ parse_source fp =
         rules2table (ManyRules (SimpleRule           name code) rules) = (name, ([], code)) : rules2table rules
         rules2table (ManyRules (ComplexRule condlist name code) rules) = (name, (conds2list condlist, code)) : rules2table rules
 
-    in  (\ (Source code1 rules code2) ->
-            ( code1
-            , (foldl'
+        source2chunk_list :: Source -> ChunkList
+        source2chunk_list (SourceEnd code )             = LastChunk code
+        source2chunk_list (Source    code rules source) = Chunk
+            code
+            ((foldl'
                 (\ rules (name, (conds, code)) -> M.insertWith
                     (\ _ xs -> M.insertWith (\ _ code' -> BS.concat [BS.pack "{ ", code, code', BS.pack " }"]) (S.fromList conds) code xs)
                     name
                     (M.insert (S.fromList conds) code M.empty)
                     rules
                 ) M.empty
-            ) (rules2table rules)
-            , code2
-            )
-        )
+            ) (rules2table rules))
+            (source2chunk_list source)
+    in  ( source2chunk_list
         . parser
         . lexer
-        <$> readFile fp
+        ) <$> readFile fp
 {-# LINE 1 "templates/GenericTemplate.hs" #-}
 {-# LINE 1 "templates/GenericTemplate.hs" #-}
 {-# LINE 1 "<built-in>" #-}

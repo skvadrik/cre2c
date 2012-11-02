@@ -33,7 +33,8 @@ import           Types
 %%
 
 Source
-    : code start Rules end code           { Source $1 $3 $5 }
+    : code start Rules end Source         { Source    $1 $3 $5 }
+    | code                                { SourceEnd $1       }
 
 Rules
     : Rule                                { OneRule   $1    }
@@ -51,7 +52,8 @@ CondList
 {
 
 data Source
-    = Source Code Rules Code
+    = Source    Code Rules Source
+    | SourceEnd Code
 
 data Token
     = TokenEq
@@ -78,12 +80,12 @@ lexer cs =
         lex_entry_code code ('\n' : '/' : '*' : 's' : 't' : 'a' : 'r' : 't' : ':' : cs) = (code, cs)
         lex_entry_code code (c : cs) = lex_entry_code (DL.snoc code c) cs
         (code, rest) = lex_entry_code DL.empty cs
-    in  TokenCode ((BS.pack . DL.toList) code) : TokenStart : lex_rules rest
+    in  TokenCode ((BS.pack . DL.toList) code) : (if rest == "" then [] else TokenStart : lex_rules rest)
 
 
 lex_rules :: String -> [Token]
 lex_rules [] = []
-lex_rules ('\n' : 'e' : 'n' : 'd' : '*' : '/' : cs) = TokenEnd : [TokenCode (BS.pack cs)]
+lex_rules ('\n' : 'e' : 'n' : 'd' : '*' : '/' : cs) = TokenEnd : lexer cs -- [TokenCode (BS.pack cs)]
 lex_rules (c : cs)
     | isSpace c = lex_rules cs
     | isAlpha c = lex_name (c : cs)
@@ -112,7 +114,7 @@ lex_name cs =
 
 
 --------------------------------------------------------------------------------
-parse_source :: FilePath -> IO (Code, RuleTable, Code)
+parse_source :: FilePath -> IO ChunkList
 parse_source fp =
     let conds2list :: CondList -> [Cond]
         conds2list (OneCond c)      = [c]
@@ -124,22 +126,23 @@ parse_source fp =
         rules2table (ManyRules (SimpleRule           name code) rules) = (name, ([], code)) : rules2table rules
         rules2table (ManyRules (ComplexRule condlist name code) rules) = (name, (conds2list condlist, code)) : rules2table rules
 
-    in  (\ (Source code1 rules code2) ->
-            ( code1
-            , (foldl'
+        source2chunk_list :: Source -> ChunkList
+        source2chunk_list (SourceEnd code )             = LastChunk code
+        source2chunk_list (Source    code rules source) = Chunk
+            code
+            ((foldl'
                 (\ rules (name, (conds, code)) -> M.insertWith
                     (\ _ xs -> M.insertWith (\ _ code' -> BS.concat [BS.pack "{ ", code, code', BS.pack " }"]) (S.fromList conds) code xs)
                     name
                     (M.insert (S.fromList conds) code M.empty)
                     rules
                 ) M.empty
-            ) (rules2table rules)
-            , code2
-            )
-        )
+            ) (rules2table rules))
+            (source2chunk_list source)
+    in  ( source2chunk_list
         . parser
         . lexer
-        <$> readFile fp
+        ) <$> readFile fp
 
 }
 

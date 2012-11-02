@@ -83,6 +83,9 @@ instance Show Label where
     show (LabelRange s) = tail $ init $ show $ head s : '-' : [last s]
 
 ---------------- Common types
+data ChunkList
+    = LastChunk Code
+    | Chunk Code RuleTable ChunkList
 data Rules
     = ManyRules Rule Rules
     | OneRule   Rule
