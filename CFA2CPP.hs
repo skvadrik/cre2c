@@ -13,10 +13,10 @@ import           Types
 import           CFA
 
 
-cfa2cpp :: DCFA -> Code -> [M.HashMap (S.Set Cond) Code] -> Int -> Code
-cfa2cpp dcfa prolog conds2code sign_maxlen =
+cfa2cpp :: DCFA -> Code -> [M.HashMap (S.Set Cond) Code] -> Int -> Int -> Code
+cfa2cpp dcfa prolog conds2code maxlen n_scanner =
     let n          = length conds2code
-        entry      = code_for_entry n sign_maxlen
+        entry      = code_for_entry n maxlen n_scanner
         g          = dcfa_graph dcfa
         s0         = dcfa_init_state dcfa
         states     = M.foldlWithKey'
@@ -38,22 +38,24 @@ cfa2cpp dcfa prolog conds2code sign_maxlen =
             , entry
             , states
             , final_states
-            , BS.pack "\n#undef NUM_SIGN"
-            , BS.pack "\n#undef SIGN_MAXLEN"
             ]
 
 
-code_for_entry :: Int -> Int -> Code
-code_for_entry n sign_maxlen = BS.pack $ concat
-    [ "\n#define NUM_SIGN "
+code_for_entry :: Int -> Int -> Int -> Code
+code_for_entry n maxlen n_scanner = BS.pack $ concat
+    [ "\n#define NUM_SIGN"
+    , show n_scanner
+    , " "
     , show n
-    , "\n#define SIGN_MAXLEN "
-    , show sign_maxlen
+    , "\n#define MAXLEN"
+    , show n_scanner
+    , " "
+    , show maxlen
     , "\ngoto m_start;"
     , "\n\n\nm_fin:"
     , "\nCURSOR = MARKER;"
     , "\n\n\nm_start:"
-    , "\nif (LIMIT - CURSOR < SIGN_MAXLEN) FILL();\n\n"
+    , "\nif (LIMIT - CURSOR < MAXLEN) FILL();\n\n"
     , "\ngoto m_0;"
     ]
 

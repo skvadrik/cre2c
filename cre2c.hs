@@ -3,7 +3,7 @@
 
 import           System.Environment          (getArgs)
 import qualified Data.HashMap.Strict   as M
-import qualified Data.ByteString       as BS
+import qualified Data.ByteString.Char8 as BS
 
 import           Types
 import           CFA
@@ -13,15 +13,15 @@ import           SourceParser
 import           RegexpParser
 
 
-gen_code :: ChunkList -> RegexpTable -> BS.ByteString
-gen_code (LastChunk code)              _            = code
-gen_code (Chunk code rules chunk_list) regexp_table =
+gen_code :: ChunkList -> Int -> RegexpTable -> (BS.ByteString, Int)
+gen_code (LastChunk code)              _ _            = (code, 0)
+gen_code (Chunk code rules chunk_list) k regexp_table =
     let (regexps, conds2code) = (unzip . M.toList) rules
-        ncfa                  = re2ncfa regexps regexp_table
+        (ncfa, maxlen')       = re2ncfa regexps regexp_table
         dcfa                  = determine ncfa
-        sign_maxlen           = 100
-        code'                 = cfa2cpp dcfa code conds2code sign_maxlen
-    in  BS.append code' $ gen_code chunk_list regexp_table
+        code'                 = cfa2cpp dcfa code conds2code maxlen' k
+        (code'', maxlen'')    = gen_code chunk_list (k + 1) regexp_table
+    in  (BS.append code' code'', max maxlen' maxlen'')
 
 
 main :: IO ()
@@ -33,5 +33,11 @@ main = do
 
     chunk_list   <- parse_source fsrc
     regexp_table <- parse_regexps fre
+    let (code, maxlen) = gen_code chunk_list 0 regexp_table
 
-    BS.writeFile fdest $ gen_code chunk_list regexp_table
+    BS.writeFile fdest $ BS.concat
+        [ BS.pack "#define MAXLEN "
+        , BS.pack $ show maxlen
+        , BS.pack "\n"
+        , code
+        ]
