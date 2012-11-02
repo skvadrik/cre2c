@@ -14,12 +14,12 @@ import           RegexpParser
 
 
 gen_code :: ChunkList -> RegexpTable -> BS.ByteString
-gen_code (LastChunk code)              regexp_table = code
+gen_code (LastChunk code)              _            = code
 gen_code (Chunk code rules chunk_list) regexp_table =
     let (regexps, conds2code) = (unzip . M.toList) rules
         ncfa                  = re2ncfa regexps regexp_table
         dcfa                  = determine ncfa
-        sign_maxlen           = 56
+        sign_maxlen           = 100
         code'                 = cfa2cpp dcfa code conds2code sign_maxlen
     in  BS.append code' $ gen_code chunk_list regexp_table
 

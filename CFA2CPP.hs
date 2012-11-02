@@ -38,6 +38,8 @@ cfa2cpp dcfa prolog conds2code sign_maxlen =
             , entry
             , states
             , final_states
+            , BS.pack "\n#undef NUM_SIGN"
+            , BS.pack "\n#undef SIGN_MAXLEN"
             ]
 
 
@@ -47,7 +49,6 @@ code_for_entry n sign_maxlen = BS.pack $ concat
     , show n
     , "\n#define SIGN_MAXLEN "
     , show sign_maxlen
-    , "\nbool adjust_marker = true;"
     , "\ngoto m_start;"
     , "\n\n\nm_fin:"
     , "\nCURSOR = MARKER;"
@@ -103,6 +104,7 @@ code_for_state s is_init is_final node conds2code signs = (BS.pack . concat)
                         ]
                 ]) (M.toList node)
             , "\n\tdefault:"
+            , "\n\t\tadjust_marker = true;"
             , "\n\t\tMARKER += adjust_marker;"
             , "\n\t\tgoto m_fin;"
             , "\n\t}"
