@@ -40,7 +40,7 @@ ncfa_add_regexp_iter (ncfa, ss, l) r rt sign = case r of
         let (ncfa', ss', l') = ncfa_add_regexp_prim (ncfa, ss, l) rprim rt sign
         in  (ncfa', S.union ss ss', l')
     IterRepeat rprim n  ->
-        let rcat = foldl' (\ rc _ -> Cat (IterFromPrim rprim) rc) ((CatFromIter . IterFromPrim) rprim)  [1 .. n]
+        let rcat = foldl' (\ rc _ -> Cat (IterFromPrim rprim) rc) ((CatFromIter . IterFromPrim) rprim)  [1 .. n - 1]
         in  ncfa_add_regexp_cat (ncfa, ss, l) rcat rt sign
     IterRange rprim n m
         | m == 0         -> (ncfa, ss, l)
