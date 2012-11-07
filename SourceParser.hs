@@ -33,86 +33,90 @@ action_1 _ = happyFail
 action_2 (14) = happyShift action_5
 action_2 _ = happyFail
 
-action_3 (16) = happyAccept
+action_3 (17) = happyAccept
 action_3 _ = happyFail
 
 action_4 (14) = happyShift action_5
 action_4 _ = happyReduce_2
 
-action_5 (8) = happyShift action_9
-action_5 (5) = happyGoto action_6
-action_5 (6) = happyGoto action_7
-action_5 (7) = happyGoto action_8
+action_5 (16) = happyShift action_6
 action_5 _ = happyFail
 
-action_6 (15) = happyShift action_15
+action_6 (8) = happyShift action_10
+action_6 (5) = happyGoto action_7
+action_6 (6) = happyGoto action_8
+action_6 (7) = happyGoto action_9
 action_6 _ = happyFail
 
-action_7 (8) = happyShift action_9
-action_7 (5) = happyGoto action_14
-action_7 (6) = happyGoto action_7
-action_7 (7) = happyGoto action_8
-action_7 _ = happyReduce_3
+action_7 (15) = happyShift action_16
+action_7 _ = happyFail
 
-action_8 (10) = happyShift action_13
-action_8 _ = happyFail
+action_8 (8) = happyShift action_10
+action_8 (5) = happyGoto action_15
+action_8 (6) = happyGoto action_8
+action_8 (7) = happyGoto action_9
+action_8 _ = happyReduce_3
 
-action_9 (8) = happyShift action_11
-action_9 (13) = happyShift action_12
-action_9 (7) = happyGoto action_10
-action_9 _ = happyReduce_7
+action_9 (10) = happyShift action_14
+action_9 _ = happyFail
 
-action_10 _ = happyReduce_8
+action_10 (8) = happyShift action_12
+action_10 (13) = happyShift action_13
+action_10 (7) = happyGoto action_11
+action_10 _ = happyReduce_7
 
-action_11 (8) = happyShift action_11
-action_11 (7) = happyGoto action_10
-action_11 _ = happyReduce_7
+action_11 _ = happyReduce_8
 
-action_12 (11) = happyShift action_18
-action_12 _ = happyFail
+action_12 (8) = happyShift action_12
+action_12 (7) = happyGoto action_11
+action_12 _ = happyReduce_7
 
-action_13 (8) = happyShift action_17
+action_13 (11) = happyShift action_19
 action_13 _ = happyFail
 
-action_14 _ = happyReduce_4
+action_14 (8) = happyShift action_18
+action_14 _ = happyFail
 
-action_15 (9) = happyShift action_4
-action_15 (4) = happyGoto action_16
-action_15 _ = happyFail
+action_15 _ = happyReduce_4
 
-action_16 _ = happyReduce_1
+action_16 (9) = happyShift action_4
+action_16 (4) = happyGoto action_17
+action_16 _ = happyFail
 
-action_17 (13) = happyShift action_20
-action_17 _ = happyFail
+action_17 _ = happyReduce_1
 
-action_18 (9) = happyShift action_19
+action_18 (13) = happyShift action_21
 action_18 _ = happyFail
 
-action_19 (12) = happyShift action_22
+action_19 (9) = happyShift action_20
 action_19 _ = happyFail
 
-action_20 (11) = happyShift action_21
+action_20 (12) = happyShift action_23
 action_20 _ = happyFail
 
-action_21 (9) = happyShift action_23
+action_21 (11) = happyShift action_22
 action_21 _ = happyFail
 
-action_22 _ = happyReduce_5
+action_22 (9) = happyShift action_24
+action_22 _ = happyFail
 
-action_23 (12) = happyShift action_24
-action_23 _ = happyFail
+action_23 _ = happyReduce_5
 
-action_24 _ = happyReduce_6
+action_24 (12) = happyShift action_25
+action_24 _ = happyFail
 
-happyReduce_1 = happyReduce 5 4 happyReduction_1
-happyReduction_1 ((HappyAbsSyn4  happy_var_5) `HappyStk`
+action_25 _ = happyReduce_6
+
+happyReduce_1 = happyReduce 6 4 happyReduction_1
+happyReduction_1 ((HappyAbsSyn4  happy_var_6) `HappyStk`
 	_ `HappyStk`
-	(HappyAbsSyn5  happy_var_3) `HappyStk`
+	(HappyAbsSyn5  happy_var_4) `HappyStk`
+	(HappyTerminal (TokenOnce happy_var_3)) `HappyStk`
 	_ `HappyStk`
 	(HappyTerminal (TokenCode happy_var_1)) `HappyStk`
 	happyRest)
 	 = HappyAbsSyn4
-		 (Source    happy_var_1 happy_var_3 happy_var_5
+		 (Source    happy_var_1 happy_var_3 happy_var_4 happy_var_6
 	) `HappyStk` happyRest
 
 happyReduce_2 = happySpecReduce_1  4 happyReduction_2
@@ -177,7 +181,7 @@ happyReduction_8 (HappyAbsSyn7  happy_var_2)
 happyReduction_8 _ _  = notHappyAtAll 
 
 happyNewToken action sts stk [] =
-	action 16 16 notHappyAtAll (HappyState action) sts stk []
+	action 17 17 notHappyAtAll (HappyState action) sts stk []
 
 happyNewToken action sts stk (tk:tks) =
 	let cont i = action i i tk (HappyState action) sts stk tks in
@@ -190,10 +194,11 @@ happyNewToken action sts stk (tk:tks) =
 	TokenEq -> cont 13;
 	TokenStart -> cont 14;
 	TokenEnd -> cont 15;
+	TokenOnce happy_dollar_dollar -> cont 16;
 	_ -> happyError' (tk:tks)
 	}
 
-happyError_ 16 tk tks = happyError' tks
+happyError_ 17 tk tks = happyError' tks
 happyError_ _ tk tks = happyError' (tk:tks)
 
 newtype HappyIdentity a = HappyIdentity a
@@ -221,8 +226,8 @@ happySeq = happyDontSeq
 
 
 data Source
-    = Source    Code Rules Source
-    | SourceEnd Code
+    = Source     Code Bool Rules Source
+    | SourceEnd  Code
 
 data Token
     = TokenEq
@@ -233,6 +238,7 @@ data Token
     | TokenAngle
     | TokenStart
     | TokenEnd
+    | TokenOnce Bool
     deriving (Show)
 
 
@@ -242,14 +248,16 @@ parseError e = error $ "Parse error: " ++ show e
 
 lexer ::  String -> [Token]
 lexer [] = []
-lexer ('/' : '*' : 's' : 't' : 'a' : 'r' : 't' : ':' : cs) = TokenStart : lex_rules cs
+lexer ('/' : '*' : 's' : 't' : 'a' : 'r' : 't' : '_' : 'o' : 'n' : 'c' : 'e' : ':' : cs) = TokenStart : TokenOnce True : lex_rules cs
+lexer ('/' : '*' : 's' : 't' : 'a' : 'r' : 't' : ':' : cs) = TokenStart : TokenOnce False : lex_rules cs
 lexer cs =
-    let lex_entry_code :: DL.DList Char -> String -> (DL.DList Char, String)
-        lex_entry_code code "" = (code, "")
-        lex_entry_code code ('\n' : '/' : '*' : 's' : 't' : 'a' : 'r' : 't' : ':' : cs) = (code, cs)
+    let lex_entry_code :: DL.DList Char -> String -> (DL.DList Char, String, Bool)
+        lex_entry_code code "" = (code, "", False)
+        lex_entry_code code ('\n' : '/' : '*' : 's' : 't' : 'a' : 'r' : 't' : '_' : 'o' : 'n' : 'c' : 'e' : ':' : cs) = (code, cs, True)
+        lex_entry_code code ('\n' : '/' : '*' : 's' : 't' : 'a' : 'r' : 't' : ':' : cs) = (code, cs, False)
         lex_entry_code code (c : cs) = lex_entry_code (DL.snoc code c) cs
-        (code, rest) = lex_entry_code DL.empty cs
-    in  TokenCode ((BS.pack . DL.toList) code) : (if rest == "" then [] else TokenStart : lex_rules rest)
+        (code, rest, once) = lex_entry_code DL.empty cs
+    in  TokenCode ((BS.pack . DL.toList) code) : (if rest == "" then [] else TokenStart : TokenOnce once : lex_rules rest)
 
 
 lex_rules :: String -> [Token]
@@ -296,9 +304,10 @@ parse_source fp =
         rules2table (ManyRules (ComplexRule condlist name code) rules) = (name, (conds2list condlist, code)) : rules2table rules
 
         source2chunk_list :: Source -> ChunkList
-        source2chunk_list (SourceEnd code )             = LastChunk code
-        source2chunk_list (Source    code rules source) = Chunk
+        source2chunk_list (SourceEnd code)                   = LastChunk code
+        source2chunk_list (Source code once rules source) = Chunk
             code
+            once
             ((foldl'
                 (\ rules (name, (conds, code)) -> M.insertWith
                     (\ _ xs -> M.insertWith (\ _ code' -> BS.concat [BS.pack "{ ", code, code', BS.pack " }"]) (S.fromList conds) code xs)

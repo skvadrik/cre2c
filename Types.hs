@@ -85,7 +85,7 @@ instance Show Label where
 ---------------- Common types
 data ChunkList
     = LastChunk Code
-    | Chunk Code RuleTable ChunkList
+    | Chunk Code Bool RuleTable ChunkList
 data Rules
     = ManyRules Rule Rules
     | OneRule   Rule
