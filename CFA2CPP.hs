@@ -13,9 +13,9 @@ import           Types
 import           CFA
 
 
-cfa2cpp :: DCFA -> Code -> [M.HashMap (S.Set Cond) Code] -> Int -> Int -> Mode -> Code
-cfa2cpp dcfa prolog conds2code maxlen n_scanner mode =
-    let entry      = code_for_entry maxlen n_scanner mode
+cfa2cpp :: DCFA -> Code -> [M.HashMap (S.Set Cond) Code] -> Int -> Int -> Options -> Code
+cfa2cpp dcfa prolog conds2code maxlen n_scanner opts =
+    let entry      = code_for_entry maxlen n_scanner opts
         g          = dcfa_graph dcfa
         s0         = dcfa_init_state dcfa
         states     = M.foldlWithKey'
@@ -23,13 +23,13 @@ cfa2cpp dcfa prolog conds2code maxlen n_scanner mode =
                 [ code
                 , case s of
                     s | dcfa_is_final s dcfa -> BS.empty
-                    s                        -> code_for_state s (s == s0) False node conds2code S.empty n_scanner mode
+                    s                        -> code_for_state s (s == s0) False node conds2code S.empty n_scanner opts
                 ]
             ) BS.empty g
         final_states = M.foldlWithKey'
             (\ code s accepted -> BS.concat
                 [ code
-                , code_for_state s (s == s0) True (M.lookupDefault M.empty s g) conds2code accepted n_scanner mode
+                , code_for_state s (s == s0) True (M.lookupDefault M.empty s g) conds2code accepted n_scanner opts
                 ]
             ) BS.empty (dcfa_final_states dcfa)
     in  BS.concat
@@ -37,8 +37,8 @@ cfa2cpp dcfa prolog conds2code maxlen n_scanner mode =
             , entry
             , states
             , final_states
-            , case mode of
-                Once -> (BS.pack . concat)
+            , case mode opts of
+                OneTimeScanner -> (BS.pack . concat)
                     [ "\nm"
                     , show n_scanner
                     , "_fin:\n"
@@ -47,14 +47,14 @@ cfa2cpp dcfa prolog conds2code maxlen n_scanner mode =
             ]
 
 
-code_for_entry :: Int -> Int -> Mode -> Code
-code_for_entry maxlen k mode = let n_scanner = show k in BS.pack $ concat
+code_for_entry :: Int -> Int -> Options -> Code
+code_for_entry maxlen k opts = let n_scanner = show k in BS.pack $ concat
     [ "\n#define MAXLEN"
     , n_scanner
     , " "
     , show maxlen
-    , case mode of
-        Once -> "\ntoken = MARKER;"
+    , case mode opts of
+        OneTimeScanner -> "\ntoken = MARKER;"
         _ -> concat
             [ "\n\n\nm"
             , n_scanner
@@ -76,14 +76,14 @@ code_for_conditions =
     in  intercalate " || " . map f
 
 
-code_for_state :: State -> Bool -> Bool -> DCFANode -> [M.HashMap (S.Set Cond) Code] -> S.Set Id -> Int -> Mode -> Code
-code_for_state s is_init is_final node conds2code signs k mode = let n_scanner = show k in (BS.pack . concat)
+code_for_state :: State -> Bool -> Bool -> DCFANode -> [M.HashMap (S.Set Cond) Code] -> S.Set Id -> Int -> Options -> Code
+code_for_state s is_init is_final node conds2code signs k opts = let n_scanner = show k in (BS.pack . concat)
     [ "\nm"
     , n_scanner
     , "_"
     , show s
     , ":"
-    , if is_final then code_for_final_state conds2code signs (node == M.empty) mode else ""
+    , if is_final then code_for_final_state conds2code signs (node == M.empty) opts else ""
     , case M.toList node of
         [] -> concat
             [ "\n\tgoto m"
@@ -104,8 +104,8 @@ code_for_state s is_init is_final node conds2code signs k mode = let n_scanner =
                 [ let code_for_case = printf "\n\tcase 0x%X:" in case l of
                     LabelChar c  -> code_for_case c
                     LabelRange r -> concatMap code_for_case r
-                , case mode of
-                    Once -> ""
+                , case mode opts of
+                    OneTimeScanner -> ""
                     _    -> concat
                         [ if is_init || is_final then "\n\ttoken = adjust_marker ? MARKER : token;" else ""
                         , if is_init then "\n\tadjust_marker = true;" else ""
@@ -119,8 +119,8 @@ code_for_state s is_init is_final node conds2code signs k mode = let n_scanner =
                         , "_"
                         , show s'
                         , ";\n\t\telse {"
-                        , case mode of
-                            Once -> ""
+                        , case mode opts of
+                            OneTimeScanner -> ""
                             _    -> "\n\t\t\tMARKER += adjust_marker;"
                         , "\n\t\t\tgoto m"
                         , n_scanner
@@ -136,8 +136,8 @@ code_for_state s is_init is_final node conds2code signs k mode = let n_scanner =
                         ]
                 ]) (M.toList node)
             , "\n\tdefault:"
-            , case mode of
-                Once -> ""
+            , case mode opts of
+                OneTimeScanner -> ""
                 _    -> concat
                     [ if is_init then "\n\t\tadjust_marker = true;" else ""
                     , "\n\t\tMARKER += adjust_marker;"
@@ -150,8 +150,8 @@ code_for_state s is_init is_final node conds2code signs k mode = let n_scanner =
     ]
 
 
-code_for_final_state :: [M.HashMap (S.Set Cond) Code] -> S.Set Id -> Bool -> Mode -> String
-code_for_final_state conds2code signs is_empty_node mode =
+code_for_final_state :: [M.HashMap (S.Set Cond) Code] -> S.Set Id -> Bool -> Options -> String
+code_for_final_state conds2code signs is_empty_node opts =
     let conds2code' = S.foldl' (\ conds k -> M.toList (conds2code !! k) ++ conds) [] signs in concatMap
         (\ (conds, code) ->
             if not is_empty_node && conds /= S.empty
@@ -160,8 +160,8 @@ code_for_final_state conds2code signs is_empty_node mode =
                     , code_for_conditions [S.toList conds]
                     , ") {\n\t"
                     , BS.unpack code
-                    , case mode of
-                        Once -> ""
+                    , case mode opts of
+                        OneTimeScanner -> ""
                         _    -> concat
                             [ "\n\tMARKER = CURSOR;"
                             , "\n\tadjust_marker = false;"
@@ -171,8 +171,8 @@ code_for_final_state conds2code signs is_empty_node mode =
                 else concat
                     [ "\n\t"
                     , BS.unpack code
-                    , case mode of
-                        Once -> ""
+                    , case mode opts of
+                        OneTimeScanner -> ""
                         _    -> concat
                             [ "\n\tMARKER = CURSOR;"
                             , if not is_empty_node then "\n\tadjust_marker = false;" else ""

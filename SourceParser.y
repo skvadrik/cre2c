@@ -30,12 +30,16 @@ import           Types
     start         { TokenStart }
     end           { TokenEnd }
     mode          { TokenMode $$ }
+    match         { TokenMatch $$ }
 
 %%
 
 Source
-    : code start mode Rules end Source    { Source    $1 $3 $4 $6 }
+    : code start Options Rules end Source { Source    $1 $3 $4 $6 }
     | code                                { SourceEnd $1          }
+
+Options
+    : mode match                          { Options $1 $2 }
 
 Rules
     : Rule                                { OneRule   $1    }
@@ -53,7 +57,7 @@ CondList
 {
 
 data Source
-    = Source     Code Mode Rules Source
+    = Source     Code Options Rules Source
     | SourceEnd  Code
 
 data Token
@@ -66,6 +70,7 @@ data Token
     | TokenStart
     | TokenEnd
     | TokenMode Mode
+    | TokenMatch Match
     deriving (Show)
 
 
@@ -75,18 +80,43 @@ parseError e = error $ "Parse error: " ++ show e
 
 lexer ::  String -> [Token]
 lexer [] = []
-lexer ('/':'*':'s':'t':'a':'r':'t':'_':'t':'o':'k':'e':'n':'i':'z':'e':':':cs) = TokenStart : TokenMode Tokenize : lex_rules cs
-lexer ('/':'*':'s':'t':'a':'r':'t':'_':'o':'n':'c':'e':':':cs) = TokenStart : TokenMode Once : lex_rules cs
-lexer ('/':'*':'s':'t':'a':'r':'t':':': cs) = TokenStart : TokenMode Normal : lex_rules cs
+lexer ('/':'*':'s':'t':'a':'r':'t':':': cs) = TokenStart : lex_options cs
 lexer cs =
-    let lex_entry_code :: DL.DList Char -> String -> (DL.DList Char, String, Mode)
-        lex_entry_code code "" = (code, "", Normal)
-        lex_entry_code code ('\n':'/':'*':'s':'t':'a':'r':'t':'_':'t':'o':'k':'e':'n':'i':'z':'e':':':cs) = (code, cs, Tokenize)
-        lex_entry_code code ('\n':'/':'*':'s':'t':'a':'r':'t':'_':'o':'n':'c':'e':':':cs) = (code, cs, Once)
-        lex_entry_code code ('\n':'/':'*':'s':'t':'a':'r':'t':':':cs) = (code, cs, Normal)
+    let lex_entry_code :: DL.DList Char -> String -> (DL.DList Char, String)
+        lex_entry_code code "" = (code, "")
+        lex_entry_code code ('\n':'/':'*':'s':'t':'a':'r':'t':':':cs) = (code, cs)
         lex_entry_code code (c : cs) = lex_entry_code (DL.snoc code c) cs
-        (code, rest, mode) = lex_entry_code DL.empty cs
-    in  TokenCode ((BS.pack . DL.toList) code) : (if rest == "" then [] else TokenStart : TokenMode mode : lex_rules rest)
+        (code, rest) = lex_entry_code DL.empty cs
+    in  TokenCode ((BS.pack . DL.toList) code) : (if rest == "" then [] else TokenStart : lex_options rest)
+
+
+lex_options :: String -> [Token]
+lex_options cs =
+    let (mode, cs')   = (lex_mode . dropWhile isSpace) cs
+        (match, cs'') = (lex_match . dropWhile isSpace) cs'
+    in  TokenMode mode : TokenMatch match : lex_rules cs''
+
+
+lex_mode :: String -> (Mode, String)
+lex_mode ('!':'c':'r':'e':'2':'c':'_':'m':'o':'d':'e':':':cs) =
+    let (mode, rest) = (span (\ c -> isAlpha c || c == '-') . dropWhile isSpace) cs
+    in  case mode of
+            m | m == "scanner"          -> (Scanner, rest)
+            m | m == "one-time-scanner" -> (OneTimeScanner, rest)
+            m | m == "tokenizer"        -> (Tokenizer, rest)
+            _                           -> error $ "unknown mode: " ++ mode
+lex_mode _ = error " *** missing \"!cre2c_mode:\" directive"
+
+
+lex_match :: String -> (Match, String)
+lex_match ('!':'c':'r':'e':'2':'c':'_':'m':'a':'t':'c':'h':':':cs) =
+    let (match, rest) = (span (\ c -> isAlpha c) . dropWhile isSpace) cs
+    in  case match of
+            m | m == "longest"  -> (Longest, rest)
+            m | m == "shortest" -> (Shortest, rest)
+            m | m == "all"      -> (All, rest)
+            _                   -> error $ "unknown match: " ++ match
+lex_match _ = error " *** missing \"!cre2c_match:\" directive"
 
 
 lex_rules :: String -> [Token]
@@ -134,9 +164,9 @@ parse_source fp =
 
         source2chunk_list :: Source -> ChunkList
         source2chunk_list (SourceEnd code)                = LastChunk code
-        source2chunk_list (Source code mode rules source) = Chunk
+        source2chunk_list (Source code opts rules source) = Chunk
             code
-            mode
+            opts
             ((foldl'
                 (\ rules (name, (conds, code)) -> M.insertWith
                     (\ _ xs -> M.insertWith (\ _ code' -> BS.concat [BS.pack "{ ", code, code', BS.pack " }"]) (S.fromList conds) code xs)

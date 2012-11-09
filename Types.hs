@@ -85,11 +85,20 @@ instance Show Label where
 ---------------- Common types
 data ChunkList
     = LastChunk Code
-    | Chunk Code Mode RuleTable ChunkList
+    | Chunk Code Options RuleTable ChunkList
+data Options = Options
+    { mode  :: Mode
+    , match :: Match
+    } deriving (Show)
 data Mode
-    = Normal
-    | Once
-    | Tokenize
+    = Scanner
+    | OneTimeScanner
+    | Tokenizer
+    deriving (Show)
+data Match
+    = Longest
+    | Shortest
+    | All
     deriving (Show)
 data Rules
     = ManyRules Rule Rules
