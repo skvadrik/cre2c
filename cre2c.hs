@@ -17,11 +17,11 @@ import           RegexpParser
 
 gen_code :: ChunkList -> Int -> RegexpTable -> (BS.ByteString, Int)
 gen_code (LastChunk code)                   _ _            = (code, 0)
-gen_code (Chunk code once rules chunk_list) k regexp_table =
+gen_code (Chunk code mode rules chunk_list) k regexp_table =
     let (regexps, conds2code) = (unzip . M.toList) rules
         (ncfa, maxlen')       = re2ncfa regexps regexp_table
         dcfa                  = determine ncfa
-        code'                 = cfa2cpp dcfa code conds2code maxlen' k once
+        code'                 = cfa2cpp dcfa code conds2code maxlen' k mode
         (code'', maxlen'')    = gen_code chunk_list (k + 1) regexp_table
     in  (BS.append code' code'', max maxlen' maxlen'')
 

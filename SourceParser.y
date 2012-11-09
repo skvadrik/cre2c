@@ -29,12 +29,12 @@ import           Types
     '='           { TokenEq }
     start         { TokenStart }
     end           { TokenEnd }
-    once          { TokenOnce $$ }
+    mode          { TokenMode $$ }
 
 %%
 
 Source
-    : code start once Rules end Source    { Source    $1 $3 $4 $6 }
+    : code start mode Rules end Source    { Source    $1 $3 $4 $6 }
     | code                                { SourceEnd $1          }
 
 Rules
@@ -53,7 +53,7 @@ CondList
 {
 
 data Source
-    = Source     Code Bool Rules Source
+    = Source     Code Mode Rules Source
     | SourceEnd  Code
 
 data Token
@@ -65,7 +65,7 @@ data Token
     | TokenAngle
     | TokenStart
     | TokenEnd
-    | TokenOnce Bool
+    | TokenMode Mode
     deriving (Show)
 
 
@@ -75,21 +75,23 @@ parseError e = error $ "Parse error: " ++ show e
 
 lexer ::  String -> [Token]
 lexer [] = []
-lexer ('/' : '*' : 's' : 't' : 'a' : 'r' : 't' : '_' : 'o' : 'n' : 'c' : 'e' : ':' : cs) = TokenStart : TokenOnce True : lex_rules cs
-lexer ('/' : '*' : 's' : 't' : 'a' : 'r' : 't' : ':' : cs) = TokenStart : TokenOnce False : lex_rules cs
+lexer ('/':'*':'s':'t':'a':'r':'t':'_':'t':'o':'k':'e':'n':'i':'z':'e':':':cs) = TokenStart : TokenMode Tokenize : lex_rules cs
+lexer ('/':'*':'s':'t':'a':'r':'t':'_':'o':'n':'c':'e':':':cs) = TokenStart : TokenMode Once : lex_rules cs
+lexer ('/':'*':'s':'t':'a':'r':'t':':': cs) = TokenStart : TokenMode Normal : lex_rules cs
 lexer cs =
-    let lex_entry_code :: DL.DList Char -> String -> (DL.DList Char, String, Bool)
-        lex_entry_code code "" = (code, "", False)
-        lex_entry_code code ('\n' : '/' : '*' : 's' : 't' : 'a' : 'r' : 't' : '_' : 'o' : 'n' : 'c' : 'e' : ':' : cs) = (code, cs, True)
-        lex_entry_code code ('\n' : '/' : '*' : 's' : 't' : 'a' : 'r' : 't' : ':' : cs) = (code, cs, False)
+    let lex_entry_code :: DL.DList Char -> String -> (DL.DList Char, String, Mode)
+        lex_entry_code code "" = (code, "", Normal)
+        lex_entry_code code ('\n':'/':'*':'s':'t':'a':'r':'t':'_':'t':'o':'k':'e':'n':'i':'z':'e':':':cs) = (code, cs, Tokenize)
+        lex_entry_code code ('\n':'/':'*':'s':'t':'a':'r':'t':'_':'o':'n':'c':'e':':':cs) = (code, cs, Once)
+        lex_entry_code code ('\n':'/':'*':'s':'t':'a':'r':'t':':':cs) = (code, cs, Normal)
         lex_entry_code code (c : cs) = lex_entry_code (DL.snoc code c) cs
-        (code, rest, once) = lex_entry_code DL.empty cs
-    in  TokenCode ((BS.pack . DL.toList) code) : (if rest == "" then [] else TokenStart : TokenOnce once : lex_rules rest)
+        (code, rest, mode) = lex_entry_code DL.empty cs
+    in  TokenCode ((BS.pack . DL.toList) code) : (if rest == "" then [] else TokenStart : TokenMode mode : lex_rules rest)
 
 
 lex_rules :: String -> [Token]
 lex_rules [] = []
-lex_rules ('\n' : 'e' : 'n' : 'd' : '*' : '/' : cs) = TokenEnd : lexer cs -- [TokenCode (BS.pack cs)]
+lex_rules ('\n' : 'e' : 'n' : 'd' : '*' : '/' : cs) = TokenEnd : lexer cs
 lex_rules (c : cs)
     | isSpace c = lex_rules cs
     | isAlpha c = lex_name (c : cs)
@@ -131,10 +133,10 @@ parse_source fp =
         rules2table (ManyRules (ComplexRule condlist name code) rules) = (name, (conds2list condlist, code)) : rules2table rules
 
         source2chunk_list :: Source -> ChunkList
-        source2chunk_list (SourceEnd code)                   = LastChunk code
-        source2chunk_list (Source code once rules source) = Chunk
+        source2chunk_list (SourceEnd code)                = LastChunk code
+        source2chunk_list (Source code mode rules source) = Chunk
             code
-            once
+            mode
             ((foldl'
                 (\ rules (name, (conds, code)) -> M.insertWith
                     (\ _ xs -> M.insertWith (\ _ code' -> BS.concat [BS.pack "{ ", code, code', BS.pack " }"]) (S.fromList conds) code xs)
