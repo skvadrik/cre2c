@@ -1,4 +1,4 @@
 #!/bin/sh
 
 make clean
-make PROF="-rtsopts -auto-all -prof"
+make PROF="-auto-all -prof"
