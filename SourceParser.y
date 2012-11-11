@@ -101,10 +101,10 @@ lex_mode :: String -> (Mode, String)
 lex_mode ('!':'c':'r':'e':'2':'c':'_':'m':'o':'d':'e':':':cs) =
     let (mode, rest) = (span (\ c -> isAlpha c || c == '-') . dropWhile isSpace) cs
     in  case mode of
-            m | m == "scanner"          -> (Scanner, rest)
-            m | m == "one-time-scanner" -> (OneTimeScanner, rest)
-            m | m == "tokenizer"        -> (Tokenizer, rest)
-            _                           -> error $ "unknown mode: " ++ mode
+            m | m == "scanner"   -> (Scanner, rest)
+            m | m == "matcher"   -> (Matcher, rest)
+            m | m == "tokenizer" -> (Tokenizer, rest)
+            _                    -> error $ "unknown mode: " ++ mode
 lex_mode _ = error " *** missing \"!cre2c_mode:\" directive"
 
 

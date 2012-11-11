@@ -5,10 +5,11 @@ module CFA2CPP
 
 import qualified Data.HashMap.Strict       as M
 import qualified Data.Set                  as S
-import           Data.List                       (foldl', partition)
+import           Data.List                       (foldl', partition, nub)
 import qualified Data.ByteString.Char8     as BS
 import           Text.Printf                     (printf)
-import           Text.PrettyPrint.HughesPJ as PP (($$), (<>), text, char, int, empty, Doc, punctuate, braces, parens, hcat, vcat, space, colon, semi, nest)
+import           Text.PrettyPrint.HughesPJ       (($$), (<>), ($+$), Doc)
+import qualified Text.PrettyPrint.HughesPJ as PP
 
 import           Types
 import           CFA
@@ -20,28 +21,36 @@ cfa2cpp dcfa prolog conds2code maxlen n_scanner opts =
         g          = dcfa_graph dcfa
         s0         = dcfa_init_state dcfa
         states     = M.foldlWithKey'
-            (\ code s node -> PP.vcat
-                [ code
-                , case s of
+            (\ code s node -> code
+                $$$ case s of
                     s | dcfa_is_final s dcfa -> PP.empty
                     s                        -> code_for_state s (s == s0) False node conds2code S.empty n_scanner opts
-                ]
             ) PP.empty g
         final_states = M.foldlWithKey'
-            (\ code s accepted -> PP.vcat
-                [ code
-                , code_for_state s (s == s0) True (M.lookupDefault M.empty s g) conds2code accepted n_scanner opts
-                ]
+            (\ code s accepted -> code
+                $$$ code_for_state s (s == s0) True (M.lookupDefault M.empty s g) conds2code accepted n_scanner opts
             ) PP.empty (dcfa_final_states dcfa)
-    in  BS.pack $ show $ PP.vcat
-            [ PP.text $ BS.unpack prolog
-            , entry
-            , states
-            , final_states
-            , case mode opts of
-                OneTimeScanner -> m_fin_decl n_scanner
-                _              -> PP.empty
-            ]
+    in  (BS.pack . PP.render)
+            ( ( PP.text . BS.unpack ) prolog
+            $$$ entry
+            $$$ states
+            $$$ final_states
+            $$$ case mode opts of
+                Matcher -> m_fin_decl n_scanner
+                _       -> PP.empty )
+
+
+instance Eq Doc where
+    d1 == d2 = PP.render d1 == PP.render d2
+
+
+($$$) :: Doc -> Doc -> Doc
+($$$) d1 d2 = d1 $$ PP.text "" $$ d2
+infixl 5 $$$
+
+
+wrap_in_braces :: Doc -> Doc
+wrap_in_braces d = PP.text "{" $+$ PP.nest 4 d $$ PP.text "}"
 
 
 m_decl :: Int -> Int -> Doc
@@ -80,24 +89,24 @@ code_for_entry :: Int -> Int -> Options -> PP.Doc
 code_for_entry maxlen k opts =
     PP.text "#define MAXLEN" <> PP.int k <> PP.space <> PP.int maxlen
     $$ case mode opts of
-        OneTimeScanner -> PP.text "token = MARKER;"
-        _              -> m_fin_decl k $$ PP.text "CURSOR = MARKER;"
+        Matcher -> PP.text "token = MARKER;"
+        _       -> m_fin_decl k $$ PP.text "CURSOR = MARKER;"
     $$ PP.text "if (LIMIT - CURSOR < MAXLEN" <> PP.int k <> PP.text ") FILL();"
     $$ m_goto k 0
 
 
 code_for_conditions :: [[Cond]] -> Doc
 code_for_conditions =
-    ( PP.parens
-    . PP.hcat
-    . PP.punctuate (PP.text " || ")
-    . map
-        ( PP.parens
-        . PP.hcat
-        . PP.punctuate (PP.text " && ")
-        . map PP.text
-        )
-    )
+    let f :: String -> [Doc] -> Doc
+        f s xs = case nub xs of
+            []   -> PP.empty
+            [x]  -> x
+            xs'  ->
+                ( PP.parens
+                . PP.hcat
+                . PP.punctuate (PP.text s)
+                ) xs'
+    in  f " || " . map (f " && " . map PP.text)
 
 
 code_for_case_alternatives :: Label -> Doc
@@ -106,8 +115,8 @@ code_for_case_alternatives l = case l of
     LabelRange r -> PP.vcat $ map (PP.text . printf "case 0x%X:") r
 
 
-codegen_case1 :: DCFANode -> [M.HashMap (S.Set Cond) Code] -> Int -> PP.Doc
-codegen_case1 node conds2code k =
+codegen_case_matcher :: DCFANode -> [M.HashMap (S.Set Cond) Code] -> Int -> PP.Doc
+codegen_case_matcher node conds2code k =
     let get_conds = S.foldl' (\ conds k -> (map S.toList . M.keys) (conds2code !! k) ++ conds) []
         code' = M.foldlWithKey'
             (\ doc l (ks, s) -> doc
@@ -128,8 +137,8 @@ codegen_case1 node conds2code k =
         $$ PP.nest 4 ( m_fin_goto k )
 
 
-codegen_case2 :: Bool -> Bool -> DCFANode -> [M.HashMap (S.Set Cond) Code] -> Int -> PP.Doc
-codegen_case2 is_init is_final node conds2code k =
+codegen_case_scanner :: Bool -> Bool -> DCFANode -> [M.HashMap (S.Set Cond) Code] -> Int -> PP.Doc
+codegen_case_scanner is_init is_final node conds2code k =
     let get_conds = S.foldl' (\ conds k -> (map S.toList . M.keys) (conds2code !! k) ++ conds) []
         code' = M.foldlWithKey'
             (\ doc l (ks, s) -> doc
@@ -148,7 +157,7 @@ codegen_case2 is_init is_final node conds2code k =
                             <> ( PP.parens . code_for_conditions) conds''
                             $$ PP.nest 4 ( m_goto k s )
                             $$ PP.text "else"
-                            $$ ( PP.nest 4 . PP.braces )
+                            $$ wrap_in_braces
                                 ( PP.text "MARKER += adjust_marker;"
                                 $$ m_fin_goto k
                                 )
@@ -170,50 +179,53 @@ code_for_state s is_init is_final node conds2code signs k opts =
     $$ ( if not is_final then PP.empty else
         let conds2code' = S.foldl' (\ conds k -> M.toList (conds2code !! k) ++ conds) [] signs
         in  case mode opts of
-                OneTimeScanner -> codegen_final_state1 conds2code' (node == M.empty)
-                _              -> codegen_final_state2 conds2code' (node == M.empty) )
-    $$ case M.toList node of
-        [] -> PP.nest 4 $ m_fin_goto k
+                Matcher -> codegen_final_state_matcher conds2code' (node == M.empty)
+                _       -> codegen_final_state_scanner conds2code' (node == M.empty) )
+    $$ ( PP.nest 4 $ case M.toList node of
+        [] -> m_fin_goto k
         [(LabelRange r, (_, s))] | S.fromList r == S.fromList ['\x00' .. '\xFF'] ->
             PP.text "CURSOR++;"
             $$ m_goto k s
         _ ->
             PP.text "switch (*CURSOR++)"
-            $$ (PP.nest 4 $ PP.braces $ case mode opts of
-                OneTimeScanner -> codegen_case1 node conds2code k
-                _              -> codegen_case2 is_init is_final node conds2code k)
+            $$ ( wrap_in_braces $ case mode opts of
+                Matcher -> codegen_case_matcher node conds2code k
+                _       -> codegen_case_scanner is_init is_final node conds2code k ) )
 
 
-codegen_final_state1 :: [(S.Set Cond, Code)] -> Bool -> Doc
-codegen_final_state1 conds2code is_empty_node = foldl'
-    (\ doc (conds, code) -> doc $$ PP.nest 4
-        ( if not is_empty_node && conds /= S.empty
-            then
-                PP.text "if "
-                <> ( PP.parens . code_for_conditions ) [S.toList conds]
-                $$ ( PP.nest 4 . PP.braces . PP.text . BS.unpack ) code
-            else ( PP.text . BS.unpack ) code
-        )
-    ) PP.empty conds2code
+codegen_final_state_matcher :: [(S.Set Cond, Code)] -> Bool -> Doc
+codegen_final_state_matcher conds2code is_empty_node =
+    let doc_conds = PP.parens . code_for_conditions
+        doc_code  = PP.nest 4 . PP.text . BS.unpack
+        f doc (conds, code) = doc $$ PP.nest 4
+            ( if not is_empty_node && conds /= S.empty
+                then
+                    PP.text "if "
+                    <> doc_conds [S.toList conds]
+                    $$ doc_code code
+                else ( PP.text . BS.unpack ) code
+            )
+    in  foldl' f  PP.empty conds2code
 
 
-codegen_final_state2 :: [(S.Set Cond, Code)] -> Bool -> Doc
-codegen_final_state2 conds2code is_empty_node = foldl'
-    (\ doc (conds, code) -> doc $$ PP.nest 4
-        ( if not is_empty_node && conds /= S.empty
-            then
-                PP.text "if "
-                <> ( PP.parens . code_for_conditions) [S.toList conds]
-                $$ ( PP.braces . PP.nest 4 )
-                    ( ( PP.text . BS.unpack ) code
+codegen_final_state_scanner :: [(S.Set Cond, Code)] -> Bool -> Doc
+codegen_final_state_scanner conds2code is_empty_node =
+    let doc_conds = PP.parens . code_for_conditions
+        doc_code  = PP.text . BS.unpack
+        f doc (conds, code) = doc $$ PP.nest 4
+            ( if not is_empty_node && conds /= S.empty
+                then
+                    PP.text "if "
+                    <> doc_conds [S.toList conds]
+                    $$ wrap_in_braces
+                        ( doc_code code
+                        $$ PP.text "MARKER = CURSOR;"
+                        $$ PP.text "adjust_marker = false;"
+                        )
+                else
+                    ( PP.text . BS.unpack ) code
                     $$ PP.text "MARKER = CURSOR;"
-                    $$ PP.text "adjust_marker = false;"
-                    )
-            else
-                ( PP.text . BS.unpack ) code
-                $$ PP.text "MARKER = CURSOR;"
-                $$ if is_empty_node then PP.empty else PP.text "adjust_marker = false;"
-        )
-    ) PP.empty conds2code
-
+                    $$ if is_empty_node then PP.empty else PP.text "adjust_marker = false;"
+            )
+    in  foldl' f  PP.empty conds2code
 

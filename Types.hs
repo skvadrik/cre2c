@@ -92,7 +92,7 @@ data Options = Options
     } deriving (Show)
 data Mode
     = Scanner
-    | OneTimeScanner
+    | Matcher
     | Tokenizer
     deriving (Show)
 data Match
