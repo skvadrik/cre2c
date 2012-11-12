@@ -40,18 +40,44 @@ merge_regexp_tables (rt : rts) =
     in  foldl' merge_one rt rts
 
 
+data Args = Args
+    { src     :: Maybe FilePath
+    , dest    :: Maybe FilePath
+    , defs    :: [FilePath]
+    , verbose :: Int
+    }
+
+
+parse_args :: [String] -> Args
+parse_args =
+    let parse_args' :: Args -> [String] -> Args
+        parse_args' args []              = args
+        parse_args' args ("-v" : xs)     = parse_args' (args { verbose = 1 }) xs
+        parse_args' args ("-o" : x : xs) = parse_args' (args { dest = Just x }) xs
+        parse_args' args ("-d" : xs) =
+            let span_defs :: [FilePath] -> [String] -> Args
+                span_defs ds []                 = args { defs = ds }
+                span_defs ds xs@(('-' : _) : _) = parse_args' (args { defs = ds }) xs
+                span_defs ds (x : xs)           = span_defs (x : ds) xs
+            in  span_defs [] xs
+        parse_args' args (x : xs)        = parse_args' (args { src = Just x }) xs
+    in  parse_args' (Args Nothing Nothing [] 0)
+
+
 main :: IO ()
 main = do
-    args <- getArgs
-    (fcre, fcpp, fdefs) <- case args of
-        cre : cpp : defs -> return (cre, cpp, defs)
-        _                -> error "usage: ./cre2c.hs <source.cre> <destination.cpp> <rules.def> [<rules1.def> ... <rulesN.def>]"
+    args <- parse_args <$> getArgs
+    let (fsrc, fdest, fdefs, verbose) = case args of
+            (Args Nothing     _          _    _) -> error "No source file specified."
+            (Args _           Nothing    _    _) -> error "No destination file specified."
+            (Args _           _          []   _) -> error "No .def files specified."
+            (Args (Just src) (Just dest) defs v) -> (src, dest, defs, v)
 
-    chunk_list   <- parse_source fcre
+    chunk_list   <- parse_source fsrc
     regexp_table <- merge_regexp_tables <$> mapM parse_regexps fdefs
     let (code, maxlen) = gen_code chunk_list 0 regexp_table
 
-    BS.writeFile fcpp $ BS.concat
+    BS.writeFile fdest $ BS.concat
         [ BS.pack "#define MAXLEN "
         , BS.pack $ show maxlen
         , BS.pack "\n"
