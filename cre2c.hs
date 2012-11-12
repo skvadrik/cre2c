@@ -6,6 +6,7 @@ import qualified Data.HashMap.Strict   as M
 import qualified Data.ByteString.Char8 as BS
 import           Data.List                   (foldl')
 import           Control.Applicative         ((<$>))
+import           Debug.Trace
 
 import           Types
 import           CFA
@@ -15,14 +16,22 @@ import           SourceParser
 import           RegexpParser
 
 
-gen_code :: ChunkList -> Int -> RegexpTable -> (BS.ByteString, Int)
-gen_code (LastChunk code)                   _ _            = (code, 0)
-gen_code (Chunk code opts rules chunk_list) k regexp_table =
-    let (regexps, conds2code) = (unzip . M.toList) rules
+trace' :: (Show a) => a -> a
+trace' a = trace (show a) a
+
+
+gen_code :: ChunkList -> Int -> RegexpTable -> Verbosity -> (BS.ByteString, Int)
+gen_code (LastChunk code)                   _ _            _ = (code, 0)
+gen_code (Chunk code opts rules chunk_list) k regexp_table v =
+    let verbose :: (Show a) => a -> a
+        verbose = case v of
+            V0 -> id
+            V1 -> trace'
+        (regexps, conds2code) = (unzip . M.toList) rules
         (ncfa, maxlen')       = re2ncfa regexps regexp_table
-        dcfa                  = determine ncfa
-        code'                 = cfa2cpp dcfa code conds2code maxlen' k opts
-        (code'', maxlen'')    = gen_code chunk_list (k + 1) regexp_table
+        dcfa                  = determine (verbose ncfa)
+        code'                 = cfa2cpp (verbose dcfa) code conds2code maxlen' k opts
+        (code'', maxlen'')    = gen_code chunk_list (k + 1) regexp_table v
     in  (BS.append code' code'', max maxlen' maxlen'')
 
 
@@ -40,11 +49,12 @@ merge_regexp_tables (rt : rts) =
     in  foldl' merge_one rt rts
 
 
+data Verbosity = V0 | V1
 data Args = Args
     { src     :: Maybe FilePath
     , dest    :: Maybe FilePath
     , defs    :: [FilePath]
-    , verbose :: Int
+    , verbose :: Verbosity
     }
 
 
@@ -52,7 +62,7 @@ parse_args :: [String] -> Args
 parse_args =
     let parse_args' :: Args -> [String] -> Args
         parse_args' args []              = args
-        parse_args' args ("-v" : xs)     = parse_args' (args { verbose = 1 }) xs
+        parse_args' args ("-v" : xs)     = parse_args' (args { verbose = V1 }) xs
         parse_args' args ("-o" : x : xs) = parse_args' (args { dest = Just x }) xs
         parse_args' args ("-d" : xs) =
             let span_defs :: [FilePath] -> [String] -> Args
@@ -61,7 +71,7 @@ parse_args =
                 span_defs ds (x : xs)           = span_defs (x : ds) xs
             in  span_defs [] xs
         parse_args' args (x : xs)        = parse_args' (args { src = Just x }) xs
-    in  parse_args' (Args Nothing Nothing [] 0)
+    in  parse_args' (Args Nothing Nothing [] V0)
 
 
 main :: IO ()
@@ -75,7 +85,7 @@ main = do
 
     chunk_list   <- parse_source fsrc
     regexp_table <- merge_regexp_tables <$> mapM parse_regexps fdefs
-    let (code, maxlen) = gen_code chunk_list 0 regexp_table
+    let (code, maxlen) = gen_code chunk_list 0 regexp_table verbose
 
     BS.writeFile fdest $ BS.concat
         [ BS.pack "#define MAXLEN "
