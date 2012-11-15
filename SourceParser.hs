@@ -15,7 +15,7 @@ import           Types
 
 -- parser produced by Happy Version 1.18.10
 
-data HappyAbsSyn t4 t5 t6 t7 t8
+data HappyAbsSyn t4 t5 t6 t7 t8 t9 t10 t11
 	= HappyTerminal (Token)
 	| HappyErrorToken Int
 	| HappyAbsSyn4 t4
@@ -23,99 +23,190 @@ data HappyAbsSyn t4 t5 t6 t7 t8
 	| HappyAbsSyn6 t6
 	| HappyAbsSyn7 t7
 	| HappyAbsSyn8 t8
+	| HappyAbsSyn9 t9
+	| HappyAbsSyn10 t10
+	| HappyAbsSyn11 t11
 
-action_0 (10) = happyShift action_4
+action_0 (14) = happyShift action_4
 action_0 (4) = happyGoto action_3
 action_0 _ = happyFail
 
-action_1 (10) = happyShift action_2
+action_1 (14) = happyShift action_2
 action_1 _ = happyFail
 
-action_2 (15) = happyShift action_5
 action_2 _ = happyFail
 
-action_3 (19) = happyAccept
+action_3 (24) = happyAccept
 action_3 _ = happyFail
 
-action_4 (15) = happyShift action_5
-action_4 _ = happyReduce_2
+action_4 (20) = happyShift action_5
+action_4 _ = happyReduce_1
 
-action_5 (17) = happyShift action_7
+action_5 (22) = happyShift action_7
 action_5 (5) = happyGoto action_6
 action_5 _ = happyFail
 
-action_6 (9) = happyShift action_12
+action_6 (12) = happyShift action_15
 action_6 (6) = happyGoto action_9
 action_6 (7) = happyGoto action_10
 action_6 (8) = happyGoto action_11
+action_6 (9) = happyGoto action_12
+action_6 (10) = happyGoto action_13
+action_6 (11) = happyGoto action_14
 action_6 _ = happyFail
 
-action_7 (18) = happyShift action_8
+action_7 (23) = happyShift action_8
 action_7 _ = happyFail
 
-action_8 _ = happyReduce_3
+action_8 (13) = happyShift action_28
+action_8 _ = happyFail
 
-action_9 (16) = happyShift action_18
+action_9 (21) = happyShift action_27
 action_9 _ = happyFail
 
-action_10 (9) = happyShift action_12
-action_10 (6) = happyGoto action_17
-action_10 (7) = happyGoto action_10
-action_10 (8) = happyGoto action_11
 action_10 _ = happyReduce_4
 
-action_11 (11) = happyShift action_16
-action_11 _ = happyFail
+action_11 (12) = happyShift action_26
+action_11 (7) = happyGoto action_24
+action_11 (8) = happyGoto action_11
+action_11 (11) = happyGoto action_25
+action_11 _ = happyReduce_6
 
-action_12 (9) = happyShift action_14
-action_12 (14) = happyShift action_15
-action_12 (8) = happyGoto action_13
-action_12 _ = happyReduce_8
+action_12 _ = happyReduce_5
 
-action_13 _ = happyReduce_9
+action_13 (12) = happyShift action_23
+action_13 (9) = happyGoto action_21
+action_13 (10) = happyGoto action_13
+action_13 (11) = happyGoto action_22
+action_13 _ = happyReduce_10
 
-action_14 (9) = happyShift action_14
-action_14 (8) = happyGoto action_13
-action_14 _ = happyReduce_8
+action_14 (15) = happyShift action_20
+action_14 _ = happyFail
 
-action_15 (12) = happyShift action_21
-action_15 _ = happyFail
+action_15 (12) = happyShift action_17
+action_15 (16) = happyShift action_18
+action_15 (19) = happyShift action_19
+action_15 (11) = happyGoto action_16
+action_15 _ = happyReduce_14
 
-action_16 (9) = happyShift action_20
-action_16 _ = happyFail
+action_16 _ = happyReduce_15
 
-action_17 _ = happyReduce_5
+action_17 (12) = happyShift action_17
+action_17 (11) = happyGoto action_16
+action_17 _ = happyReduce_14
 
-action_18 (10) = happyShift action_4
-action_18 (4) = happyGoto action_19
+action_18 (12) = happyShift action_34
 action_18 _ = happyFail
 
-action_19 _ = happyReduce_1
+action_19 (17) = happyShift action_33
+action_19 _ = happyFail
 
-action_20 (14) = happyShift action_23
+action_20 (12) = happyShift action_32
 action_20 _ = happyFail
 
-action_21 (10) = happyShift action_22
-action_21 _ = happyFail
+action_21 _ = happyReduce_11
 
-action_22 (13) = happyShift action_25
+action_22 (15) = happyShift action_31
 action_22 _ = happyFail
 
-action_23 (12) = happyShift action_24
-action_23 _ = happyFail
+action_23 (12) = happyShift action_17
+action_23 (16) = happyShift action_18
+action_23 (11) = happyGoto action_16
+action_23 _ = happyReduce_14
 
-action_24 (10) = happyShift action_26
-action_24 _ = happyFail
+action_24 _ = happyReduce_7
 
-action_25 _ = happyReduce_6
+action_25 (15) = happyShift action_30
+action_25 _ = happyFail
 
-action_26 (13) = happyShift action_27
-action_26 _ = happyFail
+action_26 (12) = happyShift action_17
+action_26 (19) = happyShift action_19
+action_26 (11) = happyGoto action_16
+action_26 _ = happyReduce_14
 
-action_27 _ = happyReduce_7
+action_27 (14) = happyShift action_4
+action_27 (4) = happyGoto action_29
+action_27 _ = happyFail
 
-happyReduce_1 = happyReduce 6 4 happyReduction_1
-happyReduction_1 ((HappyAbsSyn4  happy_var_6) `HappyStk`
+action_28 _ = happyReduce_3
+
+action_29 _ = happyReduce_2
+
+action_30 (12) = happyShift action_40
+action_30 _ = happyFail
+
+action_31 (12) = happyShift action_39
+action_31 _ = happyFail
+
+action_32 (16) = happyShift action_37
+action_32 (19) = happyShift action_38
+action_32 _ = happyFail
+
+action_33 (14) = happyShift action_36
+action_33 _ = happyFail
+
+action_34 (19) = happyShift action_35
+action_34 _ = happyFail
+
+action_35 (17) = happyShift action_44
+action_35 _ = happyFail
+
+action_36 (18) = happyShift action_43
+action_36 _ = happyFail
+
+action_37 (12) = happyShift action_42
+action_37 _ = happyFail
+
+action_38 (17) = happyShift action_41
+action_38 _ = happyFail
+
+action_39 (16) = happyShift action_37
+action_39 _ = happyFail
+
+action_40 (19) = happyShift action_38
+action_40 _ = happyFail
+
+action_41 (14) = happyShift action_47
+action_41 _ = happyFail
+
+action_42 (19) = happyShift action_46
+action_42 _ = happyFail
+
+action_43 _ = happyReduce_8
+
+action_44 (14) = happyShift action_45
+action_44 _ = happyFail
+
+action_45 (18) = happyShift action_50
+action_45 _ = happyFail
+
+action_46 (17) = happyShift action_49
+action_46 _ = happyFail
+
+action_47 (18) = happyShift action_48
+action_47 _ = happyFail
+
+action_48 _ = happyReduce_9
+
+action_49 (14) = happyShift action_51
+action_49 _ = happyFail
+
+action_50 _ = happyReduce_12
+
+action_51 (18) = happyShift action_52
+action_51 _ = happyFail
+
+action_52 _ = happyReduce_13
+
+happyReduce_1 = happySpecReduce_1  4 happyReduction_1
+happyReduction_1 (HappyTerminal (TokenCode happy_var_1))
+	 =  HappyAbsSyn4
+		 (SourceEnd happy_var_1
+	)
+happyReduction_1 _  = notHappyAtAll 
+
+happyReduce_2 = happyReduce 6 4 happyReduction_2
+happyReduction_2 ((HappyAbsSyn4  happy_var_6) `HappyStk`
 	_ `HappyStk`
 	(HappyAbsSyn6  happy_var_4) `HappyStk`
 	(HappyAbsSyn5  happy_var_3) `HappyStk`
@@ -126,95 +217,148 @@ happyReduction_1 ((HappyAbsSyn4  happy_var_6) `HappyStk`
 		 (Source    happy_var_1 happy_var_3 happy_var_4 happy_var_6
 	) `HappyStk` happyRest
 
-happyReduce_2 = happySpecReduce_1  4 happyReduction_2
-happyReduction_2 (HappyTerminal (TokenCode happy_var_1))
-	 =  HappyAbsSyn4
-		 (SourceEnd happy_var_1
-	)
-happyReduction_2 _  = notHappyAtAll 
-
-happyReduce_3 = happySpecReduce_2  5 happyReduction_3
-happyReduction_3 (HappyTerminal (TokenMatch happy_var_2))
+happyReduce_3 = happySpecReduce_3  5 happyReduction_3
+happyReduction_3 (HappyTerminal (TokenBlock happy_var_3))
+	(HappyTerminal (TokenMatch happy_var_2))
 	(HappyTerminal (TokenMode happy_var_1))
 	 =  HappyAbsSyn5
-		 (Options happy_var_1 happy_var_2
+		 (Options happy_var_1 happy_var_2 happy_var_3
 	)
-happyReduction_3 _ _  = notHappyAtAll 
+happyReduction_3 _ _ _  = notHappyAtAll 
 
 happyReduce_4 = happySpecReduce_1  6 happyReduction_4
 happyReduction_4 (HappyAbsSyn7  happy_var_1)
 	 =  HappyAbsSyn6
-		 (OneRule   happy_var_1
+		 (R1 happy_var_1
 	)
 happyReduction_4 _  = notHappyAtAll 
 
-happyReduce_5 = happySpecReduce_2  6 happyReduction_5
-happyReduction_5 (HappyAbsSyn6  happy_var_2)
-	(HappyAbsSyn7  happy_var_1)
+happyReduce_5 = happySpecReduce_1  6 happyReduction_5
+happyReduction_5 (HappyAbsSyn9  happy_var_1)
 	 =  HappyAbsSyn6
-		 (ManyRules happy_var_1 happy_var_2
+		 (R2 happy_var_1
 	)
-happyReduction_5 _ _  = notHappyAtAll 
+happyReduction_5 _  = notHappyAtAll 
 
-happyReduce_6 = happyReduce 5 7 happyReduction_6
-happyReduction_6 (_ `HappyStk`
+happyReduce_6 = happySpecReduce_1  7 happyReduction_6
+happyReduction_6 (HappyAbsSyn8  happy_var_1)
+	 =  HappyAbsSyn7
+		 (ROne1  happy_var_1
+	)
+happyReduction_6 _  = notHappyAtAll 
+
+happyReduce_7 = happySpecReduce_2  7 happyReduction_7
+happyReduction_7 (HappyAbsSyn7  happy_var_2)
+	(HappyAbsSyn8  happy_var_1)
+	 =  HappyAbsSyn7
+		 (RMany1 happy_var_1 happy_var_2
+	)
+happyReduction_7 _ _  = notHappyAtAll 
+
+happyReduce_8 = happyReduce 5 8 happyReduction_8
+happyReduction_8 (_ `HappyStk`
 	(HappyTerminal (TokenCode happy_var_4)) `HappyStk`
 	_ `HappyStk`
 	_ `HappyStk`
 	(HappyTerminal (TokenName happy_var_1)) `HappyStk`
 	happyRest)
-	 = HappyAbsSyn7
-		 (SimpleRule  happy_var_1 happy_var_4
+	 = HappyAbsSyn8
+		 (RSimple1  happy_var_1 happy_var_4
 	) `HappyStk` happyRest
 
-happyReduce_7 = happyReduce 7 7 happyReduction_7
-happyReduction_7 (_ `HappyStk`
+happyReduce_9 = happyReduce 7 8 happyReduction_9
+happyReduction_9 (_ `HappyStk`
 	(HappyTerminal (TokenCode happy_var_6)) `HappyStk`
 	_ `HappyStk`
 	_ `HappyStk`
 	(HappyTerminal (TokenName happy_var_3)) `HappyStk`
 	_ `HappyStk`
-	(HappyAbsSyn8  happy_var_1) `HappyStk`
+	(HappyAbsSyn11  happy_var_1) `HappyStk`
 	happyRest)
-	 = HappyAbsSyn7
-		 (ComplexRule happy_var_1 happy_var_3 happy_var_6
+	 = HappyAbsSyn8
+		 (RComplex1 happy_var_1 happy_var_3 happy_var_6
 	) `HappyStk` happyRest
 
-happyReduce_8 = happySpecReduce_1  8 happyReduction_8
-happyReduction_8 (HappyTerminal (TokenName happy_var_1))
-	 =  HappyAbsSyn8
+happyReduce_10 = happySpecReduce_1  9 happyReduction_10
+happyReduction_10 (HappyAbsSyn10  happy_var_1)
+	 =  HappyAbsSyn9
+		 (ROne2  happy_var_1
+	)
+happyReduction_10 _  = notHappyAtAll 
+
+happyReduce_11 = happySpecReduce_2  9 happyReduction_11
+happyReduction_11 (HappyAbsSyn9  happy_var_2)
+	(HappyAbsSyn10  happy_var_1)
+	 =  HappyAbsSyn9
+		 (RMany2 happy_var_1 happy_var_2
+	)
+happyReduction_11 _ _  = notHappyAtAll 
+
+happyReduce_12 = happyReduce 7 10 happyReduction_12
+happyReduction_12 (_ `HappyStk`
+	(HappyTerminal (TokenCode happy_var_6)) `HappyStk`
+	_ `HappyStk`
+	_ `HappyStk`
+	(HappyTerminal (TokenName happy_var_3)) `HappyStk`
+	_ `HappyStk`
+	(HappyTerminal (TokenName happy_var_1)) `HappyStk`
+	happyRest)
+	 = HappyAbsSyn10
+		 (RSimple2  happy_var_1 happy_var_3 happy_var_6
+	) `HappyStk` happyRest
+
+happyReduce_13 = happyReduce 9 10 happyReduction_13
+happyReduction_13 (_ `HappyStk`
+	(HappyTerminal (TokenCode happy_var_8)) `HappyStk`
+	_ `HappyStk`
+	_ `HappyStk`
+	(HappyTerminal (TokenName happy_var_5)) `HappyStk`
+	_ `HappyStk`
+	(HappyTerminal (TokenName happy_var_3)) `HappyStk`
+	_ `HappyStk`
+	(HappyAbsSyn11  happy_var_1) `HappyStk`
+	happyRest)
+	 = HappyAbsSyn10
+		 (RComplex2 happy_var_1 happy_var_3 happy_var_5 happy_var_8
+	) `HappyStk` happyRest
+
+happyReduce_14 = happySpecReduce_1  11 happyReduction_14
+happyReduction_14 (HappyTerminal (TokenName happy_var_1))
+	 =  HappyAbsSyn11
 		 (OneCond   happy_var_1
 	)
-happyReduction_8 _  = notHappyAtAll 
+happyReduction_14 _  = notHappyAtAll 
 
-happyReduce_9 = happySpecReduce_2  8 happyReduction_9
-happyReduction_9 (HappyAbsSyn8  happy_var_2)
+happyReduce_15 = happySpecReduce_2  11 happyReduction_15
+happyReduction_15 (HappyAbsSyn11  happy_var_2)
 	(HappyTerminal (TokenName happy_var_1))
-	 =  HappyAbsSyn8
+	 =  HappyAbsSyn11
 		 (ManyConds happy_var_1 happy_var_2
 	)
-happyReduction_9 _ _  = notHappyAtAll 
+happyReduction_15 _ _  = notHappyAtAll 
 
 happyNewToken action sts stk [] =
-	action 19 19 notHappyAtAll (HappyState action) sts stk []
+	action 24 24 notHappyAtAll (HappyState action) sts stk []
 
 happyNewToken action sts stk (tk:tks) =
 	let cont i = action i i tk (HappyState action) sts stk tks in
 	case tk of {
-	TokenName happy_dollar_dollar -> cont 9;
-	TokenCode happy_dollar_dollar -> cont 10;
-	TokenAngle -> cont 11;
-	TokenOParenthesis -> cont 12;
-	TokenCParenthesis -> cont 13;
-	TokenEq -> cont 14;
-	TokenStart -> cont 15;
-	TokenEnd -> cont 16;
-	TokenMode happy_dollar_dollar -> cont 17;
-	TokenMatch happy_dollar_dollar -> cont 18;
+	TokenName happy_dollar_dollar -> cont 12;
+	TokenBlock happy_dollar_dollar -> cont 13;
+	TokenCode happy_dollar_dollar -> cont 14;
+	TokenAngle -> cont 15;
+	TokenColon -> cont 16;
+	TokenOParenthesis -> cont 17;
+	TokenCParenthesis -> cont 18;
+	TokenEq -> cont 19;
+	TokenStart -> cont 20;
+	TokenEnd -> cont 21;
+	TokenMode happy_dollar_dollar -> cont 22;
+	TokenMatch happy_dollar_dollar -> cont 23;
 	_ -> happyError' (tk:tks)
 	}
 
-happyError_ 19 tk tks = happyError' tks
+happyError_ 24 tk tks = happyError' tks
 happyError_ _ tk tks = happyError' (tk:tks)
 
 newtype HappyIdentity a = HappyIdentity a
@@ -242,16 +386,38 @@ happySeq = happyDontSeq
 
 
 data Source
-    = Source     Code Options Rules Source
-    | SourceEnd  Code
+    = SourceEnd  Code
+    | Source     Code Options Rules Source
+
+data Rules
+    = R1 Rules1
+    | R2 Rules2
+
+data Rules1
+    = RMany1 Rule1 Rules1
+    | ROne1  Rule1
+
+data Rule1
+    = RSimple1  RegexpName Code
+    | RComplex1 CondList RegexpName Code
+
+data Rules2
+    = RMany2 Rule2 Rules2
+    | ROne2  Rule2
+
+data Rule2
+    = RSimple2  RegexpName BlockName Code
+    | RComplex2 CondList RegexpName BlockName Code
 
 data Token
     = TokenEq
     | TokenCode BS.ByteString
     | TokenName String
+    | TokenBlock (Maybe String)
     | TokenOParenthesis
     | TokenCParenthesis
     | TokenAngle
+    | TokenColon
     | TokenStart
     | TokenEnd
     | TokenMode Mode
@@ -277,31 +443,43 @@ lexer cs =
 
 lex_options :: String -> [Token]
 lex_options cs =
-    let (mode, cs')   = (lex_mode . dropWhile isSpace) cs
-        (match, cs'') = (lex_match . dropWhile isSpace) cs'
-    in  TokenMode mode : TokenMatch match : lex_rules cs''
+    let (mode, cs')    = (lex_mode . dropWhile isSpace) cs
+        (match, cs'')  = (lex_match . dropWhile isSpace) cs'
+        (block, cs''') = (lex_block . dropWhile isSpace) cs''
+    in  TokenMode mode : TokenMatch match : TokenBlock block : case block of
+            Nothing -> lex_rules cs'''
+            Just b  -> lex_rules_b cs'''
 
 
 lex_mode :: String -> (Mode, String)
 lex_mode ('!':'c':'r':'e':'2':'c':'_':'m':'o':'d':'e':':':cs) =
-    let (mode, rest) = (span (\ c -> isAlpha c || c == '-') . dropWhile isSpace) cs
+    let (mode, rest) = (span (\ c -> isAlpha c || c == '_') . dropWhile isSpace) cs
     in  case mode of
             m | m == "scanner"   -> (Scanner, rest)
             m | m == "matcher"   -> (Matcher, rest)
             m | m == "tokenizer" -> (Tokenizer, rest)
-            _                    -> error $ "unknown mode: " ++ mode
-lex_mode _ = error " *** missing \"!cre2c_mode:\" directive"
+            _                    -> error $ "*** SourceParser: unknown mode: " ++ mode
+lex_mode _ = error "*** SourceParser: missing \"!cre2c_mode:\" directive"
 
 
 lex_match :: String -> (Match, String)
 lex_match ('!':'c':'r':'e':'2':'c':'_':'m':'a':'t':'c':'h':':':cs) =
-    let (match, rest) = (span (\ c -> isAlpha c) . dropWhile isSpace) cs
+    let (match, rest) = (span (\ c -> isAlpha c || c == '_') . dropWhile isSpace) cs
     in  case match of
             m | m == "longest"  -> (Longest, rest)
             m | m == "shortest" -> (Shortest, rest)
             m | m == "all"      -> (All, rest)
-            _                   -> error $ "unknown match: " ++ match
-lex_match _ = error " *** missing \"!cre2c_match:\" directive"
+            _                   -> error $ "*** SourceParser: unknown match: " ++ match
+lex_match _ = error "*** SourceParser: missing \"!cre2c_match:\" directive"
+
+
+lex_block :: String -> (Maybe BlockName, String)
+lex_block ('!':'c':'r':'e':'2':'c':'_':'b':'l':'o':'c':'k':':':cs) =
+    let (block, rest) = (span (\ c -> isAlpha c || c == '_') . dropWhile isSpace) cs
+    in  case block of
+            "" -> error $ "*** SourceParser: block name not specified."
+            _  -> (Just block, rest)
+lex_block cs = (Nothing, cs)
 
 
 lex_rules :: String -> [Token]
@@ -309,62 +487,107 @@ lex_rules [] = []
 lex_rules ('\n' : 'e' : 'n' : 'd' : '*' : '/' : cs) = TokenEnd : lexer cs
 lex_rules (c : cs)
     | isSpace c = lex_rules cs
-    | isAlpha c = lex_name (c : cs)
-lex_rules ('>'  : cs) = TokenAngle        : lex_name cs
+    | isAlpha c = lex_name (c : cs) lex_rules
+lex_rules ('>'  : cs) = TokenAngle        : lex_name cs lex_rules
 lex_rules ('='  : cs) = TokenEq           : lex_rules cs
-lex_rules ('{'  : cs) = TokenOParenthesis : lex_code cs
+lex_rules ('{'  : cs) = TokenOParenthesis : lex_code cs lex_rules
 
 
-lex_code :: String -> [Token]
-lex_code cs =
+lex_rules_b :: String -> [Token]
+lex_rules_b [] = []
+lex_rules_b ('\n' : 'e' : 'n' : 'd' : '*' : '/' : cs) = TokenEnd : lexer cs
+lex_rules_b (c : cs)
+    | isSpace c = lex_rules_b cs
+    | isAlpha c = lex_name (c : cs) lex_rules_b
+lex_rules_b (':'  : cs) = TokenColon : lex_name cs lex_rules_b
+lex_rules_b ('>'  : cs) = TokenAngle        : lex_name cs lex_rules_b
+lex_rules_b ('='  : cs) = TokenEq           : lex_rules_b cs
+lex_rules_b ('{'  : cs) = TokenOParenthesis : lex_code cs lex_rules_b
+
+
+lex_code :: String -> (String -> [Token]) -> [Token]
+lex_code cs lex =
     let lex_code' :: Int -> DL.DList Char -> String -> (DL.DList Char, String)
         lex_code' 0 tok rest         = (DL.cons '{' tok, rest)
-        lex_code' i tok ""           = error "invalid code block in regexp definition"
+        lex_code' i tok ""           = error "*** SourceParser: invalid code block in regexp definition"
         lex_code' i tok ('{' : rest) = lex_code' (i + 1) (DL.snoc tok '{') rest
         lex_code' i tok ('}' : rest) = lex_code' (i - 1) (DL.snoc tok '}') rest
         lex_code' i tok (c   : rest) = lex_code' i       (DL.snoc tok c)   rest
         (code, rest) = lex_code' 1 DL.empty cs
-    in  TokenCode ((BS.pack . DL.toList) code) : TokenCParenthesis : lex_rules rest
+    in  TokenCode ((BS.pack . DL.toList) code) : TokenCParenthesis : lex rest
 
 
-lex_name :: String -> [Token]
-lex_name cs =
+lex_name :: String -> (String -> [Token]) -> [Token]
+lex_name cs lex =
     let (nm, rest) = span (\ c -> isAlphaNum c || c == '_') cs
-        rest'      = lex_rules rest
+        rest'      = lex rest
     in  if nm /= "" then TokenName nm : rest' else rest'
 
 
 --------------------------------------------------------------------------------
+
+
+conds2list :: CondList -> [Cond]
+conds2list (OneCond c)      = [c]
+conds2list (ManyConds c cs) = c : conds2list cs
+
+
+-- 2 types (Rules1 and Rules2) are needed to make ALL rules in one block be either "block" rules or simple rules
+
+rules2table1 :: Rules1 -> [(RegexpName, Maybe BlockName, [Cond], Code)]
+rules2table1 (ROne1  (RSimple1           name code))       = [(name, Nothing, [], code)]
+rules2table1 (ROne1  (RComplex1 condlist name code))       = [(name, Nothing, conds2list condlist, code)]
+rules2table1 (RMany1 (RSimple1           name code) rules) = (name, Nothing, [], code) : rules2table1 rules
+rules2table1 (RMany1 (RComplex1 condlist name code) rules) = (name, Nothing, conds2list condlist, code) : rules2table1 rules
+
+
+rules2table2 :: Rules2 -> [(RegexpName, Maybe BlockName, [Cond], Code)]
+rules2table2 (ROne2  (RSimple2           name block code))       = [(name, Just block, [], code)]
+rules2table2 (ROne2  (RComplex2 condlist name block code))       = [(name, Just block, conds2list condlist, code)]
+rules2table2 (RMany2 (RSimple2           name block code) rules) = (name, Just block, [], code) : rules2table2 rules
+rules2table2 (RMany2 (RComplex2 condlist name block code) rules) = (name, Just block, conds2list condlist, code) : rules2table2 rules
+
+
+combine_rules :: (Maybe BlockName, M.HashMap (S.Set Cond) Code) -> (Maybe BlockName, M.HashMap (S.Set Cond) Code) -> (Maybe BlockName, M.HashMap (S.Set Cond) Code)
+combine_rules (Just b, _) (Just b', _) | b /= b' = error $ "*** SourceParser: rules for one regexp lead to different blocks"
+combine_rules (Just b, _) (Nothing, _)           = error $ "*** SourceParser: combine_rules: dark magic..."
+combine_rules (Nothing, _) (Just b, _)           = error $ "*** SourceParser: combine_rules: dark magic..."
+combine_rules (b, conds2code) (b', conds2code')  =
+    let conds2code'' = M.foldlWithKey'
+            (\ c2c conds code -> M.insertWith
+                (\ _ code' -> BS.concat [BS.pack "{ ", code, code', BS.pack " }"])
+                conds
+                code
+                conds2code
+            ) conds2code' conds2code
+    in  (b, conds2code'')
+
+
+insert_rule :: RuleTable -> (RegexpName, Maybe BlockName, [Cond], Code) -> RuleTable
+insert_rule rules (name, block, conds, code) = M.insertWith
+    combine_rules
+    name
+    (block, M.insert (S.fromList conds) code M.empty)
+    rules
+
+
+source2chunk_list :: Source -> ChunkList
+source2chunk_list (SourceEnd code)                = LastChunk code
+source2chunk_list (Source code opts rules source) =
+    let rules'  = case rules of
+            R1 rs -> rules2table1 rs
+            R2 rs -> rules2table2 rs
+        rules'' = foldl' insert_rule M.empty rules'
+        chunks  = source2chunk_list source
+    in  Chunk code opts rules'' chunks
+
+
 parse_source :: FilePath -> IO ChunkList
 parse_source fp =
-    let conds2list :: CondList -> [Cond]
-        conds2list (OneCond c)      = [c]
-        conds2list (ManyConds c cs) = c : conds2list cs
-
-        rules2table :: Rules -> [(RegexpName, ([Cond], Code))]
-        rules2table (OneRule   (SimpleRule           name code))       = [(name, ([], code))]
-        rules2table (OneRule   (ComplexRule condlist name code))       = [(name, (conds2list condlist, code))]
-        rules2table (ManyRules (SimpleRule           name code) rules) = (name, ([], code)) : rules2table rules
-        rules2table (ManyRules (ComplexRule condlist name code) rules) = (name, (conds2list condlist, code)) : rules2table rules
-
-        source2chunk_list :: Source -> ChunkList
-        source2chunk_list (SourceEnd code)                = LastChunk code
-        source2chunk_list (Source code opts rules source) = Chunk
-            code
-            opts
-            ((foldl'
-                (\ rules (name, (conds, code)) -> M.insertWith
-                    (\ _ xs -> M.insertWith (\ _ code' -> BS.concat [BS.pack "{ ", code, code', BS.pack " }"]) (S.fromList conds) code xs)
-                    name
-                    (M.insert (S.fromList conds) code M.empty)
-                    rules
-                ) M.empty
-            ) (rules2table rules))
-            (source2chunk_list source)
-    in  ( source2chunk_list
-        . parser
-        . lexer
-        ) <$> readFile fp
+    ( source2chunk_list
+    . parser
+    . lexer
+    ) <$> readFile fp
 {-# LINE 1 "templates/GenericTemplate.hs" #-}
 {-# LINE 1 "templates/GenericTemplate.hs" #-}
 {-# LINE 1 "<built-in>" #-}

@@ -86,10 +86,13 @@ instance Show Label where
 data ChunkList
     = LastChunk Code
     | Chunk Code Options RuleTable ChunkList
-data Options = Options
-    { mode  :: Mode
-    , match :: Match
-    } deriving (Show)
+data Options
+    = Options
+        { mode  :: Mode
+        , match :: Match
+        , block :: Maybe BlockName
+        }
+    deriving (Show)
 data Mode
     = Scanner
     | Matcher
@@ -100,14 +103,6 @@ data Match
     | Shortest
     | All
     deriving (Show)
-data Rules
-    = ManyRules Rule Rules
-    | OneRule   Rule
-    deriving (Show)
-data Rule
-    = SimpleRule  RegexpName Code
-    | ComplexRule CondList RegexpName Code
-    deriving (Show)
 data CondList
     = ManyConds Cond CondList
     | OneCond   Cond
@@ -116,10 +111,12 @@ type Cond
     = String
 type RegexpName
     = String
+type BlockName
+    = String
 type Code
     = BS.ByteString
 type RuleTable
-    = M.HashMap RegexpName (M.HashMap (S.Set Cond) Code)
+    = M.HashMap RegexpName (Maybe BlockName, M.HashMap (S.Set Cond) Code)
 type SignTable
     = M.HashMap String [BS.ByteString]
 

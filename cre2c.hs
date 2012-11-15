@@ -16,7 +16,7 @@ import           Types
 import           CFA
 import           RE2CFA
 import           CFA2CPP
-import           SourceParserB
+import           SourceParser
 import           RegexpParser
 
 
@@ -67,14 +67,14 @@ instance Eq Verbosity where
     V2 == V2 = True
     _  == _  = False
 
-data Options = Options
+data CmdOptions = CmdOptions
     { src     :: Maybe FilePath
     , dest    :: Maybe FilePath
     , defs    :: [FilePath]
     , verbose :: Verbosity
     }
 
-default_options = Options
+default_options = CmdOptions
     { src     = Nothing
     , dest    = Nothing
     , defs    = []
@@ -82,17 +82,17 @@ default_options = Options
     }
 
 
-options :: [OptDescr (Options -> Options)]
+options :: [OptDescr (CmdOptions -> CmdOptions)]
 options =
-    [ Option "v"  ["verbose"]      (NoArg (\ opts -> opts { verbose = V1 }))                                    "trace inner structures"
-    , Option "V"  ["very-verbose"] (NoArg (\ opts -> opts { verbose = V2 }))                                    "trace inner structures and output CFA graphs to PNG"
-    , Option "o"  ["output"]       (ReqArg (\ f opts -> opts{ dest = Just f })                  "<c/cpp-file>") "output FILE"
-    , Option "i"  ["input"]        (ReqArg (\ f opts -> opts{ src = Just f })                   "<cre-file>")   "input FILE"
-    , Option "d"  ["def-file"]     (ReqArg (\ f opts@Options{defs = fs} -> opts{ defs = f:fs }) "<def-file>")   "definition FILE"
+    [ Option "v"  ["verbose"]      (NoArg (\ opts -> opts { verbose = V1 }))                                       "trace inner structures"
+    , Option "V"  ["very-verbose"] (NoArg (\ opts -> opts { verbose = V2 }))                                       "trace inner structures and output CFA graphs to PNG"
+    , Option "o"  ["output"]       (ReqArg (\ f opts -> opts{ dest = Just f })                     "<c/cpp-file>") "output FILE"
+    , Option "i"  ["input"]        (ReqArg (\ f opts -> opts{ src = Just f })                      "<cre-file>")   "input FILE"
+    , Option "d"  ["def-file"]     (ReqArg (\ f opts@CmdOptions{defs = fs} -> opts{ defs = f:fs }) "<def-file>")   "definition FILE"
     ]
 
 
-parse_args :: [String] -> IO (Options, [String], [String])
+parse_args :: [String] -> IO (CmdOptions, [String], [String])
 parse_args argv =
     let header = "Usage: ic [OPTION...] files..."
     in  case getOpt' Permute options argv of
@@ -104,14 +104,14 @@ main :: IO ()
 main = do
     (opts, non_opts, unknown_opts) <- getArgs >>= parse_args
     when (non_opts /= []) $
-        error $ concat $ "*** cre2c : unparsed cmd arguments: " : non_opts
+        error $ "*** cre2c : unparsed cmd arguments: " ++ unwords non_opts
     when (unknown_opts /= []) $
-        error $ concat $ "*** cre2c : unknown cmd-options: " : unknown_opts
+        error $ "*** cre2c : unknown cmd-options: " ++ unwords unknown_opts
     let (fsrc, fdest, fdefs, verbose) = case opts of
-            (Options Nothing     _          _    _) -> error "No source file specified."
-            (Options _           Nothing    _    _) -> error "No destination file specified."
-            (Options _           _          []   _) -> error "No .def files specified."
-            (Options (Just src) (Just dest) defs v) -> (src, dest, defs, v)
+            (CmdOptions Nothing     _          _    _) -> error "No source file specified."
+            (CmdOptions _           Nothing    _    _) -> error "No destination file specified."
+            (CmdOptions _           _          []   _) -> error "No .def files specified."
+            (CmdOptions (Just src) (Just dest) defs v) -> (src, dest, defs, v)
 
     chunk_list     <- parse_source fsrc
     regexp_table   <- merge_regexp_tables <$> mapM parse_regexps fdefs

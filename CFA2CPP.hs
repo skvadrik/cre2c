@@ -15,7 +15,7 @@ import           Types
 import           CFA
 
 
-cfa2cpp :: DCFA -> Code -> [M.HashMap (S.Set Cond) Code] -> Int -> Int -> Options -> Code
+cfa2cpp :: DCFA -> Code -> [(Maybe BlockName, M.HashMap (S.Set Cond) Code)] -> Int -> Int -> Options -> Code
 cfa2cpp dcfa prolog conds2code maxlen n_scanner opts =
     let entry      = codegen_entry maxlen n_scanner opts
         g          = dcfa_graph dcfa
@@ -115,9 +115,9 @@ codegen_case_alternatives l = case l of
     LabelRange r -> PP.vcat $ map (PP.text . printf "case 0x%X:") r
 
 
-codegen_case_matcher :: DCFANode -> [M.HashMap (S.Set Cond) Code] -> Int -> PP.Doc
+codegen_case_matcher :: DCFANode -> [(Maybe BlockName, M.HashMap (S.Set Cond) Code)] -> Int -> PP.Doc
 codegen_case_matcher node conds2code k =
-    let get_conds = S.foldl' (\ conds k -> (map S.toList . M.keys) (conds2code !! k) ++ conds) []
+    let get_conds = S.foldl' (\ conds k -> (map S.toList . M.keys . snd) (conds2code !! k) ++ conds) []
         code' = M.foldlWithKey'
             (\ doc l (ks, s) -> doc
                 $$ codegen_case_alternatives l
@@ -137,9 +137,9 @@ codegen_case_matcher node conds2code k =
         $$ PP.nest 4 ( m_fin_goto k )
 
 
-codegen_case_scanner :: Bool -> Bool -> DCFANode -> [M.HashMap (S.Set Cond) Code] -> Int -> PP.Doc
+codegen_case_scanner :: Bool -> Bool -> DCFANode -> [(Maybe BlockName, M.HashMap (S.Set Cond) Code)] -> Int -> PP.Doc
 codegen_case_scanner is_init is_final node conds2code k =
-    let get_conds = S.foldl' (\ conds k -> (map S.toList . M.keys) (conds2code !! k) ++ conds) []
+    let get_conds = S.foldl' (\ conds k -> (map S.toList . M.keys . snd) (conds2code !! k) ++ conds) []
         code' = M.foldlWithKey'
             (\ doc l (ks, s) -> doc
                 $$ codegen_case_alternatives l
@@ -173,11 +173,11 @@ codegen_case_scanner is_init is_final node conds2code k =
             )
 
 
-codegen_state :: State -> Bool -> Bool -> DCFANode -> [M.HashMap (S.Set Cond) Code] -> S.Set Id -> Int -> Options -> PP.Doc
+codegen_state :: State -> Bool -> Bool -> DCFANode -> [(Maybe BlockName, M.HashMap (S.Set Cond) Code)] -> S.Set Id -> Int -> Options -> PP.Doc
 codegen_state s is_init is_final node conds2code signs k opts =
     m_decl k s
     $$ ( if not is_final then PP.empty else
-        let conds2code' = S.foldl' (\ conds k -> M.toList (conds2code !! k) ++ conds) [] signs
+        let conds2code' = S.foldl' (\ conds i -> (M.toList . snd) (conds2code !! i) ++ conds) [] signs
         in  case mode opts of
                 Matcher   -> codegen_fstate_matcher   conds2code' (node == M.empty)
                 Scanner   -> codegen_fstate_scanner   conds2code' (node == M.empty)
