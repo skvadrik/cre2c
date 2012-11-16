@@ -33,15 +33,15 @@ dcfa_is_final :: State -> DCFA -> Bool
 dcfa_is_final s (DCFA _ _ fss) = isJust $ M.lookup s fss
 
 
-dcfa_accepted :: State -> DCFA -> S.Set Id
+dcfa_accepted :: State -> DCFA -> S.Set RegexpId
 dcfa_accepted s (DCFA _ _ fss) = M.lookupDefault S.empty s fss
 
 
-ncfa_set_final :: State -> Id -> NCFA -> NCFA
+ncfa_set_final :: State -> RegexpId -> NCFA -> NCFA
 ncfa_set_final s k (NCFA s0 sl g fss) = NCFA s0 sl g (M.insertWith (\ _ ks -> S.insert k ks) s (S.insert k S.empty) fss)
 
 
-ncfa_add_transition :: NCFA -> (State, Label, Id, State) -> (NCFA, State)
+ncfa_add_transition :: NCFA -> (State, Label, RegexpId, State) -> (NCFA, State)
 ncfa_add_transition (NCFA s0 sl g fss) (s1, l, k, s2) =
     let g' = M.insertWith (\ _ node -> (l, k, s2) : node) s1 [(l, k, s2)] g
     in  (NCFA s0 (max (sl + 1) s2) g' fss, s2)
@@ -55,9 +55,9 @@ to_label [c] = LabelChar c
 to_label r   = LabelRange r
 
 
-determine_node :: NCFANode -> NCFAGraph -> M.HashMap State (S.Set Id) -> M.HashMap State (S.Set Id) -> State -> (DCFANode, NCFAGraph, M.HashMap State (S.Set Id), State, S.Set State)
+determine_node :: NCFANode -> NCFAGraph -> M.HashMap State (S.Set RegexpId) -> M.HashMap State (S.Set RegexpId) -> State -> (DCFANode, NCFAGraph, M.HashMap State (S.Set RegexpId), State, S.Set State)
 determine_node n g fss_old fss s_max =
-    let f :: (Id, State) -> M.HashMap Char ([Id], [State]) -> Char -> M.HashMap Char ([Id], [State])
+    let f :: (RegexpId, State) -> M.HashMap Char ([RegexpId], [State]) -> Char -> M.HashMap Char ([RegexpId], [State])
         f (k, s) n c = M.insertWith (\ _ (ks, ss) -> (k : ks, s : ss)) c ([k], [s]) n
         n' = foldl'
             (\ n (l, k, s) -> case l of
@@ -87,7 +87,7 @@ determine_node n g fss_old fss s_max =
     in  (n''', g', fss', s_max', ss)
 
 
-determine' :: (NCFAGraph, DCFAGraph, M.HashMap State (S.Set Id), M.HashMap State (S.Set Id), State, S.Set State) -> (DCFAGraph, M.HashMap State (S.Set Id))
+determine' :: (NCFAGraph, DCFAGraph, M.HashMap State (S.Set RegexpId), M.HashMap State (S.Set RegexpId), State, S.Set State) -> (DCFAGraph, M.HashMap State (S.Set RegexpId))
 determine' (_, dg, _, fss,  _, ss) | ss == S.empty = (dg, fss)
 determine' (ng, dg, fss_old, fss, s_max, ss)       = determine' $ S.foldl'
     (\ (ng, dg, fss_old, fss, s_max, ss) s ->

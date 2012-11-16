@@ -32,9 +32,10 @@ gen_code (Chunk code opts rules chunk_list) k regexp_table v = do
             V1 -> trace'
             _  -> id
         (regexps, conds2code) = (unzip . M.toList) rules
+        conds2code'           = M.fromList $ zip [0 .. length conds2code - 1] conds2code
         (ncfa, maxlen')       = re2ncfa regexps regexp_table
         dcfa                  = determine (verbose ncfa)
-        code'                 = cfa2cpp (verbose dcfa) code conds2code maxlen' k opts
+        code'                 = cfa2cpp (verbose dcfa) code conds2code' maxlen' k opts
     when (v == V2) $
         putStrLn "Generating .dot for NCFA..." >> ncfa_to_dot ncfa (printf "ncfa%d.dot" k) >>
         putStrLn "Generating .dot for DCFA..." >> dcfa_to_dot dcfa (printf "dcfa%d.dot" k) >>
@@ -60,25 +61,18 @@ merge_regexp_tables (rt : rts) =
 
 
 data Verbosity = V0 | V1 | V2
-
 instance Eq Verbosity where
     V0 == V0 = True
     V1 == V1 = True
     V2 == V2 = True
     _  == _  = False
 
+
 data CmdOptions = CmdOptions
     { src     :: Maybe FilePath
     , dest    :: Maybe FilePath
     , defs    :: [FilePath]
     , verbose :: Verbosity
-    }
-
-default_options = CmdOptions
-    { src     = Nothing
-    , dest    = Nothing
-    , defs    = []
-    , verbose = V0
     }
 
 
@@ -94,7 +88,13 @@ options =
 
 parse_args :: [String] -> IO (CmdOptions, [String], [String])
 parse_args argv =
-    let header = "Usage: ic [OPTION...] files..."
+    let header          = "Usage: ic [OPTION...] files..."
+        default_options = CmdOptions
+            { src     = Nothing
+            , dest    = Nothing
+            , defs    = []
+            , verbose = V0
+            }
     in  case getOpt' Permute options argv of
             (o, n, u, []  ) -> return (foldl (flip id) default_options o, n, u)
             (_, _, _, errs) -> error $ concat errs ++ usageInfo header options

@@ -10,25 +10,55 @@ import qualified Data.ByteString.Char8     as BS
 import           Text.Printf                     (printf)
 import           Text.PrettyPrint.HughesPJ       (($$), (<>), ($+$), Doc)
 import qualified Text.PrettyPrint.HughesPJ as PP
+import           Data.Maybe                      (fromJust)
 
 import           Types
 import           CFA
 
 
-cfa2cpp :: DCFA -> Code -> [(Maybe BlockName, M.HashMap (S.Set Cond) Code)] -> Int -> Int -> Options -> Code
-cfa2cpp dcfa prolog conds2code maxlen n_scanner opts =
+type Conds2Code = M.HashMap (S.Set Cond) Code
+type RegexpId2RegexpInfo = M.HashMap RegexpId (Maybe BlockName, Conds2Code)
+data StateInfo = SI State Bool Bool DCFANode (Maybe (S.Set RegexpId))
+data BlockInfo = BI Int Options RegexpId2RegexpInfo
+
+{-
+data StateInfo = SI
+    { state      :: State
+    , is_init    :: Bool
+    , is_final   :: Bool
+    , node       :: DCFANode
+    , regexp_ids :: Maybe (S.Set RegexpId)
+    }
+
+
+data BlockInfo = BI
+    { number  :: Int
+    , options :: Options
+    , id_info :: RegexpId2RegexpInfo
+    }
+-}
+
+cfa2cpp :: DCFA -> Code -> RegexpId2RegexpInfo -> Int -> Int -> Options -> Code
+cfa2cpp dcfa prolog id_info maxlen n_scanner opts =
     let entry      = codegen_entry maxlen n_scanner opts
         g          = dcfa_graph dcfa
         s0         = dcfa_init_state dcfa
+        bi         = BI n_scanner opts id_info
         states     = M.foldlWithKey'
-            (\ code s node -> code
-                $$$ case s of
-                    s | dcfa_is_final s dcfa -> PP.empty
-                    s                        -> codegen_state s (s == s0) False node conds2code S.empty n_scanner opts
+            (\ code s node ->
+                let is_init  = s == s0
+                    is_final = dcfa_is_final s dcfa
+                    si       = SI s is_init False node Nothing
+                in  code $$$ if is_final
+                        then PP.empty
+                        else codegen_state si bi
             ) PP.empty g
         final_states = M.foldlWithKey'
-            (\ code s accepted -> code
-                $$$ codegen_state s (s == s0) True (M.lookupDefault M.empty s g) conds2code accepted n_scanner opts
+            (\ code s accepted ->
+                let is_init = s == s0
+                    node    = M.lookupDefault M.empty s g
+                    si      = SI s is_init True node (Just accepted)
+                in  code $$$ codegen_state si bi
             ) PP.empty (dcfa_final_states dcfa)
     in  (BS.pack . PP.render)
             ( ( PP.text . BS.unpack ) prolog
@@ -95,8 +125,8 @@ codegen_entry maxlen k opts =
     $$ m_goto k 0
 
 
-codegen_conditions :: [[Cond]] -> Doc
-codegen_conditions =
+if_satisfy :: [S.Set Cond] -> Doc -> Doc
+if_satisfy cs doc =
     let f :: String -> [Doc] -> Doc
         f s xs = case nub xs of
             []   -> PP.empty
@@ -106,7 +136,11 @@ codegen_conditions =
                 . PP.hcat
                 . PP.punctuate (PP.text s)
                 ) xs'
-    in  f " || " . map (f " && " . map PP.text)
+        cs'   = map (f " && " . map PP.text . S.toList) cs
+        cs''  = f " || " cs'
+    in  if cs'' == PP.empty
+            then doc
+            else PP.text "if " <> PP.parens cs'' $$ wrap_in_braces doc
 
 
 codegen_case_alternatives :: Label -> Doc
@@ -115,50 +149,65 @@ codegen_case_alternatives l = case l of
     LabelRange r -> PP.vcat $ map (PP.text . printf "case 0x%X:") r
 
 
-codegen_case_matcher :: DCFANode -> [(Maybe BlockName, M.HashMap (S.Set Cond) Code)] -> Int -> PP.Doc
-codegen_case_matcher node conds2code k =
-    let get_conds = S.foldl' (\ conds k -> (map S.toList . M.keys . snd) (conds2code !! k) ++ conds) []
-        code' = M.foldlWithKey'
-            (\ doc l (ks, s) -> doc
-                $$ codegen_case_alternatives l
-                $$ PP.nest 4
-                    ( case partition (== []) (get_conds ks) of
-                        ( conds', conds'' ) | conds' == [] ->
-                            PP.text "if "
-                            <> ( PP.parens . codegen_conditions) conds''
-                            $$ PP.nest 4 ( m_goto k s )
-                            $$ PP.text "else"
-                            $$ PP.nest 4 ( m_fin_goto k )
-                        _ -> m_goto k s
-                    )
-            ) PP.empty node
-    in  code'
-        $$ PP.text "default:"
-        $$ PP.nest 4 ( m_fin_goto k )
+get_conds2code :: RegexpId2RegexpInfo -> S.Set RegexpId -> [(S.Set Cond, Code)]
+get_conds2code id_info =
+    let f :: RegexpId -> [(S.Set Cond, Code)]
+        f k = M.toList $ snd $ M.lookupDefault
+            (error (printf "*** CFA2CPP : missing regexp info for regexp number %d" k))
+            k
+            id_info
+    in  S.foldl' (\ conds k -> f k ++ conds) []
 
 
-codegen_case_scanner :: Bool -> Bool -> DCFANode -> [(Maybe BlockName, M.HashMap (S.Set Cond) Code)] -> Int -> PP.Doc
-codegen_case_scanner is_init is_final node conds2code k =
-    let get_conds = S.foldl' (\ conds k -> (map S.toList . M.keys . snd) (conds2code !! k) ++ conds) []
-        code' = M.foldlWithKey'
+get_conds :: RegexpId2RegexpInfo -> S.Set RegexpId -> [S.Set Cond]
+get_conds id_info = fst . unzip . get_conds2code id_info
+
+
+maybe_adjust_marker1 :: Match -> Bool -> Bool -> PP.Doc
+maybe_adjust_marker1 match is_init is_final = case match of
+    All -> if is_init
+        then if is_final
+            then PP.text "token = adjust_marker ? MARKER : token;"
+            else PP.text "adjust_marker = true;"
+        else PP.empty
+    _   -> PP.empty
+
+
+maybe_adjust_marker2 :: Options -> PP.Doc
+maybe_adjust_marker2 opts = case opts of
+    Options Matcher _   _ -> PP.empty
+    Options _       All _ -> PP.text "MARKER += adjust_marker;"
+    _                     -> PP.empty
+
+
+maybe_adjust_marker3 :: Match -> Bool -> PP.Doc
+maybe_adjust_marker3 match is_init = case match of
+    All -> if is_init then PP.text "adjust_marker = true;" else PP.empty
+        $$ PP.text "MARKER += adjust_marker;"
+    _   -> PP.empty
+
+
+maybe_adjust_marker4 :: Match -> Bool -> PP.Doc
+maybe_adjust_marker4 match not_empty_node = case match of
+    All ->
+        PP.text "MARKER = CURSOR;"
+        $$ ( if not_empty_node then PP.empty else PP.text "adjust_marker = false;")
+    _   -> PP.empty
+
+
+codegen_case :: StateInfo -> BlockInfo -> PP.Doc
+codegen_case (SI _ is_init is_final node _) (BI k opts id_info) =
+    let code' = M.foldlWithKey'
             (\ doc l (ks, s) -> doc
                 $$ codegen_case_alternatives l
+                $$ PP.nest 4 (maybe_adjust_marker1 (match opts) is_init is_final)
                 $$ PP.nest 4
-                    ( if is_init
-                        then if is_final
-                            then PP.text "token = adjust_marker ? MARKER : token;"
-                            else PP.text "adjust_marker = true;"
-                        else PP.empty
-                    )
-                $$ PP.nest 4
-                    ( case partition (== []) (get_conds ks) of
+                    ( case partition (== S.empty) (get_conds id_info ks) of
                         ( conds', conds'' ) | conds' == [] ->
-                            PP.text "if "
-                            <> ( PP.parens . codegen_conditions) conds''
-                            $$ PP.nest 4 ( m_goto k s )
+                            if_satisfy conds'' (m_goto k s)
                             $$ PP.text "else"
                             $$ wrap_in_braces
-                                ( PP.text "MARKER += adjust_marker;"
+                                ( maybe_adjust_marker2 opts
                                 $$ m_fin_goto k
                                 )
                         _ -> m_goto k s
@@ -167,21 +216,25 @@ codegen_case_scanner is_init is_final node conds2code k =
     in  code'
         $$ PP.text "default:"
         $$ PP.nest 4
-            ( if is_init then PP.text "adjust_marker = true;" else PP.empty
-            $$ PP.text "MARKER += adjust_marker;"
+            ( maybe_adjust_marker3 (match opts) is_init
             $$ m_fin_goto k
             )
 
 
-codegen_state :: State -> Bool -> Bool -> DCFANode -> [(Maybe BlockName, M.HashMap (S.Set Cond) Code)] -> S.Set Id -> Int -> Options -> PP.Doc
-codegen_state s is_init is_final node conds2code signs k opts =
+codegen_fstate :: StateInfo -> BlockInfo -> PP.Doc
+codegen_fstate (SI _ _ _ node ids) (BI _ opts id_info) =
+    let conds2code = get_conds2code id_info (fromJust ids)
+        f doc (conds, code) =
+            let code'  = ( PP.text . BS.unpack ) code $$ maybe_adjust_marker4 (match opts) (node /= M.empty)
+                code'' = if_satisfy [conds] code'
+            in  doc $$ PP.nest 4 code''
+    in  foldl' f  PP.empty conds2code
+
+
+codegen_state :: StateInfo -> BlockInfo -> PP.Doc
+codegen_state si@(SI s _ is_final node _) bi@(BI k _ _) =
     m_decl k s
-    $$ ( if not is_final then PP.empty else
-        let conds2code' = S.foldl' (\ conds i -> (M.toList . snd) (conds2code !! i) ++ conds) [] signs
-        in  case mode opts of
-                Matcher   -> codegen_fstate_matcher   conds2code' (node == M.empty)
-                Scanner   -> codegen_fstate_scanner   conds2code' (node == M.empty)
-                Tokenizer -> codegen_fstate_tokenizer conds2code' (node == M.empty) )
+    $$ ( if not is_final then PP.empty else codegen_fstate si bi)
     $$ ( PP.nest 4 $ case M.toList node of
         [] -> m_fin_goto k
         [(LabelRange r, (_, s))] | S.fromList r == S.fromList ['\x00' .. '\xFF'] ->
@@ -189,66 +242,5 @@ codegen_state s is_init is_final node conds2code signs k opts =
             $$ m_goto k s
         _ ->
             PP.text "switch (*CURSOR++)"
-            $$ ( wrap_in_braces $ case mode opts of
-                Matcher -> codegen_case_matcher node conds2code k
-                _       -> codegen_case_scanner is_init is_final node conds2code k ) )
-
-
-codegen_fstate_matcher :: [(S.Set Cond, Code)] -> Bool -> Doc
-codegen_fstate_matcher conds2code is_empty_node =
-    let doc_conds = PP.parens . codegen_conditions
-        doc_code  = PP.nest 4 . PP.text . BS.unpack
-        f doc (conds, code) = doc $$ PP.nest 4
-            ( if not is_empty_node && conds /= S.empty
-                then
-                    PP.text "if "
-                    <> doc_conds [S.toList conds]
-                    $$ doc_code code
-                else ( PP.text . BS.unpack ) code
-            )
-    in  foldl' f  PP.empty conds2code
-
-
-codegen_fstate_scanner :: [(S.Set Cond, Code)] -> Bool -> Doc
-codegen_fstate_scanner conds2code is_empty_node =
-    let doc_conds = PP.parens . codegen_conditions
-        doc_code  = PP.text . BS.unpack
-        f doc (conds, code) = doc $$ PP.nest 4
-            ( if not is_empty_node && conds /= S.empty
-                then
-                    PP.text "if "
-                    <> doc_conds [S.toList conds]
-                    $$ wrap_in_braces
-                        ( doc_code code
-                        $$ PP.text "MARKER = CURSOR;"
-                        $$ PP.text "adjust_marker = false;"
-                        )
-                else
-                    ( PP.text . BS.unpack ) code
-                    $$ PP.text "MARKER = CURSOR;"
-                    $$ if is_empty_node then PP.empty else PP.text "adjust_marker = false;"
-            )
-    in  foldl' f  PP.empty conds2code
-
-
-codegen_fstate_tokenizer :: [(S.Set Cond, Code)] -> Bool -> Doc
-codegen_fstate_tokenizer conds2code is_empty_node =
-    let doc_conds = PP.parens . codegen_conditions
-        doc_code  = PP.text . BS.unpack
-        f doc (conds, code) = doc $$ PP.nest 4
-            ( if not is_empty_node && conds /= S.empty
-                then
-                    PP.text "if "
-                    <> doc_conds [S.toList conds]
-                    $$ wrap_in_braces
-                        ( doc_code code
-                        $$ PP.text "MARKER = CURSOR;"
-                        $$ PP.text "adjust_marker = false;"
-                        )
-                else
-                    ( PP.text . BS.unpack ) code
-                    $$ PP.text "MARKER = CURSOR;"
-                    $$ if is_empty_node then PP.empty else PP.text "adjust_marker = false;"
-            )
-    in  foldl' f  PP.empty conds2code
+            $$ ( wrap_in_braces $ codegen_case si bi ) )
 
