@@ -16,27 +16,11 @@ import           Types
 import           CFA
 
 
-type Conds2Code = M.HashMap (S.Set Cond) Code
+type Conds2Code          = M.HashMap (S.Set Cond) Code
 type RegexpId2RegexpInfo = M.HashMap RegexpId (Maybe BlockName, Conds2Code)
-data StateInfo = SI State Bool Bool DCFANode (Maybe (S.Set RegexpId))
-data BlockInfo = BI Int Options RegexpId2RegexpInfo
+data StateInfo           = SI State Bool Bool DCFANode (Maybe (S.Set RegexpId))
+data BlockInfo           = BI Int Options RegexpId2RegexpInfo
 
-{-
-data StateInfo = SI
-    { state      :: State
-    , is_init    :: Bool
-    , is_final   :: Bool
-    , node       :: DCFANode
-    , regexp_ids :: Maybe (S.Set RegexpId)
-    }
-
-
-data BlockInfo = BI
-    { number  :: Int
-    , options :: Options
-    , id_info :: RegexpId2RegexpInfo
-    }
--}
 
 cfa2cpp :: DCFA -> Code -> RegexpId2RegexpInfo -> Int -> Int -> Options -> Code
 cfa2cpp dcfa prolog id_info maxlen n_scanner opts =
@@ -60,14 +44,14 @@ cfa2cpp dcfa prolog id_info maxlen n_scanner opts =
                     si      = SI s is_init True node (Just accepted)
                 in  code $$$ codegen_state si bi
             ) PP.empty (dcfa_final_states dcfa)
+        ending = router0 opts n_scanner
     in  (BS.pack . PP.render)
             ( ( PP.text . BS.unpack ) prolog
             $$$ entry
             $$$ states
             $$$ final_states
-            $$$ case mode opts of
-                Matcher -> m_fin_decl n_scanner
-                _       -> PP.empty )
+            $$$ ending
+            )
 
 
 instance Eq Doc where
@@ -77,10 +61,6 @@ instance Eq Doc where
 ($$$) :: Doc -> Doc -> Doc
 ($$$) d1 d2 = d1 $$ PP.text "" $$ d2
 infixl 5 $$$
-
-
-wrap_in_braces :: Doc -> Doc
-wrap_in_braces d = PP.text "{" $+$ PP.nest 4 d $$ PP.text "}"
 
 
 m_decl :: Int -> Int -> Doc
@@ -115,18 +95,12 @@ m_fin_goto k =
     <> PP.text "_fin;"
 
 
-codegen_entry :: Int -> Int -> Options -> PP.Doc
-codegen_entry maxlen k opts =
-    PP.text "#define MAXLEN" <> PP.int k <> PP.space <> PP.int maxlen
-    $$ case mode opts of
-        Matcher -> PP.text "token = MARKER;"
-        _       -> m_fin_decl k $$ PP.text "CURSOR = MARKER;"
-    $$ PP.text "if (LIMIT - CURSOR < MAXLEN" <> PP.int k <> PP.text ") FILL();"
-    $$ m_goto k 0
+wrap_in_braces :: Doc -> Doc
+wrap_in_braces d = PP.text "{" $+$ PP.nest 4 d $$ PP.text "}"
 
 
-if_satisfy :: [S.Set Cond] -> Doc -> Doc
-if_satisfy cs doc =
+codegen_if :: [S.Set Cond] -> Doc -> Doc
+codegen_if cs doc =
     let f :: String -> [Doc] -> Doc
         f s xs = case nub xs of
             []   -> PP.empty
@@ -143,10 +117,19 @@ if_satisfy cs doc =
             else PP.text "if " <> PP.parens cs'' $$ wrap_in_braces doc
 
 
-codegen_case_alternatives :: Label -> Doc
-codegen_case_alternatives l = case l of
-    LabelChar c  -> PP.text $ printf "case 0x%X:" c
-    LabelRange r -> PP.vcat $ map (PP.text . printf "case 0x%X:") r
+codegen_if_else :: [S.Set Cond] -> Doc -> Doc -> Doc
+codegen_if_else cs d1 d2 =
+    codegen_if cs d1
+    $$ PP.text "else"
+    $$ wrap_in_braces d2
+
+
+codegen_switch :: Doc -> Doc -> Doc
+codegen_switch d1 d2 = PP.text "switch " <> (PP.parens d1) $$ (wrap_in_braces d2)
+
+
+codegen_default :: Doc -> Doc
+codegen_default d = PP.text "default:" $$ PP.nest 4 d
 
 
 get_conds2code :: RegexpId2RegexpInfo -> S.Set RegexpId -> [(S.Set Cond, Code)]
@@ -163,84 +146,101 @@ get_conds :: RegexpId2RegexpInfo -> S.Set RegexpId -> [S.Set Cond]
 get_conds id_info = fst . unzip . get_conds2code id_info
 
 
-maybe_adjust_marker1 :: Match -> Bool -> Bool -> PP.Doc
-maybe_adjust_marker1 match is_init is_final = case match of
-    All -> if is_init
-        then if is_final
-            then PP.text "token = adjust_marker ? MARKER : token;"
-            else PP.text "adjust_marker = true;"
-        else PP.empty
-    _   -> PP.empty
-
-
-maybe_adjust_marker2 :: Options -> PP.Doc
-maybe_adjust_marker2 opts = case opts of
-    Options Matcher _   _ -> PP.empty
-    Options _       All _ -> PP.text "MARKER += adjust_marker;"
+router0 :: Options -> Int -> Doc
+router0 opts k = case opts of
+    Options Matcher _   _ -> m_fin_decl k
     _                     -> PP.empty
 
 
-maybe_adjust_marker3 :: Match -> Bool -> PP.Doc
-maybe_adjust_marker3 match is_init = case match of
-    All -> if is_init then PP.text "adjust_marker = true;" else PP.empty
-        $$ PP.text "MARKER += adjust_marker;"
-    _   -> PP.empty
+router1 :: Options -> Bool -> Bool -> Doc
+router1 opts is_init is_final = case opts of
+    Options Matcher _   _ -> PP.empty
+    Options _       All _ -> case (is_init, is_final) of
+        (True, True)  -> PP.text "token = adjust_marker ? MARKER : token;"
+        (True, False) -> PP.text "adjust_marker = true;"
+        _             -> PP.empty
+    Options _       _   _ -> case (is_init, is_final) of
+        (True, True)  -> PP.text "token = MARKER;"
+        _             -> PP.empty
 
 
-maybe_adjust_marker4 :: Match -> Bool -> PP.Doc
-maybe_adjust_marker4 match not_empty_node = case match of
-    All ->
-        PP.text "MARKER = CURSOR;"
-        $$ ( if not_empty_node then PP.empty else PP.text "adjust_marker = false;")
-    _   -> PP.empty
+router2 :: Options -> Doc
+router2 opts = case opts of
+    Options Matcher _   _ -> PP.empty
+    Options _       All _ -> PP.text "MARKER += adjust_marker;"
+    _                     -> PP.text "MARKER ++;"
 
 
-codegen_case :: StateInfo -> BlockInfo -> PP.Doc
-codegen_case (SI _ is_init is_final node _) (BI k opts id_info) =
-    let code' = M.foldlWithKey'
-            (\ doc l (ks, s) -> doc
-                $$ codegen_case_alternatives l
-                $$ PP.nest 4 (maybe_adjust_marker1 (match opts) is_init is_final)
-                $$ PP.nest 4
-                    ( case partition (== S.empty) (get_conds id_info ks) of
-                        ( conds', conds'' ) | conds' == [] ->
-                            if_satisfy conds'' (m_goto k s)
-                            $$ PP.text "else"
-                            $$ wrap_in_braces
-                                ( maybe_adjust_marker2 opts
-                                $$ m_fin_goto k
-                                )
-                        _ -> m_goto k s
-                    )
-            ) PP.empty node
-    in  code'
-        $$ PP.text "default:"
-        $$ PP.nest 4
-            ( maybe_adjust_marker3 (match opts) is_init
-            $$ m_fin_goto k
-            )
+router3 :: Options -> Bool -> Doc
+router3 opts is_init = case opts of
+    Options Matcher _   _ -> PP.empty
+    Options _       All _ -> (if is_init then PP.text "adjust_marker = true;" else PP.empty) $$ PP.text "MARKER += adjust_marker;"
+    _                     -> PP.text "MARKER ++;"
+
+
+router4 :: Options -> Bool -> Doc
+router4 opts empty_node = case opts of
+    Options Matcher _   _ -> PP.empty
+    Options _       All _ -> PP.text "MARKER = CURSOR;" $$ (if empty_node then PP.empty else PP.text "adjust_marker = false;")
+    _                     -> PP.text "MARKER = CURSOR;"
+
+
+codegen_entry :: Int -> Int -> Options -> PP.Doc
+codegen_entry maxlen k opts =
+    PP.text "#define MAXLEN" <> PP.int k <> PP.space <> PP.int maxlen
+    $$ case mode opts of
+        Matcher -> PP.text "token = MARKER;"
+        _       -> m_fin_decl k $$ PP.text "CURSOR = MARKER;"
+    $$ PP.text "if (LIMIT - CURSOR < MAXLEN" <> PP.int k <> PP.text ") FILL();"
+    $$ m_goto k 0
+
+
+codegen_cases :: StateInfo -> BlockInfo -> PP.Doc
+codegen_cases (SI _ is_init is_final node _) (BI k opts id_info) =
+    let show_u8b    = printf "case 0x%02X:"
+        case_head l = case l of
+            LabelChar c  -> PP.text $ show_u8b c
+            LabelRange r -> PP.vcat $ map (PP.text . show_u8b) r
+        case_body ids s =
+            let conds          = get_conds id_info ids
+                is_conditional = (null . fst . partition (== S.empty)) conds
+                goto_m         = m_goto k s
+                goto_fin       = router2 opts $$ m_fin_goto k
+            in  if is_conditional
+                    then codegen_if_else conds goto_m goto_fin
+                    else goto_m
+        one_case doc l (ids, s) =
+            doc
+            $$ case_head l
+            $$ PP.nest 4
+                ( router1 opts is_init is_final
+                $$ case_body ids s
+                )
+        cases        = M.foldlWithKey' one_case PP.empty node
+        default_case = codegen_default (router3 opts is_init $$ m_fin_goto k)
+    in  cases $$ default_case
 
 
 codegen_fstate :: StateInfo -> BlockInfo -> PP.Doc
 codegen_fstate (SI _ _ _ node ids) (BI _ opts id_info) =
     let conds2code = get_conds2code id_info (fromJust ids)
         f doc (conds, code) =
-            let code'  = ( PP.text . BS.unpack ) code $$ maybe_adjust_marker4 (match opts) (node /= M.empty)
-                code'' = if_satisfy [conds] code'
+            let code'  = ( PP.text . BS.unpack ) code $$ router4 opts (node == M.empty)
+                code'' = codegen_if [conds] code'
             in  doc $$ PP.nest 4 code''
     in  foldl' f  PP.empty conds2code
 
 
 codegen_state :: StateInfo -> BlockInfo -> PP.Doc
 codegen_state si@(SI s _ is_final node _) bi@(BI k _ _) =
-    m_decl k s
-    $$ ( if not is_final then PP.empty else codegen_fstate si bi)
-    $$ ( PP.nest 4 $ case M.toList node of
-        [] -> m_fin_goto k
-        [(LabelRange r, (_, s))] | S.fromList r == S.fromList ['\x00' .. '\xFF'] ->
-            PP.text "CURSOR++;"
-            $$ m_goto k s
-        _ ->
-            PP.text "switch (*CURSOR++)"
-            $$ ( wrap_in_braces $ codegen_case si bi ) )
+    let is_full range = S.fromList range == S.fromList ['\x00' .. '\xFF']
+        fstate = if is_final then codegen_fstate si bi else PP.empty
+        state  = case M.toList node of
+            []                                   -> m_fin_goto k
+            [(LabelRange r, (_, s))] | is_full r -> PP.text "CURSOR++;" $$ m_goto k s
+            _                                    -> codegen_switch (PP.text "*CURSOR++") (codegen_cases si bi)
+    in  m_decl k s
+        $$ fstate
+        $$ PP.nest 4 state
+
 
