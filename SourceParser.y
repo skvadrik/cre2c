@@ -38,6 +38,7 @@ import           Types
 Source
     : code                                           { SourceEnd $1          }
     | code start Options Rules end Source            { Source    $1 $3 $4 $6 }
+    | code start Options end Source                  { Empty     $1 $3 $5    }
 
 Options
     : mode match                                     { Options $1 $2 }
@@ -72,6 +73,7 @@ CondList
 data Source
     = SourceEnd  Code
     | Source     Code Options Rules Source
+    | Empty      Code Options       Source
 
 data Rules
     = R1 Rules1
@@ -257,6 +259,7 @@ insert_rule rules (name, block, conds, code) = M.insertWith
 
 source2chunk_list :: Source -> ChunkList
 source2chunk_list (SourceEnd code)                = LastChunk code
+source2chunk_list (Empty _ _ _)                   = error "*** SourceParser : empty rule list; useless scanner block."
 source2chunk_list (Source code opts rules source) =
     let rules'  = case rules of
             R1 rs -> rules2table1 rs
