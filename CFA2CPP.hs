@@ -5,7 +5,7 @@ module CFA2CPP
 
 import qualified Data.HashMap.Strict       as M
 import qualified Data.Set                  as S
-import           Data.List                       (foldl', partition, nub)
+import           Data.List                       (foldl', partition, nub, unzip4)
 import qualified Data.ByteString.Char8     as BS
 import           Text.Printf                     (printf)
 import           Text.PrettyPrint.HughesPJ       (($$), (<>), ($+$), Doc)
@@ -74,16 +74,6 @@ doc_decl k n =
     <> PP.colon
 
 
-doc_decl_fin :: Int -> Options -> Doc
-doc_decl_fin k opts =
-    let block_id = case opts of
-            Options (Block b) _ -> PP.text b
-            _                   -> PP.int k
-    in  PP.text "m_"
-        <> block_id
-        <> PP.text "_fin:"
-
-
 doc_goto :: Int -> Int -> Doc
 doc_goto k n =
     PP.text "goto m"
@@ -93,14 +83,47 @@ doc_goto k n =
     <> PP.semi
 
 
-doc_goto_fin :: Int -> Options -> Doc
-doc_goto_fin k opts =
+doc_decl_label :: Int -> Options -> String -> Doc
+doc_decl_label k opts s =
+    let block_id = case opts of
+            Options (Block b) _ -> PP.text b
+            _                   -> PP.int k
+    in  PP.text "m_"
+        <> block_id
+        <> PP.text s
+
+
+doc_goto_label :: Int -> Options -> String -> Doc
+doc_goto_label k opts s =
     let block_id = case opts of
             Options (Block b) _ -> PP.text b
             _                   -> PP.int k
     in  PP.text "goto m_"
         <> block_id
-        <> PP.text "_fin;"
+        <> PP.text s
+
+
+doc_decl_fin :: Int -> Options -> Doc
+doc_decl_fin k opts = doc_decl_label k opts "_fin:"
+
+
+doc_decl_start :: Int -> Options -> Doc
+doc_decl_start k opts = doc_decl_label k opts "_start:"
+
+
+doc_goto_fin :: Int -> Options -> Doc
+doc_goto_fin k opts = doc_goto_label k opts "_fin;"
+
+
+--doc_goto_start :: Int -> Options -> Doc
+--doc_goto_start k opts = doc_goto_label k opts "_start;"
+
+
+doc_goto_block :: BlockName -> Doc
+doc_goto_block block =
+    PP.text "goto m_"
+    <> PP.text block
+    <> PP.text "_start;"
 
 
 wrap_in_braces :: Doc -> Doc
@@ -147,27 +170,30 @@ doc_default :: Doc -> Doc
 doc_default d = PP.text "default:" $$ PP.nest 4 d
 
 
-get_conds2code :: RegexpId2RegexpInfo -> S.Set RegexpId -> [(RegexpId, S.Set Cond, Code)]
+get_conds2code :: RegexpId2RegexpInfo -> S.Set RegexpId -> [(RegexpId, S.Set Cond, Maybe BlockName, Code)]
 get_conds2code id_info ids  =
-    let f id_conds_code id (_, conds2code) = id_conds_code ++ if id `S.member` ids
-            then map (\ (conds, code) -> (id, conds, code)) (M.toList conds2code)
+    let f id_conds_code id (block, conds2code) = id_conds_code ++ if id `S.member` ids
+            then map (\ (conds, code) -> (id, conds, block, code)) (M.toList conds2code)
             else []
     in  M.foldlWithKey' f [] id_info
 
 
 get_conds :: RegexpId2RegexpInfo -> S.Set RegexpId -> [S.Set Cond]
-get_conds id_info = (\ (_, conds, _) -> conds) . unzip3 . get_conds2code id_info
+get_conds id_info = (\ (_, conds, _, _) -> conds) . unzip4 . get_conds2code id_info
 
 
 codegen_match_code :: RegexpId2RegexpInfo -> Doc
 codegen_match_code id_info =
-    let ids           = (S.fromList . M.keys) id_info
-        id_conds_code = get_conds2code id_info ids
-        f d (id, conds, code) =
+    let ids      = (S.fromList . M.keys) id_info
+        id_info' = get_conds2code id_info ids
+        f d (id, conds, block, code) =
             let d1 = doc_if [conds] ((PP.text . BS.unpack) code)
-                d2 = doc_case_break id d1
-            in  d $$ d2
-        d = foldl' f PP.empty id_conds_code
+                d2 = case block of
+                    Just b  -> doc_goto_block b
+                    Nothing -> PP.empty
+                d3 = doc_case_break id (d1 $$ d2)
+            in  d $$ d3
+        d = foldl' f PP.empty id_info'
     in  doc_switch (PP.text "accept") d
 
 
@@ -232,7 +258,8 @@ router5 opts k id_info = case opts of
 
 codegen_entry :: Int -> Int -> Options -> RegexpId2RegexpInfo -> PP.Doc
 codegen_entry maxlen k opts id_info =
-    PP.text "#define MAXLEN" <> PP.int k <> PP.space <> PP.int maxlen
+    doc_decl_start k opts
+    $$ PP.text "#define MAXLEN" <> PP.int k <> PP.space <> PP.int maxlen
     $$ router0 opts k id_info
     $$ PP.text "if (LIMIT - CURSOR < MAXLEN" <> PP.int k <> PP.text ") FILL();"
     $$ doc_goto k 0
@@ -267,7 +294,7 @@ codegen_cases (SI _ is_init is_final node _) (BI k opts id_info) =
 codegen_fstate :: StateInfo -> BlockInfo -> PP.Doc
 codegen_fstate (SI _ _ _ node ids) (BI _ opts id_info) =
     let id_conds_code = get_conds2code id_info (fromJust ids)
-        f doc (id, conds, code) =
+        f doc (id, conds, _, code) =
             let code'  = router4 opts (node == M.empty) (id, code)
                 code'' = doc_if [conds] code'
             in  doc $$ PP.nest 4 code''
