@@ -27,22 +27,22 @@ data HappyAbsSyn t4 t5 t6 t7 t8 t9 t10 t11
 	| HappyAbsSyn10 t10
 	| HappyAbsSyn11 t11
 
-action_0 (14) = happyShift action_4
+action_0 (13) = happyShift action_4
 action_0 (4) = happyGoto action_3
 action_0 _ = happyFail
 
-action_1 (14) = happyShift action_2
+action_1 (13) = happyShift action_2
 action_1 _ = happyFail
 
 action_2 _ = happyFail
 
-action_3 (24) = happyAccept
+action_3 (23) = happyAccept
 action_3 _ = happyFail
 
-action_4 (20) = happyShift action_5
+action_4 (19) = happyShift action_5
 action_4 _ = happyReduce_1
 
-action_5 (22) = happyShift action_7
+action_5 (21) = happyShift action_7
 action_5 (5) = happyGoto action_6
 action_5 _ = happyFail
 
@@ -55,13 +55,12 @@ action_6 (10) = happyGoto action_13
 action_6 (11) = happyGoto action_14
 action_6 _ = happyFail
 
-action_7 (23) = happyShift action_8
+action_7 (22) = happyShift action_8
 action_7 _ = happyFail
 
-action_8 (13) = happyShift action_28
-action_8 _ = happyFail
+action_8 _ = happyReduce_3
 
-action_9 (21) = happyShift action_27
+action_9 (20) = happyShift action_27
 action_9 _ = happyFail
 
 action_10 _ = happyReduce_4
@@ -80,12 +79,12 @@ action_13 (10) = happyGoto action_13
 action_13 (11) = happyGoto action_22
 action_13 _ = happyReduce_10
 
-action_14 (15) = happyShift action_20
+action_14 (14) = happyShift action_20
 action_14 _ = happyFail
 
 action_15 (12) = happyShift action_17
-action_15 (16) = happyShift action_18
-action_15 (19) = happyShift action_19
+action_15 (15) = happyShift action_18
+action_15 (18) = happyShift action_19
 action_15 (11) = happyGoto action_16
 action_15 _ = happyReduce_14
 
@@ -95,108 +94,106 @@ action_17 (12) = happyShift action_17
 action_17 (11) = happyGoto action_16
 action_17 _ = happyReduce_14
 
-action_18 (12) = happyShift action_34
+action_18 (12) = happyShift action_33
 action_18 _ = happyFail
 
-action_19 (17) = happyShift action_33
+action_19 (16) = happyShift action_32
 action_19 _ = happyFail
 
-action_20 (12) = happyShift action_32
+action_20 (12) = happyShift action_31
 action_20 _ = happyFail
 
 action_21 _ = happyReduce_11
 
-action_22 (15) = happyShift action_31
+action_22 (14) = happyShift action_30
 action_22 _ = happyFail
 
 action_23 (12) = happyShift action_17
-action_23 (16) = happyShift action_18
+action_23 (15) = happyShift action_18
 action_23 (11) = happyGoto action_16
 action_23 _ = happyReduce_14
 
 action_24 _ = happyReduce_7
 
-action_25 (15) = happyShift action_30
+action_25 (14) = happyShift action_29
 action_25 _ = happyFail
 
 action_26 (12) = happyShift action_17
-action_26 (19) = happyShift action_19
+action_26 (18) = happyShift action_19
 action_26 (11) = happyGoto action_16
 action_26 _ = happyReduce_14
 
-action_27 (14) = happyShift action_4
-action_27 (4) = happyGoto action_29
+action_27 (13) = happyShift action_4
+action_27 (4) = happyGoto action_28
 action_27 _ = happyFail
 
-action_28 _ = happyReduce_3
+action_28 _ = happyReduce_2
 
-action_29 _ = happyReduce_2
+action_29 (12) = happyShift action_39
+action_29 _ = happyFail
 
-action_30 (12) = happyShift action_40
+action_30 (12) = happyShift action_38
 action_30 _ = happyFail
 
-action_31 (12) = happyShift action_39
+action_31 (15) = happyShift action_36
+action_31 (18) = happyShift action_37
 action_31 _ = happyFail
 
-action_32 (16) = happyShift action_37
-action_32 (19) = happyShift action_38
+action_32 (13) = happyShift action_35
 action_32 _ = happyFail
 
-action_33 (14) = happyShift action_36
+action_33 (18) = happyShift action_34
 action_33 _ = happyFail
 
-action_34 (19) = happyShift action_35
+action_34 (16) = happyShift action_43
 action_34 _ = happyFail
 
-action_35 (17) = happyShift action_44
+action_35 (17) = happyShift action_42
 action_35 _ = happyFail
 
-action_36 (18) = happyShift action_43
+action_36 (12) = happyShift action_41
 action_36 _ = happyFail
 
-action_37 (12) = happyShift action_42
+action_37 (16) = happyShift action_40
 action_37 _ = happyFail
 
-action_38 (17) = happyShift action_41
+action_38 (15) = happyShift action_36
 action_38 _ = happyFail
 
-action_39 (16) = happyShift action_37
+action_39 (18) = happyShift action_37
 action_39 _ = happyFail
 
-action_40 (19) = happyShift action_38
+action_40 (13) = happyShift action_46
 action_40 _ = happyFail
 
-action_41 (14) = happyShift action_47
+action_41 (18) = happyShift action_45
 action_41 _ = happyFail
 
-action_42 (19) = happyShift action_46
-action_42 _ = happyFail
+action_42 _ = happyReduce_8
 
-action_43 _ = happyReduce_8
+action_43 (13) = happyShift action_44
+action_43 _ = happyFail
 
-action_44 (14) = happyShift action_45
+action_44 (17) = happyShift action_49
 action_44 _ = happyFail
 
-action_45 (18) = happyShift action_50
+action_45 (16) = happyShift action_48
 action_45 _ = happyFail
 
-action_46 (17) = happyShift action_49
+action_46 (17) = happyShift action_47
 action_46 _ = happyFail
 
-action_47 (18) = happyShift action_48
-action_47 _ = happyFail
+action_47 _ = happyReduce_9
 
-action_48 _ = happyReduce_9
+action_48 (13) = happyShift action_50
+action_48 _ = happyFail
 
-action_49 (14) = happyShift action_51
-action_49 _ = happyFail
+action_49 _ = happyReduce_12
 
-action_50 _ = happyReduce_12
+action_50 (17) = happyShift action_51
+action_50 _ = happyFail
 
-action_51 (18) = happyShift action_52
-action_51 _ = happyFail
-
-action_52 _ = happyReduce_13
+action_51 _ = happyReduce_13
 
 happyReduce_1 = happySpecReduce_1  4 happyReduction_1
 happyReduction_1 (HappyTerminal (TokenCode happy_var_1))
@@ -217,14 +214,13 @@ happyReduction_2 ((HappyAbsSyn4  happy_var_6) `HappyStk`
 		 (Source    happy_var_1 happy_var_3 happy_var_4 happy_var_6
 	) `HappyStk` happyRest
 
-happyReduce_3 = happySpecReduce_3  5 happyReduction_3
-happyReduction_3 (HappyTerminal (TokenBlock happy_var_3))
-	(HappyTerminal (TokenMatch happy_var_2))
+happyReduce_3 = happySpecReduce_2  5 happyReduction_3
+happyReduction_3 (HappyTerminal (TokenMatch happy_var_2))
 	(HappyTerminal (TokenMode happy_var_1))
 	 =  HappyAbsSyn5
-		 (Options happy_var_1 happy_var_2 happy_var_3
+		 (Options happy_var_1 happy_var_2
 	)
-happyReduction_3 _ _ _  = notHappyAtAll 
+happyReduction_3 _ _  = notHappyAtAll 
 
 happyReduce_4 = happySpecReduce_1  6 happyReduction_4
 happyReduction_4 (HappyAbsSyn7  happy_var_1)
@@ -338,27 +334,26 @@ happyReduction_15 (HappyAbsSyn11  happy_var_2)
 happyReduction_15 _ _  = notHappyAtAll 
 
 happyNewToken action sts stk [] =
-	action 24 24 notHappyAtAll (HappyState action) sts stk []
+	action 23 23 notHappyAtAll (HappyState action) sts stk []
 
 happyNewToken action sts stk (tk:tks) =
 	let cont i = action i i tk (HappyState action) sts stk tks in
 	case tk of {
 	TokenName happy_dollar_dollar -> cont 12;
-	TokenBlock happy_dollar_dollar -> cont 13;
-	TokenCode happy_dollar_dollar -> cont 14;
-	TokenAngle -> cont 15;
-	TokenColon -> cont 16;
-	TokenOParenthesis -> cont 17;
-	TokenCParenthesis -> cont 18;
-	TokenEq -> cont 19;
-	TokenStart -> cont 20;
-	TokenEnd -> cont 21;
-	TokenMode happy_dollar_dollar -> cont 22;
-	TokenMatch happy_dollar_dollar -> cont 23;
+	TokenCode happy_dollar_dollar -> cont 13;
+	TokenAngle -> cont 14;
+	TokenColon -> cont 15;
+	TokenOParenthesis -> cont 16;
+	TokenCParenthesis -> cont 17;
+	TokenEq -> cont 18;
+	TokenStart -> cont 19;
+	TokenEnd -> cont 20;
+	TokenMode happy_dollar_dollar -> cont 21;
+	TokenMatch happy_dollar_dollar -> cont 22;
 	_ -> happyError' (tk:tks)
 	}
 
-happyError_ 24 tk tks = happyError' tks
+happyError_ 23 tk tks = happyError' tks
 happyError_ _ tk tks = happyError' (tk:tks)
 
 newtype HappyIdentity a = HappyIdentity a
@@ -413,7 +408,6 @@ data Token
     = TokenEq
     | TokenCode BS.ByteString
     | TokenName String
-    | TokenBlock (Maybe String)
     | TokenOParenthesis
     | TokenCParenthesis
     | TokenAngle
@@ -445,19 +439,20 @@ lex_options :: String -> [Token]
 lex_options cs =
     let (mode, cs')    = (lex_mode . dropWhile isSpace) cs
         (match, cs'')  = (lex_match . dropWhile isSpace) cs'
-        (block, cs''') = (lex_block . dropWhile isSpace) cs''
-    in  TokenMode mode : TokenMatch match : TokenBlock block : case block of
-            Nothing -> lex_rules cs'''
-            Just b  -> lex_rules_b cs'''
+    in  TokenMode mode : TokenMatch match : case mode of
+            Block _ -> lex_rules_b cs''
+            _       -> lex_rules cs''
 
 
 lex_mode :: String -> (Mode, String)
 lex_mode ('!':'c':'r':'e':'2':'c':'_':'m':'o':'d':'e':':':cs) =
     let (mode, rest) = (span (\ c -> isAlpha c || c == '_') . dropWhile isSpace) cs
     in  case mode of
-            m | m == "scanner"   -> (Scanner, rest)
-            m | m == "matcher"   -> (Matcher, rest)
-            m | m == "tokenizer" -> (Tokenizer, rest)
+            m | m == "single" -> (Single, rest)
+            m | m == "normal" -> (Normal, rest)
+            m | m == "block"  ->
+                let (block, rest') = lex_blockname rest
+                in  (Block block, rest')
             _                    -> error $ "*** SourceParser: unknown mode: " ++ mode
 lex_mode _ = error "*** SourceParser: missing \"!cre2c_mode:\" directive"
 
@@ -467,19 +462,19 @@ lex_match ('!':'c':'r':'e':'2':'c':'_':'m':'a':'t':'c':'h':':':cs) =
     let (match, rest) = (span (\ c -> isAlpha c || c == '_') . dropWhile isSpace) cs
     in  case match of
             m | m == "longest"  -> (Longest, rest)
-            m | m == "shortest" -> (Shortest, rest)
             m | m == "all"      -> (All, rest)
             _                   -> error $ "*** SourceParser: unknown match: " ++ match
 lex_match _ = error "*** SourceParser: missing \"!cre2c_match:\" directive"
 
 
-lex_block :: String -> (Maybe BlockName, String)
-lex_block ('!':'c':'r':'e':'2':'c':'_':'b':'l':'o':'c':'k':':':cs) =
-    let (block, rest) = (span (\ c -> isAlpha c || c == '_') . dropWhile isSpace) cs
-    in  case block of
-            "" -> error $ "*** SourceParser: block name not specified."
-            _  -> (Just block, rest)
-lex_block cs = (Nothing, cs)
+lex_blockname :: String -> (BlockName, String)
+lex_blockname ('(':cs) =
+    let (block, rest) = span (\ c -> isAlpha c || c == '_') cs
+    in  case (block, rest) of
+            ("", _)                            -> error $ "*** SourceParser: block name not specified."
+            (_,  r) | r == "" || head r /= ')' -> error $ "*** SourceParser: missing ')' after \"cre2c: block(" ++ block ++ "\""
+            _                                  -> (block, tail rest)
+lex_block cs = error $ "*** SourceParser: missing '(' after \"block\" in \"cre2c_mode:\" directive"
 
 
 lex_rules :: String -> [Token]

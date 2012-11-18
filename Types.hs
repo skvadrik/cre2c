@@ -90,17 +90,15 @@ data Options
     = Options
         { mode  :: Mode
         , match :: Match
-        , block :: Maybe BlockName
         }
     deriving (Show)
 data Mode
-    = Scanner
-    | Matcher
-    | Tokenizer
+    = Single
+    | Normal
+    | Block String
     deriving (Show)
 data Match
     = Longest
-    | Shortest
     | All
     deriving (Show)
 data CondList

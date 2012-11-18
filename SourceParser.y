@@ -22,7 +22,6 @@ import           Types
 
 %token
     name          { TokenName $$ }
-    block         { TokenBlock $$ }
     code          { TokenCode $$ }
     '>'           { TokenAngle }
     ':'           { TokenColon }
@@ -41,7 +40,7 @@ Source
     | code start Options Rules end Source            { Source    $1 $3 $4 $6 }
 
 Options
-    : mode match block                               { Options $1 $2 $3 }
+    : mode match                                     { Options $1 $2 }
 
 Rules
     : Rules1                                         { R1 $1 }
@@ -98,7 +97,6 @@ data Token
     = TokenEq
     | TokenCode BS.ByteString
     | TokenName String
-    | TokenBlock (Maybe String)
     | TokenOParenthesis
     | TokenCParenthesis
     | TokenAngle
@@ -130,19 +128,20 @@ lex_options :: String -> [Token]
 lex_options cs =
     let (mode, cs')    = (lex_mode . dropWhile isSpace) cs
         (match, cs'')  = (lex_match . dropWhile isSpace) cs'
-        (block, cs''') = (lex_block . dropWhile isSpace) cs''
-    in  TokenMode mode : TokenMatch match : TokenBlock block : case block of
-            Nothing -> lex_rules cs'''
-            Just b  -> lex_rules_b cs'''
+    in  TokenMode mode : TokenMatch match : case mode of
+            Block _ -> lex_rules_b cs''
+            _       -> lex_rules cs''
 
 
 lex_mode :: String -> (Mode, String)
 lex_mode ('!':'c':'r':'e':'2':'c':'_':'m':'o':'d':'e':':':cs) =
     let (mode, rest) = (span (\ c -> isAlpha c || c == '_') . dropWhile isSpace) cs
     in  case mode of
-            m | m == "scanner"   -> (Scanner, rest)
-            m | m == "matcher"   -> (Matcher, rest)
-            m | m == "tokenizer" -> (Tokenizer, rest)
+            m | m == "single" -> (Single, rest)
+            m | m == "normal" -> (Normal, rest)
+            m | m == "block"  ->
+                let (block, rest') = lex_blockname rest
+                in  (Block block, rest')
             _                    -> error $ "*** SourceParser: unknown mode: " ++ mode
 lex_mode _ = error "*** SourceParser: missing \"!cre2c_mode:\" directive"
 
@@ -152,19 +151,19 @@ lex_match ('!':'c':'r':'e':'2':'c':'_':'m':'a':'t':'c':'h':':':cs) =
     let (match, rest) = (span (\ c -> isAlpha c || c == '_') . dropWhile isSpace) cs
     in  case match of
             m | m == "longest"  -> (Longest, rest)
-            m | m == "shortest" -> (Shortest, rest)
             m | m == "all"      -> (All, rest)
             _                   -> error $ "*** SourceParser: unknown match: " ++ match
 lex_match _ = error "*** SourceParser: missing \"!cre2c_match:\" directive"
 
 
-lex_block :: String -> (Maybe BlockName, String)
-lex_block ('!':'c':'r':'e':'2':'c':'_':'b':'l':'o':'c':'k':':':cs) =
-    let (block, rest) = (span (\ c -> isAlpha c || c == '_') . dropWhile isSpace) cs
-    in  case block of
-            "" -> error $ "*** SourceParser: block name not specified."
-            _  -> (Just block, rest)
-lex_block cs = (Nothing, cs)
+lex_blockname :: String -> (BlockName, String)
+lex_blockname ('(':cs) =
+    let (block, rest) = span (\ c -> isAlpha c || c == '_') cs
+    in  case (block, rest) of
+            ("", _)                            -> error $ "*** SourceParser: block name not specified."
+            (_,  r) | r == "" || head r /= ')' -> error $ "*** SourceParser: missing ')' after \"cre2c: block(" ++ block ++ "\""
+            _                                  -> (block, tail rest)
+lex_block cs = error $ "*** SourceParser: missing '(' after \"block\" in \"cre2c_mode:\" directive"
 
 
 lex_rules :: String -> [Token]
