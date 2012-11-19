@@ -83,40 +83,31 @@ doc_goto k n =
     <> PP.semi
 
 
-doc_decl_label :: Int -> Options -> String -> Doc
-doc_decl_label k opts s =
+doc_decl_fin :: Int -> Options -> Doc
+doc_decl_fin k opts =
     let block_id = case opts of
             Options (Block b) _ -> PP.text b
             _                   -> PP.int k
     in  PP.text "m_"
         <> block_id
-        <> PP.text s
+        <> PP.text "_fin:"
 
 
-doc_goto_label :: Int -> Options -> String -> Doc
-doc_goto_label k opts s =
+doc_goto_fin :: Int -> Options -> Doc
+doc_goto_fin k opts =
     let block_id = case opts of
             Options (Block b) _ -> PP.text b
             _                   -> PP.int k
     in  PP.text "goto m_"
         <> block_id
-        <> PP.text s
+        <> PP.text "_fin;"
 
 
-doc_decl_fin :: Int -> Options -> Doc
-doc_decl_fin k opts = doc_decl_label k opts "_fin:"
-
-
-doc_decl_start :: Int -> Options -> Doc
-doc_decl_start k opts = doc_decl_label k opts "_start:"
-
-
-doc_goto_fin :: Int -> Options -> Doc
-doc_goto_fin k opts = doc_goto_label k opts "_fin;"
-
-
---doc_goto_start :: Int -> Options -> Doc
---doc_goto_start k opts = doc_goto_label k opts "_start;"
+doc_decl_start :: Options -> Doc
+doc_decl_start opts =
+    case opts of
+        Options (Block b) _ -> PP.text "m_" <> PP.text b <> PP.text "_start:"
+        _                   -> PP.empty
 
 
 doc_goto_block :: BlockName -> Doc
@@ -258,7 +249,7 @@ router5 opts k id_info = case opts of
 
 codegen_entry :: Int -> Int -> Options -> RegexpId2RegexpInfo -> PP.Doc
 codegen_entry maxlen k opts id_info =
-    doc_decl_start k opts
+    doc_decl_start opts
     $$ PP.text "#define MAXLEN" <> PP.int k <> PP.space <> PP.int maxlen
     $$ router0 opts k id_info
     $$ PP.text "if (LIMIT - CURSOR < MAXLEN" <> PP.int k <> PP.text ") FILL();"
