@@ -11,6 +11,7 @@ import           Control.Applicative         ((<$>))
 import           Data.Char
 import           Data.List                   (foldl')
 import qualified Data.Set              as S
+import           Text.Printf
 
 import           Types
 
@@ -32,6 +33,7 @@ import           Types
     end           { TokenEnd }
     mode          { TokenMode $$ }
     match         { TokenMatch $$ }
+    block         { TokenBlock $$ }
 
 %%
 
@@ -41,7 +43,8 @@ Source
     | code start Options end Source                  { Empty     $1 $3 $5    }
 
 Options
-    : mode match                                     { Options $1 $2 }
+    : mode match                                     { Opts      $1 $2 }
+    | block                                          { OptsBlock $1    }
 
 Rules
     : Rules1                                         { R1 $1 }
@@ -107,6 +110,7 @@ data Token
     | TokenEnd
     | TokenMode Mode
     | TokenMatch Match
+    | TokenBlock BlockName
     deriving (Show)
 
 
@@ -128,23 +132,23 @@ lexer cs =
 
 lex_options :: String -> [Token]
 lex_options cs =
-    let (mode, cs')    = (lex_mode . dropWhile isSpace) cs
-        (match, cs'')  = (lex_match . dropWhile isSpace) cs'
-    in  TokenMode mode : TokenMatch match : case mode of
-            Block _ -> lex_rules_b cs''
-            _       -> lex_rules cs''
+    let (mode, cs')   = (lex_mode . dropWhile isSpace) cs
+        (match, cs'') = (lex_match . dropWhile isSpace) cs'
+    in  case mode of
+            Left m  -> TokenMode  m : TokenMatch match : lex_rules cs''
+            Right b -> TokenBlock b : lex_rules_b cs'
 
 
-lex_mode :: String -> (Mode, String)
+lex_mode :: String -> (Either Mode BlockName, String)
 lex_mode ('!':'c':'r':'e':'2':'c':'_':'m':'o':'d':'e':':':cs) =
     let (mode, rest) = (span (\ c -> isAlpha c || c == '_') . dropWhile isSpace) cs
     in  case mode of
-            m | m == "single" -> (Single, rest)
-            m | m == "normal" -> (Normal, rest)
+            m | m == "single" -> (Left Single, rest)
+            m | m == "normal" -> (Left Normal, rest)
             m | m == "block"  ->
                 let (block, rest') = lex_blockname rest
-                in  (Block block, rest')
-            _                    -> error $ "*** SourceParser: unknown mode: " ++ mode
+                in  (Right block, rest')
+            _                    -> error $ printf "*** SourceParser: unknown mode: %s" mode
 lex_mode _ = error "*** SourceParser: missing \"!cre2c_mode:\" directive"
 
 
@@ -154,7 +158,7 @@ lex_match ('!':'c':'r':'e':'2':'c':'_':'m':'a':'t':'c':'h':':':cs) =
     in  case match of
             m | m == "longest"  -> (Longest, rest)
             m | m == "all"      -> (All, rest)
-            _                   -> error $ "*** SourceParser: unknown match: " ++ match
+            _                   -> error $ printf "*** SourceParser: unknown match: %s" match
 lex_match _ = error "*** SourceParser: missing \"!cre2c_match:\" directive"
 
 
@@ -162,10 +166,10 @@ lex_blockname :: String -> (BlockName, String)
 lex_blockname ('(':cs) =
     let (block, rest) = span (\ c -> isAlpha c || c == '_') cs
     in  case (block, rest) of
-            ("", _)                            -> error $ "*** SourceParser: block name not specified."
-            (_,  r) | r == "" || head r /= ')' -> error $ "*** SourceParser: missing ')' after \"cre2c: block(" ++ block ++ "\""
+            ("", _)                            -> error "*** SourceParser: block name not specified."
+            (_,  r) | r == "" || head r /= ')' -> error $ printf "*** SourceParser: missing ')' after \"cre2c: block(%s\"" block
             _                                  -> (block, tail rest)
-lex_block cs = error $ "*** SourceParser: missing '(' after \"block\" in \"cre2c_mode:\" directive"
+lex_block cs = error "*** SourceParser: missing '(' after \"block\" in \"cre2c_mode:\" directive"
 
 
 lex_rules :: String -> [Token]
@@ -177,6 +181,7 @@ lex_rules (c : cs)
 lex_rules ('>'  : cs) = TokenAngle        : lex_name cs lex_rules
 lex_rules ('='  : cs) = TokenEq           : lex_rules cs
 lex_rules ('{'  : cs) = TokenOParenthesis : lex_code cs lex_rules
+lex_rules cs          = error $ printf "*** SourceParser : lex_rules : can't parse rules at %s" $ (show . take 50) cs
 
 
 lex_rules_b :: String -> [Token]
@@ -189,6 +194,7 @@ lex_rules_b (':'  : cs) = TokenColon : lex_name cs lex_rules_b
 lex_rules_b ('>'  : cs) = TokenAngle        : lex_name cs lex_rules_b
 lex_rules_b ('='  : cs) = TokenEq           : lex_rules_b cs
 lex_rules_b ('{'  : cs) = TokenOParenthesis : lex_code cs lex_rules_b
+lex_rules_b cs          = error $ printf "*** SourceParser : lex_rules_b : can't parse rules at %s" $ (show . take 50) cs
 
 
 lex_code :: String -> (String -> [Token]) -> [Token]
@@ -235,9 +241,9 @@ rules2table2 (RMany2 (RComplex2 condlist name block code) rules) = (name, Just b
 
 
 combine_rules :: (Maybe BlockName, M.HashMap (S.Set Cond) Code) -> (Maybe BlockName, M.HashMap (S.Set Cond) Code) -> (Maybe BlockName, M.HashMap (S.Set Cond) Code)
-combine_rules (Just b, _) (Just b', _) | b /= b' = error $ "*** SourceParser: rules for one regexp lead to different blocks"
-combine_rules (Just b, _) (Nothing, _)           = error $ "*** SourceParser: combine_rules: dark magic..."
-combine_rules (Nothing, _) (Just b, _)           = error $ "*** SourceParser: combine_rules: dark magic..."
+combine_rules (Just b, _) (Just b', _) | b /= b' = error "*** SourceParser: rules for one regexp lead to different blocks"
+combine_rules (Just b, _) (Nothing, _)           = error "*** SourceParser: combine_rules: dark magic..."
+combine_rules (Nothing, _) (Just b, _)           = error "*** SourceParser: combine_rules: dark magic..."
 combine_rules (b, conds2code) (b', conds2code')  =
     let conds2code'' = M.foldlWithKey'
             (\ c2c conds code -> M.insertWith

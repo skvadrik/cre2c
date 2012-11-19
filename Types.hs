@@ -87,15 +87,15 @@ data ChunkList
     = LastChunk Code
     | Chunk Code Options RuleTable ChunkList
 data Options
-    = Options
+    = Opts
         { mode  :: Mode
         , match :: Match
         }
+    | OptsBlock BlockName
     deriving (Show)
 data Mode
     = Single
     | Normal
-    | Block String
     deriving (Show)
 data Match
     = Longest
