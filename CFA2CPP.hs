@@ -7,7 +7,6 @@ import qualified Data.HashMap.Strict       as M
 import qualified Data.Set                  as S
 import           Data.List                       (foldl', partition, nub, unzip4)
 import qualified Data.ByteString.Char8     as BS
-import           Text.Printf                     (printf)
 import           Text.PrettyPrint.HughesPJ       (($$), (<>), ($+$), Doc)
 import qualified Text.PrettyPrint.HughesPJ as PP
 import           Data.Maybe                      (fromJust)
@@ -16,13 +15,12 @@ import           Types
 import           CFA
 
 
-type Conds2Code          = M.HashMap (S.Set Cond) Code
 type RegexpId2RegexpInfo = M.HashMap RegexpId (Maybe BlockName, Conds2Code)
-data StateInfo           = SI State Bool Bool DCFANode (Maybe (S.Set RegexpId))
-data BlockInfo           = BI Int Options RegexpId2RegexpInfo
+data StateInfo a         = SI State Bool Bool (DCFANode a) (Maybe (S.Set RegexpId))
+data BlockInfo a         = BI Int Options RegexpId2RegexpInfo
 
 
-cfa2cpp :: DCFA -> Code -> RegexpId2RegexpInfo -> Int -> Int -> Options -> Code
+cfa2cpp :: Labellable a => DCFA a -> Code -> RegexpId2RegexpInfo -> Int -> Int -> Options -> Code
 cfa2cpp dcfa prolog id_info maxlen n_scanner opts =
     let entry      = codegen_entry maxlen n_scanner opts id_info
         g          = dcfa_graph dcfa
@@ -86,8 +84,8 @@ doc_goto k n =
 doc_decl_fin :: Int -> Options -> Doc
 doc_decl_fin k opts =
     let block_id = case opts of
-            OptsBlock b -> PP.text b
-            _           -> PP.int k
+            OptsBlock b _ -> PP.text b
+            _             -> PP.int k
     in  PP.text "m_"
         <> block_id
         <> PP.text "_fin:"
@@ -96,8 +94,8 @@ doc_decl_fin k opts =
 doc_goto_fin :: Int -> Options -> Doc
 doc_goto_fin k opts =
     let block_id = case opts of
-            OptsBlock b -> PP.text b
-            _           -> PP.int k
+            OptsBlock b _ -> PP.text b
+            _             -> PP.int k
     in  PP.text "goto m_"
         <> block_id
         <> PP.text "_fin;"
@@ -106,8 +104,8 @@ doc_goto_fin k opts =
 doc_decl_start :: Options -> Doc
 doc_decl_start opts =
     case opts of
-        OptsBlock b -> PP.text "m_" <> PP.text b <> PP.text "_start:"
-        _           -> PP.empty
+        OptsBlock b _ -> PP.text "m_" <> PP.text b <> PP.text "_start:"
+        _             -> PP.empty
 
 
 doc_goto_block :: BlockName -> Doc
@@ -150,11 +148,18 @@ doc_switch :: Doc -> Doc -> Doc
 doc_switch d1 d2 = PP.text "switch " <> (PP.parens d1) $$ (wrap_in_braces d2)
 
 
-doc_case_break :: Int -> Doc ->  Doc
+doc_case :: Labellable a => Label a -> Doc
+doc_case l =
+    let f x = PP.text "case " <> (PP.text . show) x <> PP.colon
+    in  case l of
+            LOne x    -> f x
+            LRange xs -> (PP.vcat . map f) xs
+
+
+doc_case_break :: Int -> Doc -> Doc
 doc_case_break n d =
     PP.text "case " <> PP.int n <> PP.colon
     $$ PP.nest 4 (d $$ PP.text "break;")
-
 
 
 doc_default :: Doc -> Doc
@@ -196,11 +201,11 @@ router0 opts k id_info =
         d4 = PP.text "accept = -1;"
         d5 = PP.text "CURSOR = MARKER;"
     in  case opts of
-            Opts      Single Longest ->       d2       $$ d4
-            Opts      Single All     ->       d2
-            Opts      Normal Longest -> d1       $$ d3 $$ d4 $$ d5
-            Opts      Normal All     -> d1                   $$ d5
-            OptsBlock _              -> d1       $$ d3 $$ d4 $$ d5
+            Opts      Single _ Longest ->       d2       $$ d4
+            Opts      Single _ All     ->       d2
+            Opts      Normal _ Longest -> d1       $$ d3 $$ d4 $$ d5
+            Opts      Normal _ All     -> d1                   $$ d5
+            OptsBlock _      _         -> d1       $$ d3 $$ d4 $$ d5
 
 
 router1 :: Options -> Bool -> Bool -> Doc
@@ -213,10 +218,10 @@ router1 opts is_init is_final =
             (True, True)  -> PP.text "token = MARKER;"
             _             -> PP.empty
     in  case opts of
-            Opts      Single _        -> PP.empty
-            Opts      Normal All      -> d1
-            Opts      Normal Longest  -> d2
-            OptsBlock _               -> d2
+            Opts      Single _ _        -> PP.empty
+            Opts      Normal _ All      -> d1
+            Opts      Normal _ Longest  -> d2
+            OptsBlock _      _          -> d2
 
 
 router2 :: Options -> Doc
@@ -224,10 +229,10 @@ router2 opts =
     let d1 = PP.text "MARKER += adjust_marker;"
         d2 = PP.text "MARKER ++;"
     in  case opts of
-            Opts      Single _       -> PP.empty
-            Opts      Normal All     -> d1
-            Opts      Normal Longest -> d2
-            OptsBlock _              -> d2
+            Opts      Single _ _       -> PP.empty
+            Opts      Normal _ All     -> d1
+            Opts      Normal _ Longest -> d2
+            OptsBlock _      _         -> d2
 
 
 router3 :: Options -> Bool -> Doc
@@ -238,10 +243,10 @@ router3 opts is_init =
         d2 = PP.text "MARKER += adjust_marker;"
         d3 = PP.text "MARKER ++;"
     in  case opts of
-            Opts      Single _       -> PP.empty
-            Opts      Normal All     -> d1 $$ d2
-            Opts      Normal Longest -> d3
-            OptsBlock _              -> d3
+            Opts      Single _ _       -> PP.empty
+            Opts      Normal _ All     -> d1 $$ d2
+            Opts      Normal _ Longest -> d3
+            OptsBlock _      _         -> d3
 
 
 router4 :: Options -> Bool -> (Int, Code) -> Doc
@@ -251,16 +256,16 @@ router4 opts empty_node (k, code) =
         d3 = PP.text "MARKER = CURSOR;"
         d4 = if empty_node then PP.empty else PP.text "adjust_marker = false;"
     in  case opts of
-            Opts      Single Longest ->       d2
-            Opts      Single All     -> d1
-            Opts      Normal Longest ->       d2 $$ d3
-            Opts      Normal All     -> d1       $$ d3 $$ d4
-            OptsBlock _              ->       d2 $$ d3
+            Opts      Single _ Longest ->       d2
+            Opts      Single _ All     -> d1
+            Opts      Normal _ Longest ->       d2 $$ d3
+            Opts      Normal _ All     -> d1       $$ d3 $$ d4
+            OptsBlock _      _         ->       d2 $$ d3
 
 
 router5 :: Options -> Int -> RegexpId2RegexpInfo -> Doc
 router5 opts k id_info = case opts of
-    Opts Single _   -> doc_decl_fin k opts $$ codegen_match_code id_info
+    Opts Single _ _ -> doc_decl_fin k opts $$ codegen_match_code id_info
     _               -> PP.empty
 
 
@@ -273,13 +278,9 @@ codegen_entry maxlen k opts id_info =
     $$ doc_goto k 0
 
 
-codegen_cases :: StateInfo -> BlockInfo -> PP.Doc
+codegen_cases :: Labellable a => StateInfo a -> BlockInfo a -> PP.Doc
 codegen_cases (SI _ is_init is_final node _) (BI k opts id_info) =
-    let show_u8b    = printf "case 0x%02X:"
-        case_head l = case l of
-            LabelChar c  -> PP.text $ show_u8b c
-            LabelRange r -> PP.vcat $ map (PP.text . show_u8b) r
-        case_body ids s =
+    let case_body ids s =
             let conds          = get_conds id_info ids
                 is_conditional = (null . fst . partition (== S.empty)) conds
                 goto_m         = doc_goto k s
@@ -289,7 +290,7 @@ codegen_cases (SI _ is_init is_final node _) (BI k opts id_info) =
                     else goto_m
         one_case doc l (ids, s) =
             doc
-            $$ case_head l
+            $$ doc_case l
             $$ PP.nest 4
                 ( router1 opts is_init is_final
                 $$ case_body ids s
@@ -299,7 +300,7 @@ codegen_cases (SI _ is_init is_final node _) (BI k opts id_info) =
     in  cases $$ default_case
 
 
-codegen_fstate :: StateInfo -> BlockInfo -> PP.Doc
+codegen_fstate :: Labellable a => StateInfo a -> BlockInfo a -> PP.Doc
 codegen_fstate (SI _ _ _ node ids) (BI _ opts id_info) =
     let id_conds_code = get_conds2code id_info (fromJust ids)
         f doc (id, conds, _, code) =
@@ -309,14 +310,13 @@ codegen_fstate (SI _ _ _ node ids) (BI _ opts id_info) =
     in  foldl' f  PP.empty id_conds_code
 
 
-codegen_state :: StateInfo -> BlockInfo -> PP.Doc
+codegen_state :: Labellable a => StateInfo a -> BlockInfo a -> PP.Doc
 codegen_state si@(SI s _ is_final node _) bi@(BI k opts _) =
-    let is_full range = S.fromList range == S.fromList ['\x00' .. '\xFF']
-        fstate = if is_final then codegen_fstate si bi else PP.empty
+    let fstate = if is_final then codegen_fstate si bi else PP.empty
         state  = case M.toList node of
-            []                                   -> doc_goto_fin k opts
-            [(LabelRange r, (_, s))] | is_full r -> PP.text "CURSOR++;" $$ doc_goto k s
-            _                                    -> doc_switch (PP.text "*CURSOR++") (codegen_cases si bi)
+            []                                     -> doc_goto_fin k opts
+            [(LRange r, (_, s))] | is_full_range r -> PP.text "CURSOR++;" $$ doc_goto k s
+            _                                      -> doc_switch (PP.text "*CURSOR++") (codegen_cases si bi)
     in  doc_decl k s
         $$ fstate
         $$ PP.nest 4 state

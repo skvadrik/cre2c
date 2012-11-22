@@ -32,71 +32,61 @@ import           Types
     start         { TokenStart }
     end           { TokenEnd }
     mode          { TokenMode $$ }
+    token_type    { TokenType $$ }
     match         { TokenMatch $$ }
     block         { TokenBlock $$ }
 
 %%
 
-Source
-    : code                                           { SourceEnd $1          }
-    | code start Options Rules end Source            { Source    $1 $3 $4 $6 }
-    | code start Options end Source                  { Empty     $1 $3 $5    }
+Source :: { [Chunk] }
+    : code                                           { [Ch1 $1] }
+    | code start Options Rules end Source            { (Ch2 $1 $3 (foldl' insert_rule M.empty $4)) : $6 }
+    | code start Options end Source                  { error "*** SourceParser : empty rule list; useless scanner block." }
 
 Options
-    : mode match                                     { Opts      $1 $2 }
-    | block                                          { OptsBlock $1    }
+    : mode                                           { Opts      $1     U8  Longest }
+    | token_type                                     { Opts      Normal $1  Longest }
+    | match                                          { Opts      Normal U8  $1      }
+    | mode token_type                                { Opts      $1     $2  Longest }
+    | mode match                                     { Opts      $1     U8  $2      }
+    | token_type match                               { Opts      Normal $1  $2      }
+    | mode token_type match                          { Opts      $1     $2  $3      }
+    | block                                          { OptsBlock $1     U8          }
+    | block token_type                               { OptsBlock $1     $2          }
 
-Rules
-    : Rules1                                         { R1 $1 }
-    | Rules2                                         { R2 $1 }
+Rules :: { [Rule] }
+    : Rules1                                         { $1 }
+    | Rules2                                         { $1 }
 
-Rules1
-    : Rule1                                          { ROne1  $1    }
-    | Rule1 Rules1                                   { RMany1 $1 $2 }
+Rules1 :: { [Rule] }
+    : Rule1                                          { [$1]    }
+    | Rule1 Rules1                                   { $1 : $2 }
 
-Rule1
-    : name '=' '{' code '}'                          { RSimple1  $1 $4    }
-    | CondList '>' name '=' '{' code '}'             { RComplex1 $1 $3 $6 }
+Rule1 :: { Rule }
+    : name '=' '{' code '}'                          { ($1, Nothing, [], $4) }
+    | Conds '>' name '=' '{' code '}'                { ($3, Nothing, $1, $6) }
 
-Rules2
-    : Rule2                                          { ROne2  $1    }
-    | Rule2 Rules2                                   { RMany2 $1 $2 }
+Rules2 :: { [Rule] }
+    : Rule2                                          { [$1]    }
+    | Rule2 Rules2                                   { $1 : $2 }
 
-Rule2
-    : name ':' name '=' '{' code '}'                 { RSimple2  $1 $3 $6    }
-    | CondList '>' name ':' name '=' '{' code '}'    { RComplex2 $1 $3 $5 $8 }
+Rule2 :: { Rule }
+    : name ':' name '=' '{' code '}'                 { ($1, Just $3, [], $6) }
+    | Conds '>' name ':' name '=' '{' code '}'       { ($3, Just $5, $1, $8) }
 
-CondList
-    : name                                           { OneCond   $1    }
-    | name CondList                                  { ManyConds $1 $2 }
+Conds :: { [Cond] }
+    : name                                           { [$1]    }
+    | name Conds                                     { $1 : $2 }
 
 
 {
 
+type Rule
+    = (RegexpName, Maybe BlockName, [Cond], Code)
+
 data Source
     = SourceEnd  Code
-    | Source     Code Options Rules Source
-    | Empty      Code Options       Source
-
-data Rules
-    = R1 Rules1
-    | R2 Rules2
-
-data Rules1
-    = RMany1 Rule1 Rules1
-    | ROne1  Rule1
-
-data Rule1
-    = RSimple1  RegexpName Code
-    | RComplex1 CondList RegexpName Code
-
-data Rules2
-    = RMany2 Rule2 Rules2
-    | ROne2  Rule2
-
-data Rule2
-    = RSimple2  RegexpName BlockName Code
-    | RComplex2 CondList RegexpName BlockName Code
+    | Source     Code Options [Rule] Source
 
 data Token
     = TokenEq
@@ -108,7 +98,8 @@ data Token
     | TokenColon
     | TokenStart
     | TokenEnd
-    | TokenMode Mode
+    | TokenMode  Mode
+    | TokenType  Type
     | TokenMatch Match
     | TokenBlock BlockName
     deriving (Show)
@@ -120,46 +111,57 @@ parseError e = error $ "Parse error: " ++ show e
 
 lexer ::  String -> [Token]
 lexer [] = []
-lexer ('/':'*':'s':'t':'a':'r':'t':':': cs) = TokenStart : lex_options cs
+lexer ('/':'*':'s':'t':'a':'r':'t':':': cs) =
+    let default_opts = Opts Normal U8 Longest
+    in  TokenStart : lex_options cs default_opts
 lexer cs =
     let lex_entry_code :: DL.DList Char -> String -> (DL.DList Char, String)
         lex_entry_code code "" = (code, "")
         lex_entry_code code ('\n':'/':'*':'s':'t':'a':'r':'t':':':cs) = (code, cs)
         lex_entry_code code (c : cs) = lex_entry_code (DL.snoc code c) cs
         (code, rest) = lex_entry_code DL.empty cs
-    in  TokenCode ((BS.pack . DL.toList) code) : (if rest == "" then [] else TokenStart : lex_options rest)
+        default_opts = Opts Normal U8 Longest
+    in  TokenCode ((BS.pack . DL.toList) code) : (if rest == "" then [] else TokenStart : lex_options rest default_opts)
 
 
-lex_options :: String -> [Token]
-lex_options cs =
-    let (mode, cs')   = (lex_mode . dropWhile isSpace) cs
-        (match, cs'') = (lex_match . dropWhile isSpace) cs'
+lex_options :: String -> Options -> [Token]
+lex_options ('!':'c':'r':'e':'2':'c':'_':'t':'y':'p':'e':':':cs)     opts = lex_type cs  opts
+lex_options ('!':'c':'r':'e':'2':'c':'_':'m':'o':'d':'e':':':cs)     opts = lex_mode cs  opts
+lex_options ('!':'c':'r':'e':'2':'c':'_':'m':'a':'t':'c':'h':':':cs) opts = lex_match cs opts
+lex_options (c:cs)  opts | isSpace c = lex_options cs opts
+lex_options s@(c:_) opts | isAlpha c = case opts of
+    OptsBlock _ _ -> lex_rules_b s
+    _             -> lex_rules   s
+
+
+lex_type :: String -> Options -> [Token]
+lex_type cs opts =
+    let (ttype, cs') = (span isAlphaNum . dropWhile isSpace) cs
+    in  case ttype of
+            t | t == "U8B"  -> TokenType U8  : lex_options cs' (opts{ token_type = U8 })
+            t | t == "U32B" -> TokenType U32 : lex_options cs' (opts{ token_type = U32 })
+            _               -> error $ printf "*** SourceParser: unknown token_type: %s" ttype
+
+
+lex_mode :: String -> Options -> [Token]
+lex_mode cs opts =
+    let (mode, cs') = (span isAlpha . dropWhile isSpace) cs
     in  case mode of
-            Left m  -> TokenMode  m : TokenMatch match : lex_rules cs''
-            Right b -> TokenBlock b : lex_rules_b cs'
-
-
-lex_mode :: String -> (Either Mode BlockName, String)
-lex_mode ('!':'c':'r':'e':'2':'c':'_':'m':'o':'d':'e':':':cs) =
-    let (mode, rest) = (span (\ c -> isAlpha c || c == '_') . dropWhile isSpace) cs
-    in  case mode of
-            m | m == "single" -> (Left Single, rest)
-            m | m == "normal" -> (Left Normal, rest)
+            m | m == "single" -> TokenMode Single : lex_options cs' (opts{ mode = Single })
+            m | m == "normal" -> TokenMode Normal : lex_options cs' (opts{ mode = Normal })
             m | m == "block"  ->
-                let (block, rest') = lex_blockname rest
-                in  (Right block, rest')
-            _                    -> error $ printf "*** SourceParser: unknown mode: %s" mode
-lex_mode _ = error "*** SourceParser: missing \"!cre2c_mode:\" directive"
+                let (block, cs'') = lex_blockname cs'
+                in  TokenBlock block : lex_options cs' (OptsBlock block (token_type opts))
+            _                 -> error $ printf "*** SourceParser: unknown mode: %s" mode
 
 
-lex_match :: String -> (Match, String)
-lex_match ('!':'c':'r':'e':'2':'c':'_':'m':'a':'t':'c':'h':':':cs) =
-    let (match, rest) = (span (\ c -> isAlpha c || c == '_') . dropWhile isSpace) cs
+lex_match :: String -> Options -> [Token]
+lex_match cs opts =
+    let (match, cs') = (span isAlphaNum . dropWhile isSpace) cs
     in  case match of
-            m | m == "longest"  -> (Longest, rest)
-            m | m == "all"      -> (All, rest)
+            m | m == "longest"  -> TokenMatch Longest : lex_options cs' (opts{ match = Longest })
+            m | m == "all"      -> TokenMatch All     : lex_options cs' (opts{ match = All })
             _                   -> error $ printf "*** SourceParser: unknown match: %s" match
-lex_match _ = error "*** SourceParser: missing \"!cre2c_match:\" directive"
 
 
 lex_blockname :: String -> (BlockName, String)
@@ -219,28 +221,7 @@ lex_name cs lex =
 --------------------------------------------------------------------------------
 
 
-conds2list :: CondList -> [Cond]
-conds2list (OneCond c)      = [c]
-conds2list (ManyConds c cs) = c : conds2list cs
-
-
--- 2 types (Rules1 and Rules2) are needed to make ALL rules in one block be either "block" rules or simple rules
-
-rules2table1 :: Rules1 -> [(RegexpName, Maybe BlockName, [Cond], Code)]
-rules2table1 (ROne1  (RSimple1           name code))       = [(name, Nothing, [], code)]
-rules2table1 (ROne1  (RComplex1 condlist name code))       = [(name, Nothing, conds2list condlist, code)]
-rules2table1 (RMany1 (RSimple1           name code) rules) = (name, Nothing, [], code) : rules2table1 rules
-rules2table1 (RMany1 (RComplex1 condlist name code) rules) = (name, Nothing, conds2list condlist, code) : rules2table1 rules
-
-
-rules2table2 :: Rules2 -> [(RegexpName, Maybe BlockName, [Cond], Code)]
-rules2table2 (ROne2  (RSimple2           name block code))       = [(name, Just block, [], code)]
-rules2table2 (ROne2  (RComplex2 condlist name block code))       = [(name, Just block, conds2list condlist, code)]
-rules2table2 (RMany2 (RSimple2           name block code) rules) = (name, Just block, [], code) : rules2table2 rules
-rules2table2 (RMany2 (RComplex2 condlist name block code) rules) = (name, Just block, conds2list condlist, code) : rules2table2 rules
-
-
-combine_rules :: (Maybe BlockName, M.HashMap (S.Set Cond) Code) -> (Maybe BlockName, M.HashMap (S.Set Cond) Code) -> (Maybe BlockName, M.HashMap (S.Set Cond) Code)
+combine_rules :: (Maybe BlockName, Conds2Code) -> (Maybe BlockName, Conds2Code) -> (Maybe BlockName, Conds2Code)
 combine_rules (Just b, _) (Just b', _) | b /= b' = error "*** SourceParser: rules for one regexp lead to different blocks"
 combine_rules (Just b, _) (Nothing, _)           = error "*** SourceParser: combine_rules: dark magic..."
 combine_rules (Nothing, _) (Just b, _)           = error "*** SourceParser: combine_rules: dark magic..."
@@ -255,7 +236,7 @@ combine_rules (b, conds2code) (b', conds2code')  =
     in  (b, conds2code'')
 
 
-insert_rule :: RuleTable -> (RegexpName, Maybe BlockName, [Cond], Code) -> RuleTable
+insert_rule :: RuleTable -> Rule -> RuleTable
 insert_rule rules (name, block, conds, code) = M.insertWith
     combine_rules
     name
@@ -263,24 +244,8 @@ insert_rule rules (name, block, conds, code) = M.insertWith
     rules
 
 
-source2chunk_list :: Source -> ChunkList
-source2chunk_list (SourceEnd code)                = LastChunk code
-source2chunk_list (Empty _ _ _)                   = error "*** SourceParser : empty rule list; useless scanner block."
-source2chunk_list (Source code opts rules source) =
-    let rules'  = case rules of
-            R1 rs -> rules2table1 rs
-            R2 rs -> rules2table2 rs
-        rules'' = foldl' insert_rule M.empty rules'
-        chunks  = source2chunk_list source
-    in  Chunk code opts rules'' chunks
-
-
-parse_source :: FilePath -> IO ChunkList
-parse_source fp =
-    ( source2chunk_list
-    . parser
-    . lexer
-    ) <$> readFile fp
+parse_source :: FilePath -> IO [Chunk]
+parse_source fp = (parser . lexer) <$> readFile fp
 
 }
 

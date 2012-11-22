@@ -24,9 +24,9 @@ trace' :: (Show a) => a -> a
 trace' a = trace (show a) a
 
 
-gen_code :: ChunkList -> Int -> RegexpTable -> Verbosity -> IO (BS.ByteString, Int)
-gen_code (LastChunk code)                   _ _            _ = return (code, 0)
-gen_code (Chunk code opts rules chunk_list) k regexp_table v = do
+gen_code :: Labellable a => [Chunk] -> Int -> RegexpTable a -> Verbosity -> IO (BS.ByteString, Int)
+gen_code [Ch1 code]                     _ _            _ = return (code, 0)
+gen_code (Ch2 code opts rules : chunks) k regexp_table v = do
     let verbose :: (Show a) => a -> a
         verbose = case v of
             V1 -> trace'
@@ -42,14 +42,15 @@ gen_code (Chunk code opts rules chunk_list) k regexp_table v = do
         putStrLn "Generating .png for NCFA..." >> system (printf "dot -Tpng -oncfa%d.png ncfa%d.dot" k k) >>
         putStrLn "Generating .png for DCFA..." >> system (printf "dot -Tpng -odcfa%d.png dcfa%d.dot" k k) >>
         return ()
-    (code'', maxlen'') <- gen_code chunk_list (k + 1) regexp_table v
+    (code'', maxlen'') <- gen_code chunks (k + 1) regexp_table v
     return (BS.append code' code'', max maxlen' maxlen'')
+gen_code _ _ _ _ = error "*** cre2c : gen_code : wrong sequence of chunks"
 
 
-merge_regexp_tables :: [RegexpTable] -> RegexpTable
+merge_regexp_tables :: [RegexpTable a] -> RegexpTable a
 merge_regexp_tables []         = error "No .def files specified"
 merge_regexp_tables (rt : rts) =
-    let merge_one :: RegexpTable -> RegexpTable -> RegexpTable
+    let merge_one :: RegexpTable a -> RegexpTable a -> RegexpTable a
         merge_one = M.foldlWithKey' (\ rt nm r ->  case M.lookup nm rt of
             Nothing -> M.insert nm r rt
             Just _  -> error $ concat
@@ -114,7 +115,7 @@ main = do
             (CmdOptions (Just src) (Just dest) defs v) -> (src, dest, defs, v)
 
     chunk_list     <- parse_source fsrc
-    regexp_table   <- merge_regexp_tables <$> mapM parse_regexps fdefs
+    regexp_table   <- merge_regexp_tables <$> mapM (parse_regexps :: FilePath -> IO (RegexpTable Char)) fdefs
     (code, maxlen) <- gen_code chunk_list 0 regexp_table verbose
 
     BS.writeFile fdest $ BS.concat

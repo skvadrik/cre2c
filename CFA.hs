@@ -25,23 +25,23 @@ import           Data.Maybe               (isJust)
 import           Types
 
 
-ncfa_empty :: NCFA
+ncfa_empty :: NCFA a
 ncfa_empty = NCFA 0 1 M.empty M.empty
 
 
-dcfa_is_final :: State -> DCFA -> Bool
+dcfa_is_final :: State -> DCFA a -> Bool
 dcfa_is_final s (DCFA _ _ fss) = isJust $ M.lookup s fss
 
 
-dcfa_accepted :: State -> DCFA -> S.Set RegexpId
+dcfa_accepted :: State -> DCFA a -> S.Set RegexpId
 dcfa_accepted s (DCFA _ _ fss) = M.lookupDefault S.empty s fss
 
 
-ncfa_set_final :: State -> RegexpId -> NCFA -> NCFA
+ncfa_set_final :: State -> RegexpId -> NCFA a -> NCFA a
 ncfa_set_final s k (NCFA s0 sl g fss) = NCFA s0 sl g (M.insertWith (\ _ ks -> S.insert k ks) s (S.insert k S.empty) fss)
 
 
-ncfa_add_transition :: NCFA -> (State, Label, RegexpId, State) -> (NCFA, State)
+ncfa_add_transition :: NCFA a -> (State, Label a, RegexpId, State) -> (NCFA a, State)
 ncfa_add_transition (NCFA s0 sl g fss) (s1, l, k, s2) =
     let g' = M.insertWith (\ _ node -> (l, k, s2) : node) s1 [(l, k, s2)] g
     in  (NCFA s0 (max (sl + 1) s2) g' fss, s2)
@@ -50,19 +50,20 @@ ncfa_add_transition (NCFA s0 sl g fss) (s1, l, k, s2) =
 ------------------------------------------------------------------------------------------------
 
 
-to_label :: String -> Label
-to_label [c] = LabelChar c
-to_label r   = LabelRange r
+to_label :: (Labellable a) => [a] -> Label a
+to_label [x] = LOne x
+to_label xs  = LRange xs
 
 
-determine_node :: NCFANode -> NCFAGraph -> M.HashMap State (S.Set RegexpId) -> M.HashMap State (S.Set RegexpId) -> State -> (DCFANode, NCFAGraph, M.HashMap State (S.Set RegexpId), State, S.Set State)
+determine_node :: (Labellable a) => NCFANode a -> NCFAGraph a -> M.HashMap State (S.Set RegexpId) -> M.HashMap State (S.Set RegexpId) -> State ->
+    (DCFANode a, NCFAGraph a, M.HashMap State (S.Set RegexpId), State, S.Set State)
 determine_node n g fss_old fss s_max =
-    let f :: (RegexpId, State) -> M.HashMap Char ([RegexpId], [State]) -> Char -> M.HashMap Char ([RegexpId], [State])
+    let f :: (Labellable a) => (RegexpId, State) -> M.HashMap a ([RegexpId], [State]) -> a -> M.HashMap a ([RegexpId], [State])
         f (k, s) n c = M.insertWith (\ _ (ks, ss) -> (k : ks, s : ss)) c ([k], [s]) n
         n' = foldl'
             (\ n (l, k, s) -> case l of
-                LabelChar c  -> f (k, s) n c
-                LabelRange r -> foldl' (f (k, s)) n r
+                LOne   x  -> f (k, s) n x
+                LRange xs -> foldl' (f (k, s)) n xs
             ) M.empty n
         (xs, ys) = M.foldlWithKey'
             (\ (xs, ys) c (ks@(k : _), ss@(s : ss')) -> if ss' == []
@@ -87,7 +88,8 @@ determine_node n g fss_old fss s_max =
     in  (n''', g', fss', s_max', ss)
 
 
-determine' :: (NCFAGraph, DCFAGraph, M.HashMap State (S.Set RegexpId), M.HashMap State (S.Set RegexpId), State, S.Set State) -> (DCFAGraph, M.HashMap State (S.Set RegexpId))
+determine' :: (Labellable a) => (NCFAGraph a, DCFAGraph a, M.HashMap State (S.Set RegexpId), M.HashMap State (S.Set RegexpId), State, S.Set State) ->
+    (DCFAGraph a, M.HashMap State (S.Set RegexpId))
 determine' (_, dg, _, fss,  _, ss) | ss == S.empty = (dg, fss)
 determine' (ng, dg, fss_old, fss, s_max, ss)       = determine' $ S.foldl'
     (\ (ng, dg, fss_old, fss, s_max, ss) s ->
@@ -104,14 +106,14 @@ determine' (ng, dg, fss_old, fss, s_max, ss)       = determine' $ S.foldl'
     ) (ng, dg, fss_old, fss, s_max, S.empty) ss
 
 
-determine :: NCFA -> DCFA
+determine :: (Labellable a) => NCFA a -> DCFA a
 determine (NCFA s0 s_max g fss) =
     let (dg, fss') = determine' (g, M.empty, fss, M.empty, s_max, S.insert s0 S.empty)
     in  DCFA s0 dg fss'
 
 
 
-ncfa_to_dot :: NCFA -> FilePath -> IO ()
+ncfa_to_dot :: (Labellable a) => NCFA a -> FilePath -> IO ()
 ncfa_to_dot (NCFA _ _ g fss) fp = do
     writeFile  fp "digraph CFA {\n"
     appendFile fp "\trankdir = LR\n\tnode [shape=\"circle\"]\n"
@@ -140,7 +142,7 @@ ncfa_to_dot (NCFA _ _ g fss) fp = do
     appendFile fp "}\n"
 
 
-dcfa_to_dot :: DCFA -> FilePath -> IO ()
+dcfa_to_dot :: (Labellable a) => DCFA a -> FilePath -> IO ()
 dcfa_to_dot (DCFA _ g fss) fp = do
     writeFile  fp "digraph CFA {\n"
     appendFile fp "\trankdir = LR\n\tnode [shape=\"circle\"]\n"
@@ -163,8 +165,8 @@ dcfa_to_dot (DCFA _ g fss) fp = do
                 , " [label=\""
                 , show l
                 , case l of
-                    LabelRange _ -> "\", style=bold, color=red]\n"
-                    _            -> "\"]\n"
+                    LRange _ -> "\", style=bold, color=red]\n"
+                    _        -> "\"]\n"
                 , show $ S.toList ks
                 ]
     appendFile fp "}\n"

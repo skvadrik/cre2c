@@ -1,4 +1,5 @@
 {
+{-# OPTIONS -cpp #-}
 
 module RegexpParser
     ( parse_regexps
@@ -12,12 +13,13 @@ import           Data.List                 (foldl')
 
 import           Types
 
+#define HappyAbsSyn (HappyAbsSyn_ ta)
+
 }
 
 %name      parser
-%tokentype { Token }
+%tokentype { Token ta }
 %error     { parseError }
-
 %token
     name          { TokenName $$ }
     chain         { TokenChain $$ }
@@ -39,47 +41,44 @@ import           Types
 
 %%
 
-RegexpDefs
-    : RegexpDef                      { Def  $1    }
-    | RegexpDef RegexpDefs           { Defs $1 $2 }
+RDefs :: { [(String, Regexp ta)] }
+    : RDef                            { [$1]    }
+    | RDef RDefs                      { $1 : $2 }
 
-RegexpDef
-    : name '=' Regexp ';'            { RegexpDef $1 $3 }
+RDef :: { (String, Regexp ta) }
+    : name '=' R ';'                  { ($1, $3) }
 
-Regexp
-    : RegexpAlt                      { Regexp       $1 }
+R :: { Regexp ta }
+    : RAlt                            { Regexp       $1 }
 
-RegexpAlt
-    : RegexpCat '|' RegexpAlt        { Alt          $1 $3 }
-    | RegexpCat                      { AltFromCat   $1    }
+RAlt :: { RegexpAlt ta }
+    : RCat '|' RAlt                   { Alt          $1 $3 }
+    | RCat                            { AltFromCat   $1    }
 
-RegexpCat
-    : RegexpIter RegexpCat           { Cat          $1 $2 }
-    | RegexpIter                     { CatFromIter  $1    }
+RCat :: { RegexpCat ta }
+    : RIter RCat                      { Cat          $1 $2 }
+    | RIter                           { CatFromIter  $1    }
 
-RegexpIter
-    : RegexpPrim '?'                 { IterMaybe    $1       }
-    | RegexpPrim '{' int '}'         { IterRepeat   $1 $3    }
-    | RegexpPrim '{' int ',' int '}' { IterRange    $1 $3 $5 }
-    | RegexpPrim                     { IterFromPrim $1       }
+RIter :: { RegexpIter ta }
+    : RPrim '?'                       { IterMaybe    $1       }
+    | RPrim '{' int '}'               { IterRepeat   $1 $3    }
+    | RPrim '{' int ',' int '}'       { IterRange    $1 $3 $5 }
+    | RPrim                           { IterFromPrim $1       }
 
-RegexpPrim
-    : name                           { Name         $1 }
-    | '"' chain '"'                  { Elementary   $2 }
-    | '\'' chain '\''                { Elementary   $2 }
-    | '(' RegexpAlt ')'              { Wrapped      $2 }
-    | '[' chain ']'                  { Range        $2 }
-    | '.'                            { Any             }
+RPrim :: { RegexpPrim ta }
+    : name                            { Name         $1 }
+    | '"' chain '"'                   { Elementary   $2 }
+    | '\'' chain '\''                 { Elementary   $2 }
+    | '(' RAlt ')'                    { Wrapped      $2 }
+    | '[' chain ']'                   { Range        $2 }
+    | '.'                             { Any             }
 
 
 {
 
-data Token
+data Token ta
     = TokenSemicolon
     | TokenEq
-    | TokenChain String
-    | TokenName String
-    | TokenInt Int
     | TokenOBracket
     | TokenCBracket
     | TokenOSqBracket
@@ -92,14 +91,17 @@ data Token
     | TokenDQuote
     | TokenDot
     | TokenQueryMark
+    | TokenChain       [ta]
+    | TokenName        String
+    | TokenInt         Int
     deriving (Show)
 
 
-parseError :: [Token] -> a
-parseError e = error $ "Parse error: " ++ show e
+parseError :: [Token ta] -> tb
+parseError e = error "Parse error"
 
 
-lexer :: String -> [Token]
+lexer :: Labellable ta => String -> [Token ta]
 lexer [] = []
 lexer (c : cs)
       | isSpace c = lexer cs
@@ -108,17 +110,18 @@ lexer ('='  : cs)        = TokenEq : lex_regexp cs
 lexer ('-'  : '-'  : cs) = lex_comment cs
 
 
-lex_name :: (String -> [Token]) -> String -> [Token]
+lex_name :: Labellable ta => (String -> [Token ta]) -> String -> [Token ta]
 lex_name f cs =
     let (nm, rest) = span (\ c -> isAlphaNum c || c == '_') cs
         rest'      = f rest
     in  if nm /= "" then TokenName nm : rest' else rest'
 
 
+lex_comment :: Labellable ta => String -> [Token ta]
 lex_comment cs = lexer $ dropWhile (/= '\n') cs
 
 
-lex_regexp :: String -> [Token]
+lex_regexp :: Labellable ta => String -> [Token ta]
 lex_regexp [] = []
 lex_regexp (c : cs)
       | isSpace c = lex_regexp cs
@@ -136,6 +139,7 @@ lex_regexp ('|'  : cs) = TokenVSlash       : lex_regexp cs
 lex_regexp (';'  : cs) = TokenSemicolon    : lexer cs
 
 
+lex_int :: Labellable ta => String -> [Token ta]
 lex_int cs =
     let (num, rest) = span isDigit cs
     in  case rest of
@@ -154,46 +158,34 @@ break_escaped c s =
     in  ((read . DL.toList) tok, rest)
 
 
-is_alpha :: Char -> Bool
-is_alpha c = (c > '\x40' && c <= '\x5A') || (c > '\x60' && c <= '\x7A')
-
-
+lex_qchain :: Labellable ta => String -> [Token ta]
 lex_qchain cs =
     let (ch, rest) = break_escaped '\'' cs
-        f :: String -> [Token]
-        f "" = []
-        f s = case break is_alpha s of
-            (s1, s2) | s1 /= "" -> TokenQuote : TokenChain s1 : TokenQuote : f s2
-            (s1, c : s2)        -> TokenOSqBracket : TokenChain [toLower c, toUpper c] : TokenCSqBracket : f s2
-    in f ch ++ lex_regexp rest
+        ch' = reads' M.empty ch
+        f :: Labellable ta => [ta] -> [Token ta]
+        f []       = lex_regexp rest
+        f (x : xs) = case span_case x of
+            [y] -> TokenQuote : TokenChain [y] : TokenQuote : f xs
+            ys  -> TokenOSqBracket : TokenChain ys : TokenCSqBracket : f xs
+    in f ch'
 
 
+lex_dqchain :: Labellable ta => String -> [Token ta]
 lex_dqchain cs =
     let (ch, rest) = break_escaped '"' cs
-    in  TokenChain ch : TokenDQuote : lex_regexp rest
+    in  TokenChain (reads' M.empty ch) : TokenDQuote : lex_regexp rest
 
 
-span_range :: String -> String
-span_range s =
-    let span_range' :: String -> String -> String
-        span_range' s1 ""                 = s1
-        span_range' s1 (a : '-' : b : s2) = span_range' ([a .. b] ++ s1) s2
-        span_range' s1 (a : s2)           = span_range' (a : s1) s2
-    in  span_range' "" s
-
-
+lex_range :: Labellable ta => String -> [Token ta]
 lex_range cs =
     let (ch, rest) = break_escaped ']' cs
-    in  TokenChain (span_range ch) : TokenCSqBracket : lex_regexp rest
+        ch'        = (span_range . reads' M.empty) cs
+    in  TokenChain ch' : TokenCSqBracket : lex_regexp rest
 
 
 --------------------------------------------------------------------------------
-parse_regexps :: FilePath -> IO RegexpTable
-parse_regexps fp =
-    let regexps2table :: RegexpDefs -> [(String, Regexp)]
-        regexps2table (Def  (RegexpDef name regexp))      = [(name, regexp)]
-        regexps2table (Defs (RegexpDef name regexp) defs) = (name, regexp) : regexps2table defs
-    in  M.fromList . regexps2table . parser . lexer <$> readFile fp
+parse_regexps :: Labellable ta => FilePath -> IO (RegexpTable ta)
+parse_regexps fp = M.fromList . parser . lexer <$> readFile fp
 
 }
 

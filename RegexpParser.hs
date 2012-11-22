@@ -1,4 +1,6 @@
 {-# OPTIONS_GHC -w #-}
+{-# OPTIONS -cpp #-}
+
 module RegexpParser
     ( parse_regexps
     ) where
@@ -11,18 +13,105 @@ import           Data.List                 (foldl')
 
 import           Types
 
+#define HappyAbsSyn (HappyAbsSyn_ ta)
+
 -- parser produced by Happy Version 1.18.10
 
-data HappyAbsSyn t4 t5 t6 t7 t8 t9 t10
-	= HappyTerminal (Token)
+data HappyAbsSyn 
+	= HappyTerminal (Token ta)
 	| HappyErrorToken Int
-	| HappyAbsSyn4 t4
-	| HappyAbsSyn5 t5
-	| HappyAbsSyn6 t6
-	| HappyAbsSyn7 t7
-	| HappyAbsSyn8 t8
-	| HappyAbsSyn9 t9
-	| HappyAbsSyn10 t10
+	| HappyAbsSyn4 ([(String, Regexp ta)])
+	| HappyAbsSyn5 ((String, Regexp ta))
+	| HappyAbsSyn6 (Regexp ta)
+	| HappyAbsSyn7 (RegexpAlt ta)
+	| HappyAbsSyn8 (RegexpCat ta)
+	| HappyAbsSyn9 (RegexpIter ta)
+	| HappyAbsSyn10 (RegexpPrim ta)
+
+{- to allow type-synonyms as our monads (likely
+ - with explicitly-specified bind and return)
+ - in Haskell98, it seems that with
+ - /type M a = .../, then /(HappyReduction M)/
+ - is not allowed.  But Happy is a
+ - code-generator that can just substitute it.
+type HappyReduction m = 
+	   Int 
+	-> (Token ta)
+	-> HappyState (Token ta) (HappyStk HappyAbsSyn -> [(Token ta)] -> m HappyAbsSyn)
+	-> [HappyState (Token ta) (HappyStk HappyAbsSyn -> [(Token ta)] -> m HappyAbsSyn)] 
+	-> HappyStk HappyAbsSyn 
+	-> [(Token ta)] -> m HappyAbsSyn
+-}
+
+action_0,
+ action_1,
+ action_2,
+ action_3,
+ action_4,
+ action_5,
+ action_6,
+ action_7,
+ action_8,
+ action_9,
+ action_10,
+ action_11,
+ action_12,
+ action_13,
+ action_14,
+ action_15,
+ action_16,
+ action_17,
+ action_18,
+ action_19,
+ action_20,
+ action_21,
+ action_22,
+ action_23,
+ action_24,
+ action_25,
+ action_26,
+ action_27,
+ action_28,
+ action_29,
+ action_30,
+ action_31,
+ action_32,
+ action_33,
+ action_34,
+ action_35,
+ action_36,
+ action_37 :: () => Int -> ({-HappyReduction (HappyIdentity) = -}
+	   Int 
+	-> (Token ta)
+	-> HappyState (Token ta) (HappyStk HappyAbsSyn -> [(Token ta)] -> (HappyIdentity) HappyAbsSyn)
+	-> [HappyState (Token ta) (HappyStk HappyAbsSyn -> [(Token ta)] -> (HappyIdentity) HappyAbsSyn)] 
+	-> HappyStk HappyAbsSyn 
+	-> [(Token ta)] -> (HappyIdentity) HappyAbsSyn)
+
+happyReduce_1,
+ happyReduce_2,
+ happyReduce_3,
+ happyReduce_4,
+ happyReduce_5,
+ happyReduce_6,
+ happyReduce_7,
+ happyReduce_8,
+ happyReduce_9,
+ happyReduce_10,
+ happyReduce_11,
+ happyReduce_12,
+ happyReduce_13,
+ happyReduce_14,
+ happyReduce_15,
+ happyReduce_16,
+ happyReduce_17,
+ happyReduce_18 :: () => ({-HappyReduction (HappyIdentity) = -}
+	   Int 
+	-> (Token ta)
+	-> HappyState (Token ta) (HappyStk HappyAbsSyn -> [(Token ta)] -> (HappyIdentity) HappyAbsSyn)
+	-> [HappyState (Token ta) (HappyStk HappyAbsSyn -> [(Token ta)] -> (HappyIdentity) HappyAbsSyn)] 
+	-> HappyStk HappyAbsSyn 
+	-> [(Token ta)] -> (HappyIdentity) HappyAbsSyn)
 
 action_0 (11) = happyShift action_3
 action_0 (4) = happyGoto action_4
@@ -169,7 +258,7 @@ action_37 _ = happyReduce_11
 happyReduce_1 = happySpecReduce_1  4 happyReduction_1
 happyReduction_1 (HappyAbsSyn5  happy_var_1)
 	 =  HappyAbsSyn4
-		 (Def  happy_var_1
+		 ([happy_var_1]
 	)
 happyReduction_1 _  = notHappyAtAll 
 
@@ -177,7 +266,7 @@ happyReduce_2 = happySpecReduce_2  4 happyReduction_2
 happyReduction_2 (HappyAbsSyn4  happy_var_2)
 	(HappyAbsSyn5  happy_var_1)
 	 =  HappyAbsSyn4
-		 (Defs happy_var_1 happy_var_2
+		 (happy_var_1 : happy_var_2
 	)
 happyReduction_2 _ _  = notHappyAtAll 
 
@@ -188,7 +277,7 @@ happyReduction_3 (_ `HappyStk`
 	(HappyTerminal (TokenName happy_var_1)) `HappyStk`
 	happyRest)
 	 = HappyAbsSyn5
-		 (RegexpDef happy_var_1 happy_var_3
+		 ((happy_var_1, happy_var_3)
 	) `HappyStk` happyRest
 
 happyReduce_4 = happySpecReduce_1  6 happyReduction_4
@@ -359,7 +448,7 @@ happyReturn = (return)
 happyThen1 m k tks = (>>=) m (\a -> k a tks)
 happyReturn1 :: () => a -> b -> HappyIdentity a
 happyReturn1 = \a tks -> (return) a
-happyError' :: () => [(Token)] -> HappyIdentity a
+happyError' :: () => [(Token ta)] -> HappyIdentity a
 happyError' = HappyIdentity . parseError
 
 parser tks = happyRunIdentity happySomeParser where
@@ -368,12 +457,9 @@ parser tks = happyRunIdentity happySomeParser where
 happySeq = happyDontSeq
 
 
-data Token
+data Token ta
     = TokenSemicolon
     | TokenEq
-    | TokenChain String
-    | TokenName String
-    | TokenInt Int
     | TokenOBracket
     | TokenCBracket
     | TokenOSqBracket
@@ -386,14 +472,17 @@ data Token
     | TokenDQuote
     | TokenDot
     | TokenQueryMark
+    | TokenChain       [ta]
+    | TokenName        String
+    | TokenInt         Int
     deriving (Show)
 
 
-parseError :: [Token] -> a
-parseError e = error $ "Parse error: " ++ show e
+parseError :: [Token ta] -> tb
+parseError e = error "Parse error"
 
 
-lexer :: String -> [Token]
+lexer :: Labellable ta => String -> [Token ta]
 lexer [] = []
 lexer (c : cs)
       | isSpace c = lexer cs
@@ -402,17 +491,18 @@ lexer ('='  : cs)        = TokenEq : lex_regexp cs
 lexer ('-'  : '-'  : cs) = lex_comment cs
 
 
-lex_name :: (String -> [Token]) -> String -> [Token]
+lex_name :: Labellable ta => (String -> [Token ta]) -> String -> [Token ta]
 lex_name f cs =
     let (nm, rest) = span (\ c -> isAlphaNum c || c == '_') cs
         rest'      = f rest
     in  if nm /= "" then TokenName nm : rest' else rest'
 
 
+lex_comment :: Labellable ta => String -> [Token ta]
 lex_comment cs = lexer $ dropWhile (/= '\n') cs
 
 
-lex_regexp :: String -> [Token]
+lex_regexp :: Labellable ta => String -> [Token ta]
 lex_regexp [] = []
 lex_regexp (c : cs)
       | isSpace c = lex_regexp cs
@@ -430,6 +520,7 @@ lex_regexp ('|'  : cs) = TokenVSlash       : lex_regexp cs
 lex_regexp (';'  : cs) = TokenSemicolon    : lexer cs
 
 
+lex_int :: Labellable ta => String -> [Token ta]
 lex_int cs =
     let (num, rest) = span isDigit cs
     in  case rest of
@@ -448,46 +539,34 @@ break_escaped c s =
     in  ((read . DL.toList) tok, rest)
 
 
-is_alpha :: Char -> Bool
-is_alpha c = (c > '\x40' && c <= '\x5A') || (c > '\x60' && c <= '\x7A')
-
-
+lex_qchain :: Labellable ta => String -> [Token ta]
 lex_qchain cs =
     let (ch, rest) = break_escaped '\'' cs
-        f :: String -> [Token]
-        f "" = []
-        f s = case break is_alpha s of
-            (s1, s2) | s1 /= "" -> TokenQuote : TokenChain s1 : TokenQuote : f s2
-            (s1, c : s2)        -> TokenOSqBracket : TokenChain [toLower c, toUpper c] : TokenCSqBracket : f s2
-    in f ch ++ lex_regexp rest
+        ch' = reads' M.empty ch
+        f :: Labellable ta => [ta] -> [Token ta]
+        f []       = lex_regexp rest
+        f (x : xs) = case span_case x of
+            [y] -> TokenQuote : TokenChain [y] : TokenQuote : f xs
+            ys  -> TokenOSqBracket : TokenChain ys : TokenCSqBracket : f xs
+    in f ch'
 
 
+lex_dqchain :: Labellable ta => String -> [Token ta]
 lex_dqchain cs =
     let (ch, rest) = break_escaped '"' cs
-    in  TokenChain ch : TokenDQuote : lex_regexp rest
+    in  TokenChain (reads' M.empty ch) : TokenDQuote : lex_regexp rest
 
 
-span_range :: String -> String
-span_range s =
-    let span_range' :: String -> String -> String
-        span_range' s1 ""                 = s1
-        span_range' s1 (a : '-' : b : s2) = span_range' ([a .. b] ++ s1) s2
-        span_range' s1 (a : s2)           = span_range' (a : s1) s2
-    in  span_range' "" s
-
-
+lex_range :: Labellable ta => String -> [Token ta]
 lex_range cs =
     let (ch, rest) = break_escaped ']' cs
-    in  TokenChain (span_range ch) : TokenCSqBracket : lex_regexp rest
+        ch'        = (span_range . reads' M.empty) cs
+    in  TokenChain ch' : TokenCSqBracket : lex_regexp rest
 
 
 --------------------------------------------------------------------------------
-parse_regexps :: FilePath -> IO RegexpTable
-parse_regexps fp =
-    let regexps2table :: RegexpDefs -> [(String, Regexp)]
-        regexps2table (Def  (RegexpDef name regexp))      = [(name, regexp)]
-        regexps2table (Defs (RegexpDef name regexp) defs) = (name, regexp) : regexps2table defs
-    in  M.fromList . regexps2table . parser . lexer <$> readFile fp
+parse_regexps :: Labellable ta => FilePath -> IO (RegexpTable ta)
+parse_regexps fp = M.fromList . parser . lexer <$> readFile fp
 {-# LINE 1 "templates/GenericTemplate.hs" #-}
 {-# LINE 1 "templates/GenericTemplate.hs" #-}
 {-# LINE 1 "<built-in>" #-}
