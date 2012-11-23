@@ -560,8 +560,8 @@ lex_dqchain cs =
 lex_range :: Labellable ta => String -> [Token ta]
 lex_range cs =
     let (ch, rest) = break_escaped ']' cs
-        ch'        = (span_range . reads' M.empty) cs
-    in  TokenChain ch' : TokenCSqBracket : lex_regexp rest
+        ch'        = (span_range . reads' ttbl) ch
+    in  TokenChain ch' : TokenCSqBracket : lex_regexp ttbl rest
 
 
 --------------------------------------------------------------------------------
