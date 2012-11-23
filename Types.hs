@@ -4,8 +4,21 @@ import qualified Data.HashMap.Strict   as M
 import qualified Data.Set              as S
 import qualified Data.ByteString.Char8 as BS
 import           Data.Hashable
-import           Data.Char                   (isAlphaNum, toLower, toUpper)
+import           Data.Char                   (isAlphaNum, toLower, toUpper, isSpace)
+import           Data.List                   (isPrefixOf)
 import           Text.Printf
+import           Debug.Trace
+import           Control.DeepSeq
+
+
+trace' :: Show a => a -> a
+trace' a = trace (show a) a
+
+trace'' :: Show a => String -> a -> a
+trace'' s a = trace (s ++ show a) a
+
+trace''' :: Show a => String -> a -> a
+trace''' s a = trace (show a ++ s) a
 
 ---------------- regexp types
 data Regexp a
@@ -33,6 +46,9 @@ data RegexpPrim a
     | Range      [a]
     deriving (Show)
 type RegexpTable a = M.HashMap String (Regexp a)
+type TokenTable a  = M.HashMap String a
+
+
 
 
 type State = Int
@@ -58,22 +74,29 @@ data NCFA a      = NCFA
 data Label a
     = LOne a
     | LRange [a]
-    deriving (Eq, Show)
+    deriving (Eq)
 
 instance (Eq a, Show a, Hashable a) => Hashable (Label a) where
     hash (LOne c)   = hash c
     hash (LRange r) = hash r
 
+{-
+instance Eq (Label a) where
+    LOne   x  == LOne   y  = x == y
+    LRange xs == LRange ys = xs == ys
+    LOne   x  == LRange xs = x `elem` xs
+    LRange xs == LOne   x  = x `elem` xs
+-}
+
+instance Labellable a => Show (Label a) where
+    show (LOne   x ) = show_hex  x
+    show (LRange xs) = shows_hex xs
 
 
-type TokenTable a = M.HashMap String a
+class (NFData a, Eq a, PrintfArg a, Show a,  Ord a, Hashable a) => Labellable a where
+    read' :: String -> Maybe (TokenTable a) -> (a, String)
 
-
-
-class (Eq a, Ord a, Show a, Hashable a) => Labellable a where
-    read' :: String -> TokenTable a -> (a, String)
-
-    reads' :: TokenTable a -> String -> [a]
+    reads' :: Maybe (TokenTable a) -> String -> [a]
     reads' _    "" = []
     reads' ttbl s  =
         let (t, r) = read' s ttbl
@@ -88,13 +111,25 @@ class (Eq a, Ord a, Show a, Hashable a) => Labellable a where
 
     span_case :: a -> [a]
 
+    lex_token_table :: Labellable a => String -> (Maybe (TokenTable a), String)
+
+    show_hex :: a -> String
+    show_hex a = printf "0x%02X" a
+
+    shows_hex :: [a] -> String
+    shows_hex [] = "EMPTY_RANGE"
+    shows_hex r = printf "%s-%s" ((show_hex . head) r) ((show_hex . last) r)
+
+
 
 
 instance Labellable Char where
-    read' (c : cs) _ = (c, cs)
-    read' ""       _ = error "*** Types : read (Char) : trying to read from empty string"
+    read' _        (Just _) = error "*** Types : read' (Char) : non-empty token table for char-based scanner ?"
+    read' (c : cs) _        = (c, cs)
+    read' ""       _        = error "*** Types : read' (Char) : trying to read from empty string"
 
-    reads' _ cs = cs
+    reads' (Just _) _ = error "*** Types : reads' (Char) : non-empty token table for char-based scanner ?"
+    reads' _ cs       = cs
 
     full_range = ['\x00' .. '\xFF']
 
@@ -110,11 +145,14 @@ instance Labellable Char where
             is_alpha c = (c > '\x40' && c <= '\x5A') || (c > '\x60' && c <= '\x7A')
         in  if is_alpha c then [toLower c, toUpper c] else [c]
 
+    lex_token_table s = (Nothing, s)
+
 
 
 
 instance Labellable Int where
-    read' s ttbl =
+    read' _ Nothing     = error "*** Types : read' (Int) : empty token table for int-based scanner ?"
+    read' s (Just ttbl) =
         let (t, r) = span (\ c -> isAlphaNum c || c == '_') s
         in  case M.lookup t ttbl of
                 Just i  -> (i, r)
@@ -126,19 +164,23 @@ instance Labellable Int where
 
     span_case i = [i]
 
+    lex_token_table s =
+        let s1       = "!cre2c_token_table:"
+            s2       = ( dropWhile isSpace . drop (length s1) ) s
+            (s3, s4) = case break (== '}') s2 of
+                ('{':s5@(_:_), '}':s6) -> (s5, s6)
+                _                      -> error "*** RegexpParser : lex_token_table : bad token table"
+            check_token_name s =
+                let s' = takeWhile (\ c -> isAlphaNum c || c == '_') s
+                in  if s' == s then s else error "*** RegexpParser : check_token_name : mailformed token"
+            tokens   = (map check_token_name . words) s3
+            ttbl     = M.fromList $ zip tokens [1 .. length tokens]
+        in  if s1 `isPrefixOf` s
+                then (Just ttbl, s4)
+                else (Nothing, s)
 
 
-{-
-instance Eq (Label a) where
-    LOne   x  == LOne   y  = x == y
-    LRange xs == LRange ys = xs == ys
-    LOne   x  == LRange xs = x `elem` xs
-    LRange xs == LOne   x  = x `elem` xs
 
-instance Show Label where
-    show (LOne   x ) = show x
-    show (LRange xs) = show xs
--}
 
 ---------------- Common types
 data Chunk

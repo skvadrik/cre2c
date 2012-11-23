@@ -44,7 +44,7 @@ ncfa_add_regexp_iter (ncfa, ss, l) r rt sign = case r of
         in  ncfa_add_regexp_cat (ncfa, ss, l) rcat rt sign
     IterRange rprim n m
         | m == 0         -> (ncfa, ss, l)
-        | n < 0 || m < n -> error $ "RE2CFA ERROR: Invalid iteration bounds in regexp: {" ++ show n ++ "," ++ show m ++ "}"
+        | n < 0 || m < n -> error $ "*** RE2CFA : ncfa_add_regexp_iter : Invalid iteration bounds in regexp: {" ++ show n ++ "," ++ show m ++ "}"
         | otherwise      ->
         let rcat               = foldl' (\ rc _ -> Cat (IterFromPrim rprim) rc) ((CatFromIter . IterFromPrim) rprim)  [1 .. n - 1]
             (ncfa', ss', l')   = ncfa_add_regexp_cat (ncfa, ss, l) rcat rt sign

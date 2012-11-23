@@ -7,7 +7,6 @@ import qualified Data.ByteString.Char8 as BS
 import           Data.List                   (foldl')
 import           Control.Applicative         ((<$>))
 import           Control.Monad               (when)
-import           Debug.Trace
 import           System.Cmd
 import           Text.Printf
 import           System.Console.GetOpt
@@ -18,10 +17,6 @@ import           RE2CFA
 import           CFA2CPP
 import           SourceParser
 import           RegexpParser
-
-
-trace' :: (Show a) => a -> a
-trace' a = trace (show a) a
 
 
 gen_code :: Labellable a => [Chunk] -> Int -> RegexpTable a -> Verbosity -> IO (BS.ByteString, Int)

@@ -21,6 +21,7 @@ import qualified Data.Set            as S
 import           Data.List                (foldl')
 import           Control.Monad            (forM_)
 import           Data.Maybe               (isJust)
+import           Control.DeepSeq
 
 import           Types
 
@@ -59,7 +60,7 @@ determine_node :: (Labellable a) => NCFANode a -> NCFAGraph a -> M.HashMap State
     (DCFANode a, NCFAGraph a, M.HashMap State (S.Set RegexpId), State, S.Set State)
 determine_node n g fss_old fss s_max =
     let f :: (Labellable a) => (RegexpId, State) -> M.HashMap a ([RegexpId], [State]) -> a -> M.HashMap a ([RegexpId], [State])
-        f (k, s) n c = M.insertWith (\ _ (ks, ss) -> (k : ks, s : ss)) c ([k], [s]) n
+        f (k, s) n c = M.insertWith (\ _ (ks, ss) -> force (k : ks, s : ss)) c ([k], [s]) n
         n' = foldl'
             (\ n (l, k, s) -> case l of
                 LOne   x  -> f (k, s) n x

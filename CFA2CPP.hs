@@ -150,7 +150,7 @@ doc_switch d1 d2 = PP.text "switch " <> (PP.parens d1) $$ (wrap_in_braces d2)
 
 doc_case :: Labellable a => Label a -> Doc
 doc_case l =
-    let f x = PP.text "case " <> (PP.text . show) x <> PP.colon
+    let f x = PP.text "case " <> (PP.text . show_hex) x <> PP.colon
     in  case l of
             LOne x    -> f x
             LRange xs -> (PP.vcat . map f) xs

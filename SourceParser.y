@@ -51,6 +51,11 @@ Options
     | mode match                                     { Opts      $1     U8  $2      }
     | token_type match                               { Opts      Normal $1  $2      }
     | mode token_type match                          { Opts      $1     $2  $3      }
+    | mode match token_type                          { Opts      $1     $3  $2      }
+    | token_type mode match                          { Opts      $2     $1  $3      }
+    | token_type match mode                          { Opts      $3     $1  $2      }
+    | match token_type mode                          { Opts      $3     $2  $1      }
+    | match mode token_type                          { Opts      $2     $3  $1      }
     | block                                          { OptsBlock $1     U8          }
     | block token_type                               { OptsBlock $1     $2          }
 
@@ -132,6 +137,7 @@ lex_options (c:cs)  opts | isSpace c = lex_options cs opts
 lex_options s@(c:_) opts | isAlpha c = case opts of
     OptsBlock _ _ -> lex_rules_b s
     _             -> lex_rules   s
+lex_options s o = error $ "+++++++++++++++++" ++ show s ++ "----------------------" ++ show o
 
 
 lex_type :: String -> Options -> [Token]
@@ -151,7 +157,7 @@ lex_mode cs opts =
             m | m == "normal" -> TokenMode Normal : lex_options cs' (opts{ mode = Normal })
             m | m == "block"  ->
                 let (block, cs'') = lex_blockname cs'
-                in  TokenBlock block : lex_options cs' (OptsBlock block (token_type opts))
+                in  TokenBlock block : lex_options cs'' (OptsBlock block (token_type opts))
             _                 -> error $ printf "*** SourceParser: unknown mode: %s" mode
 
 

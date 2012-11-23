@@ -102,49 +102,60 @@ parseError e = error "Parse error"
 
 
 lexer :: Labellable ta => String -> [Token ta]
-lexer [] = []
-lexer (c : cs)
-      | isSpace c = lexer cs
-      | isAlpha c = lex_name lexer (c : cs)
-lexer ('='  : cs)        = TokenEq : lex_regexp cs
-lexer ('-'  : '-'  : cs) = lex_comment cs
+lexer s =
+    let (ttbl, s') = (lex_token_table . dropWhile isSpace) s
+    in  lex_rules ttbl s'
 
 
-lex_name :: Labellable ta => (String -> [Token ta]) -> String -> [Token ta]
-lex_name f cs =
-    let (nm, rest) = span (\ c -> isAlphaNum c || c == '_') cs
-        rest'      = f rest
-    in  if nm /= "" then TokenName nm : rest' else rest'
+lex_rules :: Labellable ta => Maybe (TokenTable ta) -> String -> [Token ta]
+lex_rules _    [] = []
+lex_rules ttbl (c : cs)
+    | isSpace c = lex_rules ttbl cs
+    | isAlpha c =
+        let (nm, rest) = lex_name (c : cs)
+        in  TokenName nm : lex_rules ttbl rest
+lex_rules ttbl ('='  : cs)        = TokenEq : lex_regexp ttbl cs
+lex_rules ttbl ('-'  : '-'  : cs) = lex_comment ttbl cs
 
 
-lex_comment :: Labellable ta => String -> [Token ta]
-lex_comment cs = lexer $ dropWhile (/= '\n') cs
+lex_name :: String -> (String, String)
+lex_name cs =
+    let v@(nm, rest) = span (\ c -> isAlphaNum c || c == '_') cs
+    in  case nm of
+            "" -> error "*** RegexpParser : lex_name : empty name"
+            _  -> v
 
 
-lex_regexp :: Labellable ta => String -> [Token ta]
-lex_regexp [] = []
-lex_regexp (c : cs)
-      | isSpace c = lex_regexp cs
-      | isAlpha c = lex_name lex_regexp (c : cs)
-lex_regexp ('.'  : cs) = TokenDot          : lex_regexp cs
-lex_regexp ('?'  : cs) = TokenQueryMark    : lex_regexp cs
-lex_regexp ('('  : cs) = TokenOBracket     : lex_regexp cs
-lex_regexp (')'  : cs) = TokenCBracket     : lex_regexp cs
-lex_regexp ('{'  : cs) = TokenOParenthesis : lex_int cs
-lex_regexp ('}'  : cs) = TokenCParenthesis : lex_regexp cs
-lex_regexp ('"'  : cs) = TokenDQuote       : lex_dqchain cs
-lex_regexp ('\'' : cs) = lex_qchain cs
-lex_regexp ('['  : cs) = TokenOSqBracket   : lex_range cs
-lex_regexp ('|'  : cs) = TokenVSlash       : lex_regexp cs
-lex_regexp (';'  : cs) = TokenSemicolon    : lexer cs
+lex_comment :: Labellable ta => Maybe (TokenTable ta) -> String -> [Token ta]
+lex_comment ttbl cs = lex_rules ttbl $ dropWhile (/= '\n') cs
 
 
-lex_int :: Labellable ta => String -> [Token ta]
-lex_int cs =
+lex_regexp :: Labellable ta => Maybe (TokenTable ta) -> String -> [Token ta]
+lex_regexp _    [] = []
+lex_regexp ttbl (c : cs)
+    | isSpace c = lex_regexp ttbl cs
+    | isAlpha c =
+        let (nm, rest) = lex_name (c : cs)
+        in  TokenName nm : lex_regexp ttbl rest
+lex_regexp ttbl ('.'  : cs) = TokenDot          : lex_regexp  ttbl cs
+lex_regexp ttbl ('?'  : cs) = TokenQueryMark    : lex_regexp  ttbl cs
+lex_regexp ttbl ('('  : cs) = TokenOBracket     : lex_regexp  ttbl cs
+lex_regexp ttbl (')'  : cs) = TokenCBracket     : lex_regexp  ttbl cs
+lex_regexp ttbl ('{'  : cs) = TokenOParenthesis : lex_int     ttbl cs
+lex_regexp ttbl ('}'  : cs) = TokenCParenthesis : lex_regexp  ttbl cs
+lex_regexp ttbl ('"'  : cs) = TokenDQuote       : lex_dqchain ttbl cs
+lex_regexp ttbl ('\'' : cs) =                     lex_qchain  ttbl cs
+lex_regexp ttbl ('['  : cs) = TokenOSqBracket   : lex_range   ttbl cs
+lex_regexp ttbl ('|'  : cs) = TokenVSlash       : lex_regexp  ttbl cs
+lex_regexp ttbl (';'  : cs) = TokenSemicolon    : lex_rules       ttbl cs
+
+
+lex_int :: Labellable ta => Maybe (TokenTable ta) -> String -> [Token ta]
+lex_int ttbl cs =
     let (num, rest) = span isDigit cs
     in  case rest of
-            ',' : cs' -> TokenInt (read num) : TokenComma : lex_int cs'
-            '}' : cs' -> TokenInt (read num) : TokenCParenthesis : lex_regexp cs'
+            ',' : cs' -> TokenInt (read num) : TokenComma        : lex_int    ttbl cs'
+            '}' : cs' -> TokenInt (read num) : TokenCParenthesis : lex_regexp ttbl cs'
 
 
 break_escaped :: Char -> String -> (String, String)
@@ -158,29 +169,31 @@ break_escaped c s =
     in  ((read . DL.toList) tok, rest)
 
 
-lex_qchain :: Labellable ta => String -> [Token ta]
-lex_qchain cs =
+lex_qchain' :: Labellable ta => [ta] -> [Token ta]
+lex_qchain' []       = []
+lex_qchain' (x : xs) = case span_case x of
+    [y] -> TokenQuote      : TokenChain [y] : TokenQuote      : lex_qchain' xs
+    ys  -> TokenOSqBracket : TokenChain ys  : TokenCSqBracket : lex_qchain' xs
+
+
+lex_qchain :: Labellable ta => Maybe (TokenTable ta) -> String -> [Token ta]
+lex_qchain ttbl cs =
     let (ch, rest) = break_escaped '\'' cs
-        ch' = reads' M.empty ch
-        f :: Labellable ta => [ta] -> [Token ta]
-        f []       = lex_regexp rest
-        f (x : xs) = case span_case x of
-            [y] -> TokenQuote : TokenChain [y] : TokenQuote : f xs
-            ys  -> TokenOSqBracket : TokenChain ys : TokenCSqBracket : f xs
-    in f ch'
+        ch'        = reads' ttbl ch
+    in lex_qchain' ch' ++ lex_regexp ttbl rest
 
 
-lex_dqchain :: Labellable ta => String -> [Token ta]
-lex_dqchain cs =
+lex_dqchain :: Labellable ta => Maybe (TokenTable ta) -> String -> [Token ta]
+lex_dqchain ttbl cs =
     let (ch, rest) = break_escaped '"' cs
-    in  TokenChain (reads' M.empty ch) : TokenDQuote : lex_regexp rest
+    in  TokenChain (reads' ttbl ch) : TokenDQuote : lex_regexp ttbl rest
 
 
-lex_range :: Labellable ta => String -> [Token ta]
-lex_range cs =
+lex_range :: Labellable ta => Maybe (TokenTable ta) -> String -> [Token ta]
+lex_range ttbl cs =
     let (ch, rest) = break_escaped ']' cs
-        ch'        = (span_range . reads' M.empty) cs
-    in  TokenChain ch' : TokenCSqBracket : lex_regexp rest
+        ch'        = (span_range . reads' ttbl) ch
+    in  TokenChain ch' : TokenCSqBracket : lex_regexp ttbl rest
 
 
 --------------------------------------------------------------------------------
