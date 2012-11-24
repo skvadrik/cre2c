@@ -5,7 +5,7 @@ module CFA2CPP
 
 import qualified Data.HashMap.Strict       as M
 import qualified Data.Set                  as S
-import           Data.List                       (foldl', partition, nub, unzip4)
+import           Data.List                       (foldl', partition, nub, unzip4, sortBy)
 import qualified Data.ByteString.Char8     as BS
 import           Text.PrettyPrint.HughesPJ       (($$), (<>), ($+$), Doc)
 import qualified Text.PrettyPrint.HughesPJ as PP
@@ -278,6 +278,10 @@ codegen_entry maxlen k opts id_info =
     $$ doc_goto k 0
 
 
+compare_by_label :: Labellable a => (Label a, b) -> (Label a, b) -> Ordering
+compare_by_label (l1, _) (l2, _) = l1 `compare` l2
+
+
 codegen_cases :: Labellable a => StateInfo a -> BlockInfo a -> PP.Doc
 codegen_cases (SI _ is_init is_final node _) (BI k opts id_info) =
     let case_body ids s =
@@ -288,14 +292,15 @@ codegen_cases (SI _ is_init is_final node _) (BI k opts id_info) =
             in  if is_conditional
                     then doc_if_else conds goto_m goto_fin
                     else goto_m
-        one_case doc l (ids, s) =
+        one_case doc (l, (ids, s)) =
             doc
             $$ doc_case l
             $$ PP.nest 4
                 ( router1 opts is_init is_final
                 $$ case_body ids s
                 )
-        cases        = M.foldlWithKey' one_case PP.empty node
+        node'        = (sortBy compare_by_label . M.toList) node
+        cases        = foldl' one_case PP.empty node'
         default_case = doc_default (router3 opts is_init $$ doc_goto_fin k opts)
     in  cases $$ default_case
 

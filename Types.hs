@@ -8,7 +8,6 @@ import           Data.Char                   (isAlphaNum, toLower, toUpper, isSp
 import           Data.List                   (isPrefixOf)
 import           Text.Printf
 import           Debug.Trace
-import           Control.DeepSeq
 
 
 trace' :: Show a => a -> a
@@ -74,26 +73,32 @@ data NCFA a      = NCFA
 data Label a
     = LOne a
     | LRange [a]
-    deriving (Eq)
 
-instance (Eq a, Show a, Hashable a) => Hashable (Label a) where
+instance Labellable a => Hashable (Label a) where
     hash (LOne c)   = hash c
     hash (LRange r) = hash r
 
-{-
-instance Eq (Label a) where
+instance Labellable a => Eq (Label a) where
     LOne   x  == LOne   y  = x == y
     LRange xs == LRange ys = xs == ys
     LOne   x  == LRange xs = x `elem` xs
     LRange xs == LOne   x  = x `elem` xs
--}
+
+instance Labellable a => Ord (Label a) where
+    LOne   x       `compare` LOne   y       = x  `compare` y
+    LRange xs      `compare` LRange ys      = xs `compare` ys
+    LOne   x       `compare` LRange (y : _) = x  `compare` y
+    LRange (y : _) `compare` LOne   x       = y  `compare` x
+    LOne   _       `compare` LRange []      = error "*** Types : empty range"
+    LRange []      `compare` LOne   _       = error "*** Types : empty range"
 
 instance Labellable a => Show (Label a) where
     show (LOne   x ) = show_hex  x
     show (LRange xs) = shows_hex xs
 
 
-class (NFData a, Eq a, PrintfArg a, Show a,  Ord a, Hashable a) => Labellable a where
+
+class (Eq a, Ord a, PrintfArg a, Show a, Hashable a) => Labellable a where
     read' :: String -> Maybe (TokenTable a) -> (a, String)
 
     reads' :: Maybe (TokenTable a) -> String -> [a]
