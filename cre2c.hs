@@ -118,4 +118,5 @@ main = do
         , BS.pack $ show maxlen
         , BS.pack "\n"
         , code
+        , BS.pack "\n#undef MAXLEN;"
         ]

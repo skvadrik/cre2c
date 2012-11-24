@@ -42,7 +42,9 @@ cfa2cpp dcfa prolog id_info maxlen n_scanner opts =
                     si      = SI s is_init True node (Just accepted)
                 in  code $$$ codegen_state si bi
             ) PP.empty (dcfa_final_states dcfa)
-        ending      = router5 opts n_scanner id_info
+        ending      =
+            router5 opts n_scanner id_info
+            $$$ PP.text "#undef MAXLEN" <> PP.int n_scanner <> PP.semi
     in  (BS.pack . PP.render)
             ( ( PP.text . BS.unpack ) prolog
             $$$ entry
