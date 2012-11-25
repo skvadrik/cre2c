@@ -44,7 +44,7 @@ cfa2cpp dcfa prolog id_info maxlen n_scanner opts =
             ) PP.empty (dcfa_final_states dcfa)
         ending      =
             router5 opts n_scanner id_info
-            $$$ PP.text "#undef MAXLEN" <> PP.int n_scanner <> PP.semi
+            $$$ PP.text "#undef MAXLEN" <> PP.int n_scanner
     in  (BS.pack . PP.render)
             ( ( PP.text . BS.unpack ) prolog
             $$$ entry
@@ -203,11 +203,11 @@ router0 opts k id_info =
         d4 = PP.text "accept = -1;"
         d5 = PP.text "CURSOR = MARKER;"
     in  case opts of
-            Opts      Single _ Longest ->       d2       $$ d4
-            Opts      Single _ All     ->       d2
-            Opts      Normal _ Longest -> d1       $$ d3 $$ d4 $$ d5
-            Opts      Normal _ All     -> d1                   $$ d5
-            OptsBlock _      _         -> d1       $$ d3 $$ d4 $$ d5
+            Opts      Single Longest _ ->       d2       $$ d4
+            Opts      Single All     _ ->       d2
+            Opts      Normal Longest _ -> d1       $$ d3 $$ d4 $$ d5
+            Opts      Normal All     _ -> d1                   $$ d5
+            OptsBlock _              _ -> d1       $$ d3 $$ d4 $$ d5
 
 
 router1 :: Options -> Bool -> Bool -> Doc
@@ -220,10 +220,10 @@ router1 opts is_init is_final =
             (True, True)  -> PP.text "token = MARKER;"
             _             -> PP.empty
     in  case opts of
-            Opts      Single _ _        -> PP.empty
-            Opts      Normal _ All      -> d1
-            Opts      Normal _ Longest  -> d2
-            OptsBlock _      _          -> d2
+            Opts      Single _       _  -> PP.empty
+            Opts      Normal All     _  -> d1
+            Opts      Normal Longest _  -> d2
+            OptsBlock _              _  -> d2
 
 
 router2 :: Options -> Doc
@@ -231,10 +231,10 @@ router2 opts =
     let d1 = PP.text "MARKER += adjust_marker;"
         d2 = PP.text "MARKER ++;"
     in  case opts of
-            Opts      Single _ _       -> PP.empty
-            Opts      Normal _ All     -> d1
-            Opts      Normal _ Longest -> d2
-            OptsBlock _      _         -> d2
+            Opts      Single _       _ -> PP.empty
+            Opts      Normal All     _ -> d1
+            Opts      Normal Longest _ -> d2
+            OptsBlock _              _ -> d2
 
 
 router3 :: Options -> Bool -> Doc
@@ -245,10 +245,10 @@ router3 opts is_init =
         d2 = PP.text "MARKER += adjust_marker;"
         d3 = PP.text "MARKER ++;"
     in  case opts of
-            Opts      Single _ _       -> PP.empty
-            Opts      Normal _ All     -> d1 $$ d2
-            Opts      Normal _ Longest -> d3
-            OptsBlock _      _         -> d3
+            Opts      Single _       _ -> PP.empty
+            Opts      Normal All     _ -> d1 $$ d2
+            Opts      Normal Longest _ -> d3
+            OptsBlock _              _ -> d3
 
 
 router4 :: Options -> Bool -> (Int, Code) -> Doc
@@ -258,11 +258,11 @@ router4 opts empty_node (k, code) =
         d3 = PP.text "MARKER = CURSOR;"
         d4 = if empty_node then PP.empty else PP.text "adjust_marker = false;"
     in  case opts of
-            Opts      Single _ Longest ->       d2
-            Opts      Single _ All     -> d1
-            Opts      Normal _ Longest ->       d2 $$ d3
-            Opts      Normal _ All     -> d1       $$ d3 $$ d4
-            OptsBlock _      _         ->       d2 $$ d3
+            Opts      Single Longest _ ->       d2
+            Opts      Single All     _ -> d1
+            Opts      Normal Longest _ ->       d2 $$ d3
+            Opts      Normal All     _ -> d1       $$ d3 $$ d4
+            OptsBlock _              _ ->       d2 $$ d3
 
 
 router5 :: Options -> Int -> RegexpId2RegexpInfo -> Doc

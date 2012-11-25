@@ -5,7 +5,6 @@ import qualified Data.Set              as S
 import qualified Data.ByteString.Char8 as BS
 import           Data.Hashable
 import           Data.Char                   (isAlphaNum, toLower, toUpper, isSpace)
-import           Data.List                   (isPrefixOf)
 import           Text.Printf
 import           Debug.Trace
 
@@ -45,7 +44,7 @@ data RegexpPrim a
     | Range      [a]
     deriving (Show)
 type RegexpTable a = M.HashMap String (Regexp a)
-type TokenTable a  = M.HashMap String a
+type TokenTable    = M.HashMap String Int
 
 
 
@@ -99,9 +98,9 @@ instance Labellable a => Show (Label a) where
 
 
 class (Eq a, Ord a, PrintfArg a, Show a, Hashable a) => Labellable a where
-    read' :: String -> Maybe (TokenTable a) -> (a, String)
+    read' :: String -> Maybe TokenTable -> (a, String)
 
-    reads' :: Maybe (TokenTable a) -> String -> [a]
+    reads' :: Maybe TokenTable -> String -> [a]
     reads' _    "" = []
     reads' ttbl s  =
         let (t, r) = read' s ttbl
@@ -115,8 +114,6 @@ class (Eq a, Ord a, PrintfArg a, Show a, Hashable a) => Labellable a where
     span_range :: [a] -> [a]
 
     span_case :: a -> [a]
-
-    lex_token_table :: Labellable a => String -> (Maybe (TokenTable a), String)
 
     show_hex :: a -> String
     show_hex a = printf "0x%02X" a
@@ -150,8 +147,6 @@ instance Labellable Char where
             is_alpha c = (c > '\x40' && c <= '\x5A') || (c > '\x60' && c <= '\x7A')
         in  if is_alpha c then [toLower c, toUpper c] else [c]
 
-    lex_token_table s = (Nothing, s)
-
 
 
 
@@ -163,26 +158,12 @@ instance Labellable Int where
                 Just i  -> (i, r)
                 Nothing -> error $ printf "*** Types : read (Int) : unknown token : %s" t
 
+-- ?????????????? -- do smth about range
     full_range = [0x00 .. 0xFFFFffff]
 
     span_range = id
 
     span_case i = [i]
-
-    lex_token_table s =
-        let s1       = "!cre2c_token_table:"
-            s2       = ( dropWhile isSpace . drop (length s1) ) s
-            (s3, s4) = case break (== '}') s2 of
-                ('{':s5@(_:_), '}':s6) -> (s5, s6)
-                _                      -> error "*** RegexpParser : lex_token_table : bad token table"
-            check_token_name s =
-                let s' = takeWhile (\ c -> isAlphaNum c || c == '_') s
-                in  if s' == s then s else error "*** RegexpParser : check_token_name : mailformed token"
-            tokens   = (map check_token_name . words) s3
-            ttbl     = M.fromList $ zip tokens [1 .. length tokens]
-        in  if s1 `isPrefixOf` s
-                then (Just ttbl, s4)
-                else (Nothing, s)
 
 
 
@@ -193,22 +174,22 @@ data Chunk
     | Ch2 Code Options RuleTable
 data Options
     = Opts
-        { mode       :: Mode
-        , token_type :: Type
-        , match      :: Match
+        { mode        :: Mode
+        , match       :: Match
+        , token_type  :: TokenType
         }
     | OptsBlock
-        { block      :: BlockName
-        , token_type :: Type
+        { block       :: BlockName
+        , token_type  :: TokenType
         }
     deriving (Show)
 data Mode
     = Single
     | Normal
     deriving (Show)
-data Type
-    = U8
-    | U32
+data TokenType
+    = TTChar
+    | TTEnum String
     deriving (Show)
 data Match
     = Longest
@@ -235,7 +216,6 @@ type Conds2Code
 
 
 
-type Node = [(Type, RegexpId, State)]
 type MultiArc a = (Label a, S.Set RegexpId, S.Set State)
 
 hashAndCombine :: Hashable h => Int -> h -> Int
@@ -243,3 +223,11 @@ hashAndCombine acc h = acc `combine` hash h
 
 instance (Hashable a) => Hashable (S.Set a) where
     hash = S.foldl' hashAndCombine 0
+
+
+is_alpha_num_ :: Char -> Bool
+is_alpha_num_ c = isAlphaNum c || c == '_'
+
+
+skip_spaces :: String -> String
+skip_spaces = dropWhile isSpace

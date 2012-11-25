@@ -44,7 +44,7 @@ ncfa_add_regexp_iter (ncfa, ss, l) r rt sign = case r of
         in  ncfa_add_regexp_cat (ncfa, ss, l) rcat rt sign
     IterRange rprim n m
         | m == 0         -> (ncfa, ss, l)
-        | n < 0 || m < n -> error $ "*** RE2CFA : ncfa_add_regexp_iter : Invalid iteration bounds in regexp: {" ++ show n ++ "," ++ show m ++ "}"
+        | n < 0 || m < n -> err $ "ncfa_add_regexp_iter : Invalid iteration bounds in regexp: {" ++ show n ++ "," ++ show m ++ "}"
         | otherwise      ->
         let rcat               = foldl' (\ rc _ -> Cat (IterFromPrim rprim) rc) ((CatFromIter . IterFromPrim) rprim)  [1 .. n - 1]
             (ncfa', ss', l')   = ncfa_add_regexp_cat (ncfa, ss, l) rcat rt sign
@@ -61,7 +61,7 @@ ncfa_add_regexp_prim :: (Labellable a) => (NCFA a, S.Set State, Int) -> RegexpPr
 ncfa_add_regexp_prim (ncfa, ss, l) r rt sign = case r of
     Elementary s -> foldl' (\(d, s, l) c -> ncfa_add_regexp_atom (d, s, l) (LOne c) sign) (ncfa, ss, l) s
     Name s       ->
-        let Regexp ralt = M.lookupDefault (error ("undefined regexp: " ++ show r)) s rt
+        let Regexp ralt = M.lookupDefault (err ("ncfa_add_regexp_prim : undefined regexp: " ++ show s)) s rt
         in  ncfa_add_regexp_alt (ncfa, ss, l) ralt rt sign
     Wrapped ralt -> ncfa_add_regexp_alt (ncfa, ss, l) ralt rt sign
     Any          -> ncfa_add_regexp_atom (ncfa, ss, l) (LRange full_range) sign
@@ -79,12 +79,16 @@ ncfa_add_regexp_atom (ncfa, ss, l) lbl sign =
     in  (ncfa', ss', l + 1)
 
 
+err :: String -> a
+err s = error $ "*** RE2CFA : " ++ s
+
+
 re2ncfa :: (Labellable a) => [RegexpName] -> RegexpTable a -> (NCFA a, Int)
 re2ncfa rs rt =
     let ncfa          = ncfa_empty
         (ncfa', _, l) = foldl'
             (\ (ncfa, ss, l) (k, r) ->
-                let regexp         = M.lookupDefault (error ("undefined regexp: " ++ show r)) r rt
+                let regexp         = M.lookupDefault (err ("re2ncfa : undefined regexp: " ++ show r)) r rt
                     (ncfa', _, l') = ncfa_add_regexp (ncfa, ss, 0) regexp rt k
                 in  (ncfa', ss, max l l')
             )
