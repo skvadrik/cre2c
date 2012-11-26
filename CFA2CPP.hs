@@ -252,9 +252,9 @@ router5 opts k id_info = case opts of
 
 codegen_entry :: Int -> IBlkID -> Options -> MRegID2RegInfo -> PP.Doc
 codegen_entry maxlen k opts id_info =
-    doc_decl_start opts
-    $$ PP.text "#define MAXLEN" <> PP.int k <> PP.space <> PP.int maxlen
+    PP.text "#define MAXLEN" <> PP.int k <> PP.space <> PP.int maxlen
     $$ router0 opts k id_info
+    $$ doc_decl_start opts
     $$ PP.text "if (LIMIT - CURSOR < MAXLEN" <> PP.int k <> PP.text ") FILL();"
     $$ doc_goto k 0
 
