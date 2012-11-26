@@ -2,23 +2,45 @@ module Types where
 
 import qualified Data.HashMap.Strict   as M
 import qualified Data.Set              as S
-import qualified Data.ByteString.Char8 as BS
 import           Data.Hashable
-import           Data.Char                   (isAlphaNum, toLower, toUpper, isSpace)
+import           Data.Char                   (toLower, toUpper, isAlphaNum)
 import           Text.Printf
-import           Debug.Trace
+
+import           Helpers
 
 
-trace' :: Show a => a -> a
-trace' a = trace (show a) a
+type SBlkname  = String
+type SRegname  = String
+type STokname  = String
+type SCond     = String
+type SCode     = String
 
-trace'' :: Show a => String -> a -> a
-trace'' s a = trace (s ++ show a) a
 
-trace''' :: Show a => String -> a -> a
-trace''' s a = trace (show a ++ s) a
+type IRegID    = Int
+type IStateID  = Int
+type ITokID    = Int
+type IBlkID    = Int
 
----------------- regexp types
+
+type MRegID2RegInfo       = M.HashMap IRegID        (Maybe SBlkname, MCondset2Code)
+type MRegname2RegInfo     = M.HashMap SRegname      (Maybe SBlkname, MCondset2Code)
+type MCondset2Code        = M.HashMap (S.Set SCond) SCode
+type MRegname2Regexp a    = M.HashMap SRegname      (Regexp a)
+type MTokname2TokID       = M.HashMap STokname      ITokID
+
+
+type DCFANode a    = M.HashMap (Label a) (S.Set IRegID, IStateID)
+type DCFAGraph a   = M.HashMap IStateID (DCFANode a)
+type NCFANode a    = [(Label a, IRegID, IStateID)]
+type NCFAGraph a   = M.HashMap IStateID (NCFANode a)
+
+
+data StateInfo a
+    = SI IStateID Bool Bool (DCFANode a) (Maybe (S.Set IRegID))
+data BlockInfo a
+    = BI Int Options MRegID2RegInfo
+
+
 data Regexp a
     = Regexp (RegexpAlt a)
     deriving (Show)
@@ -38,69 +60,81 @@ data RegexpIter a
     deriving (Show)
 data RegexpPrim a
     = Elementary [a]
-    | Name       RegexpName
+    | Name       SRegname
     | Wrapped    (RegexpAlt a)
     | Any
     | Range      [a]
     deriving (Show)
-type RegexpTable a = M.HashMap String (Regexp a)
-type TokenTable    = M.HashMap String Int
 
 
-
-
-type State = Int
-type RegexpId = Int
-
-type DCFANode a      = M.HashMap (Label a) (S.Set RegexpId, State)
-type DCFAGraph a     = M.HashMap State (DCFANode a)
 data DCFA a          = DCFA
-    { dcfa_init_state   :: State
+    { dcfa_init_state   :: IStateID
     , dcfa_graph        :: DCFAGraph a
-    , dcfa_final_states :: M.HashMap State (S.Set RegexpId)
+    , dcfa_final_states :: M.HashMap IStateID (S.Set IRegID)
+    } deriving (Show)
+data NCFA a      = NCFA
+    { ncfa_init_state   :: IStateID
+    , ncfa_max_state    :: IStateID
+    , ncfa_graph        :: NCFAGraph a
+    , ncfa_final_states :: M.HashMap IStateID (S.Set IRegID)
     } deriving (Show)
 
-type NCFANode a  = [(Label a, RegexpId, State)]
-type NCFAGraph a = M.HashMap State (NCFANode a)
-data NCFA a      = NCFA
-    { ncfa_init_state   :: State
-    , ncfa_max_state    :: State
-    , ncfa_graph        :: NCFAGraph a
-    , ncfa_final_states :: M.HashMap State (S.Set RegexpId)
-    } deriving (Show)
+
+data Chunk
+    = Ch1 SCode
+    | Ch2 SCode Options MRegname2RegInfo
+data Options
+    = Opts
+        { mode        :: Mode
+        , match       :: Match
+        , token_type  :: TokenType
+        }
+    | OptsBlock
+        { block       :: SBlkname
+        , token_type  :: TokenType
+        }
+    deriving (Show)
+data Mode
+    = Single
+    | Normal
+    deriving (Show)
+data TokenType
+    = TTChar
+    | TTEnum STokname
+    deriving (Show)
+data Match
+    = Longest
+    | All
+    deriving (Show)
+
 
 data Label a
     = LOne a
     | LRange [a]
-
 instance Labellable a => Hashable (Label a) where
     hash (LOne c)   = hash c
     hash (LRange r) = hash r
-
 instance Labellable a => Eq (Label a) where
     LOne   x  == LOne   y  = x == y
     LRange xs == LRange ys = xs == ys
     LOne   x  == LRange xs = x `elem` xs
     LRange xs == LOne   x  = x `elem` xs
-
 instance Labellable a => Ord (Label a) where
     LOne   x       `compare` LOne   y       = x  `compare` y
     LRange xs      `compare` LRange ys      = xs `compare` ys
     LOne   x       `compare` LRange (y : _) = x  `compare` y
     LRange (y : _) `compare` LOne   x       = y  `compare` x
-    LOne   _       `compare` LRange []      = error "*** Types : empty range"
-    LRange []      `compare` LOne   _       = error "*** Types : empty range"
-
+    LOne   _       `compare` LRange []      = err "empty range"
+    LRange []      `compare` LOne   _       = err "empty range"
 instance Labellable a => Show (Label a) where
     show (LOne   x ) = show_hex  x
     show (LRange xs) = shows_hex xs
 
 
-
 class (Eq a, Ord a, PrintfArg a, Show a, Hashable a) => Labellable a where
-    read' :: String -> Maybe TokenTable -> (a, String)
+    read' :: String -> Maybe MTokname2TokID -> (a, String)
 
-    reads' :: Maybe TokenTable -> String -> [a]
+    reads' :: Maybe MTokname2TokID -> String -> [a]
     reads' _    "" = []
     reads' ttbl s  =
         let (t, r) = read' s ttbl
@@ -123,14 +157,12 @@ class (Eq a, Ord a, PrintfArg a, Show a, Hashable a) => Labellable a where
     shows_hex r = printf "%s-%s" ((show_hex . head) r) ((show_hex . last) r)
 
 
-
-
 instance Labellable Char where
-    read' _        (Just _) = error "*** Types : read' (Char) : non-empty token table for char-based scanner ?"
+    read' _        (Just _) = err "read' (Char) : non-empty token table for char-based scanner ?"
     read' (c : cs) _        = (c, cs)
-    read' ""       _        = error "*** Types : read' (Char) : trying to read from empty string"
+    read' ""       _        = err "read' (Char) : trying to read from empty string"
 
-    reads' (Just _) _ = error "*** Types : reads' (Char) : non-empty token table for char-based scanner ?"
+    reads' (Just _) _ = err "reads' (Char) : non-empty token table for char-based scanner ?"
     reads' _ cs       = cs
 
     full_range = ['\x00' .. '\xFF']
@@ -142,21 +174,16 @@ instance Labellable Char where
             span_range' cs (a : s)           = span_range' (a : cs) s
         in  span_range' "" s
 
-    span_case c =
-        let is_alpha :: Char -> Bool
-            is_alpha c = (c > '\x40' && c <= '\x5A') || (c > '\x60' && c <= '\x7A')
-        in  if is_alpha c then [toLower c, toUpper c] else [c]
-
-
+    span_case c = if is_alpha c then [toLower c, toUpper c] else [c]
 
 
 instance Labellable Int where
-    read' _ Nothing     = error "*** Types : read' (Int) : empty token table for int-based scanner ?"
+    read' _ Nothing     = err "read' (Int) : empty token table for int-based scanner ?"
     read' s (Just ttbl) =
         let (t, r) = span (\ c -> isAlphaNum c || c == '_') s
         in  case M.lookup t ttbl of
                 Just i  -> (i, r)
-                Nothing -> error $ printf "*** Types : read (Int) : unknown token : %s" t
+                Nothing -> err $ printf "read (Int) : unknown token : %s" t
 
 -- ?????????????? -- do smth about range
     full_range = [0x00 .. 0xFFFFffff]
@@ -166,58 +193,6 @@ instance Labellable Int where
     span_case i = [i]
 
 
-
-
----------------- Common types
-data Chunk
-    = Ch1 Code
-    | Ch2 Code Options RuleTable
-data Options
-    = Opts
-        { mode        :: Mode
-        , match       :: Match
-        , token_type  :: TokenType
-        }
-    | OptsBlock
-        { block       :: BlockName
-        , token_type  :: TokenType
-        }
-    deriving (Show)
-data Mode
-    = Single
-    | Normal
-    deriving (Show)
-data TokenType
-    = TTChar
-    | TTEnum String
-    deriving (Show)
-data Match
-    = Longest
-    | All
-    deriving (Show)
-data CondList
-    = ManyConds Cond CondList
-    | OneCond   Cond
-    deriving (Show)
-type Cond
-    = String
-type RegexpName
-    = String
-type BlockName
-    = String
-type Code
-    = BS.ByteString
-type RuleTable
-    = M.HashMap RegexpName (Maybe BlockName, M.HashMap (S.Set Cond) Code)
-type SignTable
-    = M.HashMap String [BS.ByteString]
-type Conds2Code
-    = M.HashMap (S.Set Cond) Code
-
-
-
-type MultiArc a = (Label a, S.Set RegexpId, S.Set State)
-
 hashAndCombine :: Hashable h => Int -> h -> Int
 hashAndCombine acc h = acc `combine` hash h
 
@@ -225,9 +200,5 @@ instance (Hashable a) => Hashable (S.Set a) where
     hash = S.foldl' hashAndCombine 0
 
 
-is_alpha_num_ :: Char -> Bool
-is_alpha_num_ c = isAlphaNum c || c == '_'
-
-
-skip_spaces :: String -> String
-skip_spaces = dropWhile isSpace
+err :: String -> a
+err s = error $ "*** Types : " ++ s

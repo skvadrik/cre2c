@@ -6,21 +6,16 @@ module CFA2CPP
 import qualified Data.HashMap.Strict       as M
 import qualified Data.Set                  as S
 import           Data.List                       (foldl', partition, nub, unzip4, sortBy)
-import qualified Data.ByteString.Char8     as BS
-import           Text.PrettyPrint.HughesPJ       (($$), (<>), ($+$), Doc)
+import           Text.PrettyPrint.HughesPJ       (($$), (<>), Doc)
 import qualified Text.PrettyPrint.HughesPJ as PP
 import           Data.Maybe                      (fromJust)
 
-import           Types
+import           Types                     hiding (err)
+import           Helpers
 import           CFA
 
 
-type RegexpId2RegexpInfo = M.HashMap RegexpId (Maybe BlockName, Conds2Code)
-data StateInfo a         = SI State Bool Bool (DCFANode a) (Maybe (S.Set RegexpId))
-data BlockInfo a         = BI Int Options RegexpId2RegexpInfo
-
-
-cfa2cpp :: Labellable a => DCFA a -> Code -> RegexpId2RegexpInfo -> Int -> Int -> Options -> Code
+cfa2cpp :: Labellable a => DCFA a -> SCode -> MRegID2RegInfo -> Int -> IBlkID -> Options -> SCode
 cfa2cpp dcfa prolog id_info maxlen n_scanner opts =
     let entry      = codegen_entry maxlen n_scanner opts id_info
         g          = dcfa_graph dcfa
@@ -45,27 +40,15 @@ cfa2cpp dcfa prolog id_info maxlen n_scanner opts =
         ending      =
             router5 opts n_scanner id_info
             $$$ PP.text "#undef MAXLEN" <> PP.int n_scanner
-    in  (BS.pack . PP.render)
-            ( ( PP.text . BS.unpack ) prolog
+    in  PP.render $
+            PP.text prolog
             $$$ entry
             $$$ states
             $$$ final_states
             $$$ ending
-            )
 
 
-instance Eq Doc where
-    d1 == d2 = PP.render d1 == PP.render d2
-
-
-($$$) :: Doc -> Doc -> Doc
-($$$) d1 d2 | PP.isEmpty d1 = d2
-($$$) d1 d2 | PP.isEmpty d2 = d1
-($$$) d1 d2                  = d1 $$ PP.text "" $$ d2
-infixl 5 $$$
-
-
-doc_decl :: Int -> Int -> Doc
+doc_decl :: IBlkID -> IStateID -> Doc
 doc_decl k n =
     PP.char 'm'
     <> PP.int k
@@ -74,7 +57,7 @@ doc_decl k n =
     <> PP.colon
 
 
-doc_goto :: Int -> Int -> Doc
+doc_goto :: IBlkID -> IStateID -> Doc
 doc_goto k n =
     PP.text "goto m"
     <> PP.int k
@@ -83,7 +66,7 @@ doc_goto k n =
     <> PP.semi
 
 
-doc_decl_fin :: Int -> Options -> Doc
+doc_decl_fin :: IBlkID -> Options -> Doc
 doc_decl_fin k opts =
     let block_id = case opts of
             OptsBlock b _ -> PP.text b
@@ -93,7 +76,7 @@ doc_decl_fin k opts =
         <> PP.text "_fin:"
 
 
-doc_goto_fin :: Int -> Options -> Doc
+doc_goto_fin :: IBlkID -> Options -> Doc
 doc_goto_fin k opts =
     let block_id = case opts of
             OptsBlock b _ -> PP.text b
@@ -110,18 +93,14 @@ doc_decl_start opts =
         _             -> PP.empty
 
 
-doc_goto_block :: BlockName -> Doc
+doc_goto_block :: SBlkname -> Doc
 doc_goto_block block =
     PP.text "goto m_"
     <> PP.text block
     <> PP.text "_start;"
 
 
-wrap_in_braces :: Doc -> Doc
-wrap_in_braces d = PP.text "{" $+$ PP.nest 4 d $$ PP.text "}"
-
-
-doc_if :: [S.Set Cond] -> Doc -> Doc
+doc_if :: [S.Set SCond] -> Doc -> Doc
 doc_if cs doc =
     let f :: String -> [Doc] -> Doc
         f s xs = case nub xs of
@@ -139,7 +118,7 @@ doc_if cs doc =
             else PP.text "if " <> PP.parens cs'' $$ wrap_in_braces doc
 
 
-doc_if_else :: [S.Set Cond] -> Doc -> Doc -> Doc
+doc_if_else :: [S.Set SCond] -> Doc -> Doc -> Doc
 doc_if_else cs d1 d2 =
     doc_if cs d1
     $$ PP.text "else"
@@ -158,7 +137,7 @@ doc_case l =
             LRange xs -> (PP.vcat . map f) xs
 
 
-doc_case_break :: Int -> Doc -> Doc
+doc_case_break :: IRegID -> Doc -> Doc
 doc_case_break n d =
     PP.text "case " <> PP.int n <> PP.colon
     $$ PP.nest 4 (d $$ PP.text "break;")
@@ -168,7 +147,7 @@ doc_default :: Doc -> Doc
 doc_default d = PP.text "default:" $$ PP.nest 4 d
 
 
-get_conds2code :: RegexpId2RegexpInfo -> S.Set RegexpId -> [(RegexpId, S.Set Cond, Maybe BlockName, Code)]
+get_conds2code :: MRegID2RegInfo -> S.Set IRegID -> [(IRegID, S.Set SCond, Maybe SBlkname, SCode)]
 get_conds2code id_info ids  =
     let f id_conds_code id (block, conds2code) = id_conds_code ++ if id `S.member` ids
             then map (\ (conds, code) -> (id, conds, block, code)) (M.toList conds2code)
@@ -176,16 +155,16 @@ get_conds2code id_info ids  =
     in  M.foldlWithKey' f [] id_info
 
 
-get_conds :: RegexpId2RegexpInfo -> S.Set RegexpId -> [S.Set Cond]
+get_conds :: MRegID2RegInfo -> S.Set IRegID -> [S.Set SCond]
 get_conds id_info = (\ (_, conds, _, _) -> conds) . unzip4 . get_conds2code id_info
 
 
-codegen_match_code :: RegexpId2RegexpInfo -> Doc
+codegen_match_code :: MRegID2RegInfo -> Doc
 codegen_match_code id_info =
     let ids      = (S.fromList . M.keys) id_info
         id_info' = get_conds2code id_info ids
         f d (id, conds, block, code) =
-            let d1 = doc_if [conds] ((PP.text . BS.unpack) code)
+            let d1 = doc_if [conds] (PP.text code)
                 d2 = case block of
                     Just b  -> doc_goto_block b
                     Nothing -> PP.empty
@@ -195,7 +174,7 @@ codegen_match_code id_info =
     in  doc_switch (PP.text "accept") d
 
 
-router0 :: Options -> Int -> RegexpId2RegexpInfo -> Doc
+router0 :: Options -> IBlkID -> MRegID2RegInfo -> Doc
 router0 opts k id_info =
     let d1 = doc_decl_fin k opts
         d2 = PP.text "token = MARKER;"
@@ -251,9 +230,9 @@ router3 opts is_init =
             OptsBlock _              _ -> d3
 
 
-router4 :: Options -> Bool -> (Int, Code) -> Doc
+router4 :: Options -> Bool -> (IRegID, SCode) -> Doc
 router4 opts empty_node (k, code) =
-    let d1 = ( PP.text . BS.unpack ) code
+    let d1 = PP.text code
         d2 = PP.text "accept = " <> PP.int k <> PP.semi
         d3 = PP.text "MARKER = CURSOR;"
         d4 = if empty_node then PP.empty else PP.text "adjust_marker = false;"
@@ -265,13 +244,13 @@ router4 opts empty_node (k, code) =
             OptsBlock _              _ ->       d2 $$ d3
 
 
-router5 :: Options -> Int -> RegexpId2RegexpInfo -> Doc
+router5 :: Options -> IBlkID -> MRegID2RegInfo -> Doc
 router5 opts k id_info = case opts of
     Opts Single _ _ -> doc_decl_fin k opts $$ codegen_match_code id_info
     _               -> PP.empty
 
 
-codegen_entry :: Int -> Int -> Options -> RegexpId2RegexpInfo -> PP.Doc
+codegen_entry :: Int -> IBlkID -> Options -> MRegID2RegInfo -> PP.Doc
 codegen_entry maxlen k opts id_info =
     doc_decl_start opts
     $$ PP.text "#define MAXLEN" <> PP.int k <> PP.space <> PP.int maxlen

@@ -12,9 +12,10 @@ import qualified Data.DList          as DL
 import           Data.List                 (foldl', isPrefixOf)
 import           Text.Printf
 
-import           Types
+import           Types               hiding (err)
+import           Helpers
 
-#define HappyAbsSyn (HappyAbsSyn_ ta)
+#define HappyAbsSyn    (HappyAbsSyn_ ta)
 
 }
 
@@ -42,11 +43,11 @@ import           Types
 
 %%
 
-RDefs :: { [(String, Regexp ta)] }
+RDefs :: { [(SRegname, Regexp ta)] }
     : RDef                            { [$1]    }
     | RDef RDefs                      { $1 : $2 }
 
-RDef :: { (String, Regexp ta) }
+RDef :: { (SRegname, Regexp ta) }
     : name '=' R ';'                  { ($1, $3) }
 
 R :: { Regexp ta }
@@ -99,10 +100,13 @@ data Token ta
 
 
 parseError :: [Token ta] -> tb
-parseError e = error "Parse error"
+parseError _ = err "Parse error"
+
+--parseError :: Labellable ta => [Token ta] -> tb
+--parseError e = err $ "Parse error : " ++ show e
 
 
-analyze :: String -> M.HashMap String TokenTable -> (String, Maybe TokenTable, String)
+analyze :: SCode -> M.HashMap STokname MTokname2TokID -> (STokname, Maybe MTokname2TokID, SCode)
 analyze s ttbls =
     let s1 = "!cre2c_type:"
         s2 = (skip_spaces . drop (length s1)) s
@@ -117,7 +121,7 @@ analyze s ttbls =
             _                       -> err $ printf "missing %s directive" (show s1)
 
 
-lexer :: Labellable ta => Maybe TokenTable -> String -> [Token ta]
+lexer :: Labellable ta => Maybe MTokname2TokID -> SCode -> [Token ta]
 lexer _    "" = []
 lexer ttbl (c : cs)
     | isSpace c = lexer ttbl cs
@@ -128,19 +132,11 @@ lexer ttbl ('='  : cs)        = TokenEq : lex_regexp ttbl cs
 lexer ttbl ('-'  : '-'  : cs) = lex_comment ttbl cs
 
 
-lex_name :: String -> (String, String)
-lex_name cs =
-    let v@(nm, rest) = span (\ c -> isAlphaNum c || c == '_') cs
-    in  case nm of
-            "" -> err "lex_name : empty name"
-            _  -> v
-
-
-lex_comment :: Labellable ta => Maybe TokenTable -> String -> [Token ta]
+lex_comment :: Labellable ta => Maybe MTokname2TokID -> SCode -> [Token ta]
 lex_comment ttbl cs = lexer ttbl $ dropWhile (/= '\n') cs
 
 
-lex_regexp :: Labellable ta => Maybe TokenTable -> String -> [Token ta]
+lex_regexp :: Labellable ta => Maybe MTokname2TokID -> SCode -> [Token ta]
 lex_regexp _    [] = []
 lex_regexp ttbl (c : cs)
     | isSpace c = lex_regexp ttbl cs
@@ -151,7 +147,7 @@ lex_regexp ttbl ('.'  : cs) = TokenDot          : lex_regexp  ttbl cs
 lex_regexp ttbl ('?'  : cs) = TokenQueryMark    : lex_regexp  ttbl cs
 lex_regexp ttbl ('('  : cs) = TokenOBracket     : lex_regexp  ttbl cs
 lex_regexp ttbl (')'  : cs) = TokenCBracket     : lex_regexp  ttbl cs
-lex_regexp ttbl ('{'  : cs) = TokenOParenthesis : lex_int     ttbl cs
+lex_regexp ttbl ('{'  : cs) = TokenOParenthesis : lex_iters   ttbl cs
 lex_regexp ttbl ('}'  : cs) = TokenCParenthesis : lex_regexp  ttbl cs
 lex_regexp ttbl ('"'  : cs) = TokenDQuote       : lex_dqchain ttbl cs
 lex_regexp ttbl ('\'' : cs) =                     lex_qchain  ttbl cs
@@ -160,12 +156,14 @@ lex_regexp ttbl ('|'  : cs) = TokenVSlash       : lex_regexp  ttbl cs
 lex_regexp ttbl (';'  : cs) = TokenSemicolon    : lexer       ttbl cs
 
 
-lex_int :: Labellable ta => Maybe TokenTable -> String -> [Token ta]
-lex_int ttbl cs =
-    let (num, rest) = span isDigit cs
-    in  case rest of
-            ',' : cs' -> TokenInt (read num) : TokenComma        : lex_int    ttbl cs'
-            '}' : cs' -> TokenInt (read num) : TokenCParenthesis : lex_regexp ttbl cs'
+lex_iters :: Labellable ta => Maybe MTokname2TokID -> SCode -> [Token ta]
+lex_iters ttbl s =
+    let (n, s1)  = lex_int s
+    in  case skip_spaces s1 of
+            ',' : s2 ->
+                let (m, s3) = lex_int s2
+                in  TokenInt n : TokenComma : TokenInt m : lex_regexp ttbl s3
+            '}' : s2 -> TokenInt n : TokenCParenthesis : lex_regexp ttbl s2
 
 
 break_escaped :: Char -> String -> (String, String)
@@ -186,20 +184,20 @@ lex_qchain' (x : xs) = case span_case x of
     ys  -> TokenOSqBracket : TokenChain ys  : TokenCSqBracket : lex_qchain' xs
 
 
-lex_qchain :: Labellable ta => Maybe TokenTable -> String -> [Token ta]
+lex_qchain :: Labellable ta => Maybe MTokname2TokID -> SCode -> [Token ta]
 lex_qchain ttbl cs =
     let (ch, rest) = break_escaped '\'' cs
         ch'        = reads' ttbl ch
     in lex_qchain' ch' ++ lex_regexp ttbl rest
 
 
-lex_dqchain :: Labellable ta => Maybe TokenTable -> String -> [Token ta]
+lex_dqchain :: Labellable ta => Maybe MTokname2TokID -> SCode -> [Token ta]
 lex_dqchain ttbl cs =
     let (ch, rest) = break_escaped '"' cs
     in  TokenChain (reads' ttbl ch) : TokenDQuote : lex_regexp ttbl rest
 
 
-lex_range :: Labellable ta => Maybe TokenTable -> String -> [Token ta]
+lex_range :: Labellable ta => Maybe MTokname2TokID -> SCode -> [Token ta]
 lex_range ttbl cs =
     let (ch, rest) = break_escaped ']' cs
         ch'        = (span_range . reads' ttbl) ch
@@ -212,10 +210,10 @@ err s = error $ "*** RegexpParser : " ++ s
 
 --------------------------------------------------------------------------------
 
-parse_regexps :: Labellable ta => Maybe TokenTable -> String -> RegexpTable ta
+parse_regexps :: Labellable ta => Maybe MTokname2TokID -> SCode -> MRegname2Regexp ta
 parse_regexps ttbl = M.fromList . parser . lexer ttbl
 
-parse_def_file :: M.HashMap String TokenTable -> String -> Either (RegexpTable Char) (String, RegexpTable Int)
+parse_def_file :: M.HashMap STokname MTokname2TokID -> SCode -> Either (MRegname2Regexp Char) (STokname, MRegname2Regexp Int)
 parse_def_file ttbls s =
     let (ttype, ttbl, s') = analyze s ttbls
     in  case ttbl of

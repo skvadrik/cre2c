@@ -4,13 +4,14 @@ module SourceParser
     ) where
 
 import qualified Data.HashMap.Strict   as M
-import qualified Data.ByteString.Char8 as BS
 import           Data.Char
 import           Data.List                   (foldl', isPrefixOf)
+import qualified Data.DList            as DL
 import qualified Data.Set              as S
 import           Text.Printf
 
-import           Types
+import           Types                 hiding (err)
+import           Helpers
 
 -- parser produced by Happy Version 1.18.10
 
@@ -20,7 +21,7 @@ data HappyAbsSyn
 	| HappyAbsSyn4 ([Chunk])
 	| HappyAbsSyn5 ([Rule])
 	| HappyAbsSyn7 (Rule)
-	| HappyAbsSyn10 ([Cond])
+	| HappyAbsSyn10 ([SCond])
 
 {- to allow type-synonyms as our monads (likely
  - with explicitly-specified bind and return)
@@ -433,7 +434,7 @@ happySeq = happyDontSeq
 
 
 type Rule
-    = (RegexpName, Maybe BlockName, [Cond], Code)
+    = (SRegname, Maybe SBlkname, [SCond], SCode)
 
 data Token
     = TEq
@@ -441,7 +442,7 @@ data Token
     | TColon
     | TStart
     | TEnd
-    | TCode    BS.ByteString
+    | TCode    SCode
     | TName    String
     | TOptions Options
     deriving (Show)
@@ -449,7 +450,7 @@ data Token
 data OptionSet = OptionSet
     { opt_mode        :: Mode
     , opt_match       :: Match
-    , opt_block       :: Maybe BlockName
+    , opt_block       :: Maybe SBlkname
     , opt_token_type  :: TokenType
     }
 
@@ -466,14 +467,14 @@ lexer s =
             _  -> TStart : lex_options s'
 
 
-lex_entry :: String -> (Code, String)
+lex_entry :: SCode -> (SCode, String)
 lex_entry s =
     let s1 = "/*start:"
         lex_entry' entry rest = case rest of
-            ""                    -> (entry, "")
-            r | s1 `isPrefixOf` r -> (entry, drop (length s1) r)
-            c : cs                -> lex_entry' (BS.snoc entry c) cs
-    in  lex_entry' BS.empty s
+            ""                    -> (DL.toList entry, "")
+            r | s1 `isPrefixOf` r -> (DL.toList entry, drop (length s1) r)
+            c : cs                -> lex_entry' (DL.snoc entry c) cs
+    in  lex_entry' DL.empty s
 
 
 lex_options :: String -> [Token]
@@ -525,7 +526,7 @@ lex_token_type opts s =
             _      -> (opts{opt_token_type = TTEnum t}, s')
 
 
-lex_blockname :: String -> (BlockName, String)
+lex_blockname :: String -> (SBlkname, String)
 lex_blockname ('(':s) =
     case span is_alpha_num_ s of
         ("", _     ) -> err "block name not specified."
@@ -561,23 +562,14 @@ lex_rules_b s =
             s'                            -> err $ printf "lex_rules : can't parse rules at %s" $ (take 50 . show) s'
 
 
-lex_code :: String -> (Code, String)
+lex_code :: String -> (SCode, String)
 lex_code s =
-    let lex_code' :: Int -> Code -> String -> (Code, String)
-        lex_code' 0 tok rest         = (BS.cons '{' tok, rest)
+    let lex_code' 0 tok rest         = ((DL.toList . DL.cons '{') tok, rest)
         lex_code' i tok ""           = err "invalid code block in regexp definition"
-        lex_code' i tok ('{' : rest) = lex_code' (i + 1) (BS.snoc tok '{') rest
-        lex_code' i tok ('}' : rest) = lex_code' (i - 1) (BS.snoc tok '}') rest
-        lex_code' i tok (c   : rest) = lex_code' i       (BS.snoc tok c)   rest
-    in  lex_code' 1 BS.empty s
-
-
-lex_name :: String -> (String, String)
-lex_name s =
-    let (nm, s') = (span is_alpha_num_ . skip_spaces) s
-    in  case nm of
-            "" -> err "lex_name : empty name"
-            _  -> (nm, s')
+        lex_code' i tok ('{' : rest) = lex_code' (i + 1) (DL.snoc tok '{') rest
+        lex_code' i tok ('}' : rest) = lex_code' (i - 1) (DL.snoc tok '}') rest
+        lex_code' i tok (c   : rest) = lex_code' i       (DL.snoc tok c)   rest
+    in  lex_code' 1 DL.empty s
 
 
 err :: String -> a
@@ -587,14 +579,14 @@ err s = error $ "*** SourceParser : " ++ s
 --------------------------------------------------------------------------------
 
 
-combine_rules :: (Maybe BlockName, Conds2Code) -> (Maybe BlockName, Conds2Code) -> (Maybe BlockName, Conds2Code)
+combine_rules :: (Maybe SBlkname, MCondset2Code) -> (Maybe SBlkname, MCondset2Code) -> (Maybe SBlkname, MCondset2Code)
 combine_rules (Just b, _) (Just b', _) | b /= b' = err "rules for one regexp lead to different blocks"
 combine_rules (Just b, _) (Nothing, _)           = err "combine_rules: dark magic..."
 combine_rules (Nothing, _) (Just b, _)           = err "combine_rules: dark magic..."
 combine_rules (b, conds2code) (b', conds2code')  =
     let conds2code'' = M.foldlWithKey'
             (\ c2c conds code -> M.insertWith
-                (\ _ code' -> BS.concat [BS.pack "{ ", code, code', BS.pack " }"])
+                (\ _ code' -> concat ["{ ", code, code', " }"])
                 conds
                 code
                 conds2code
@@ -602,7 +594,7 @@ combine_rules (b, conds2code) (b', conds2code')  =
     in  (b, conds2code'')
 
 
-insert_rule :: RuleTable -> Rule -> RuleTable
+insert_rule :: MRegname2RegInfo -> Rule -> MRegname2RegInfo
 insert_rule rules (name, block, conds, code) = M.insertWith
     combine_rules
     name

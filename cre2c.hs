@@ -1,18 +1,22 @@
 #!/usr/bin/env runghc
 
 
-import           System.Environment          (getArgs)
-import qualified Data.HashMap.Strict   as M
-import qualified Data.ByteString.Char8 as BS
-import           Data.List                   (foldl')
-import           Data.Either                 (lefts, rights)
-import           Control.Applicative         ((<$>))
-import           Control.Monad               (when)
+import           Control.Applicative             ((<$>))
+import           Control.Monad                   (when)
+import           Data.Char                       (toUpper, toLower)
+import qualified Data.HashMap.Strict       as M
+import           Data.Either                     (lefts, rights)
+import           Data.List                       (foldl')
 import           System.Cmd
-import           Text.Printf
 import           System.Console.GetOpt
+import           System.Environment              (getArgs)
+import           System.FilePath.Posix           (takeDirectory, (<.>), (</>))
+import           Text.Printf
+import qualified Text.PrettyPrint.HughesPJ as PP
+import           Text.PrettyPrint.HughesPJ       (($$), (<>))
 
-import           Types
+import           Types                           hiding (err)
+import           Helpers
 import           CFA
 import           RE2CFA
 import           CFA2CPP
@@ -20,7 +24,7 @@ import           SourceParser
 import           RegexpParser
 
 
-gen_code :: [Chunk] -> RegexpTable Char -> M.HashMap String (RegexpTable Int) -> Verbosity -> IO (BS.ByteString, Int)
+gen_code :: [Chunk] -> MRegname2Regexp Char -> M.HashMap STokname (MRegname2Regexp Int) -> Verbosity -> IO (SCode, Int)
 gen_code chunks crtbl irtbls v = do
     let chunks'      = zip [0 .. length chunks] chunks
         find_irtbl t = M.lookupDefault (err "gen_code : regexp table not found") t irtbls
@@ -29,10 +33,10 @@ gen_code chunks crtbl irtbls v = do
             Ch2 _ (OptsBlock _ (TTEnum t)) _ -> gen_code_for_chunk k chunk (find_irtbl t) v
             _                                -> gen_code_for_chunk k chunk crtbl          v
     (codes, maxlens) <- unzip <$> mapM f chunks'
-    return (BS.concat codes, maximum maxlens)
+    return (concat codes, maximum maxlens)
 
 
-gen_code_for_chunk :: Labellable a => Int -> Chunk -> RegexpTable a -> Verbosity -> IO (BS.ByteString, Int)
+gen_code_for_chunk :: Labellable a => IBlkID -> Chunk -> MRegname2Regexp a -> Verbosity -> IO (SCode, Int)
 gen_code_for_chunk _ (Ch1 code)            _    _ = return (code, 0)
 gen_code_for_chunk k (Ch2 code opts rules) rtbl v = do
     let verbose :: (Show a) => a -> a
@@ -53,7 +57,7 @@ gen_code_for_chunk k (Ch2 code opts rules) rtbl v = do
     return (code', maxlen')
 
 
-parse_token_table :: String -> (String, TokenTable)
+parse_token_table :: String -> (STokname, MTokname2TokID)
 parse_token_table s =
     let (s1, s2) = (span is_alpha_num_ . skip_spaces) s
         tokens   = case (break (== '}') . skip_spaces) s2 of
@@ -66,15 +70,15 @@ parse_token_table s =
     in   (s1, ttbl)
 
 
-merge_regexp_tables :: RegexpTable a -> RegexpTable a -> RegexpTable a
+merge_regexp_tables :: MRegname2Regexp a -> MRegname2Regexp a -> MRegname2Regexp a
 merge_regexp_tables tbl1 tbl2 =
     let insert_regexp tbl nm r = case M.lookup nm tbl of
             Nothing -> M.insert nm r tbl
-            Just _  -> err $ printf "\nMultiple definitions of the same name found: %s" nm
+            Just _  -> err $ printf "Multiple definitions of the same name found: %s" nm
     in  M.foldlWithKey' insert_regexp tbl2 tbl1
 
 
-group_regexp_tables :: [Either (RegexpTable Char) (String, RegexpTable Int)] -> (RegexpTable Char, M.HashMap String (RegexpTable Int))
+group_regexp_tables :: [Either (MRegname2Regexp Char) (STokname, MRegname2Regexp Int)] -> (MRegname2Regexp Char, M.HashMap STokname (MRegname2Regexp Int))
 group_regexp_tables []    = err "No .def files specified"
 group_regexp_tables rtbls =
     let merge_irtbls tbls (t, tbl) = M.insertWith merge_regexp_tables t tbl tbls
@@ -124,6 +128,30 @@ err :: String -> a
 err s = error $ "*** cre2c : " ++ s
 
 
+codegen_token_enum :: FilePath -> STokname -> MTokname2TokID -> SCode
+codegen_token_enum f t ttbl =
+    let d1 = (PP.text . map (\ c -> if is_alpha_num_ c then toUpper c else '_')) f
+        d2 = PP.text t
+        d3 = (PP.vcat . map (PP.text . (++ ",")) . M.keys) ttbl
+    in  PP.render $
+            PP.text "#ifndef " <> d1
+            $$ PP.text "#define " <> d1
+            $$$ PP.text "enum " <> d2
+            $$ wrap_in_braces d3 <> PP.semi
+            $$$ PP.text "#endif // " <> d1
+
+
+gen_ttbl_headers :: [FilePath] -> M.HashMap STokname MTokname2TokID -> IO [FilePath]
+gen_ttbl_headers fs ttbls = do
+    let filename (f, t) = takeDirectory f </> map toLower t <.> "h"
+        ts       = M.keys ttbls
+        tbls     = M.elems ttbls
+        fs'      = map filename (zip fs ts)
+        fs2codes = map (\ (f, t, tbl) -> (f, codegen_token_enum f t tbl)) (zip3 fs' ts tbls)
+    mapM_ (\ (f, c) -> writeFile f c) fs2codes
+    return fs'
+
+
 main :: IO ()
 main = do
     (opts, non_opts, unknown_opts) <- getArgs >>= parse_args
@@ -141,11 +169,10 @@ main = do
     ttbls           <- M.fromList . map parse_token_table <$> mapM readFile fttbls
     (crtbl, irtbls) <- group_regexp_tables . map (parse_def_file ttbls) <$> mapM readFile fdefs
     (code, maxlen)  <- gen_code chunks crtbl irtbls verbose
+    fttbl_hdrs      <- gen_ttbl_headers fttbls ttbls
 
-    BS.writeFile fdest $ BS.concat
-        [ BS.pack "#define MAXLEN "
-        , BS.pack $ show maxlen
-        , BS.pack "\n"
-        , code
-        , BS.pack "\n#undef MAXLEN"
-        ]
+    writeFile fdest $ PP.render $
+        PP.text "#define MAXLEN " <> PP.int maxlen
+        $$$ PP.vcat (map ((PP.text "#include " <>) . PP.doubleQuotes . PP.text) fttbl_hdrs)
+        $$$ PP.text code
+        $$$ PP.text "#undef MAXLEN"

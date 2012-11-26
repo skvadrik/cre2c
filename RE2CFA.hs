@@ -7,18 +7,18 @@ import qualified Data.HashMap.Strict   as M
 import qualified Data.Set              as S
 import           Data.List                  (foldl')
 
-import           Types
+import           Types                 hiding (err)
 import           CFA
 
 
-ncfa_add_regexp :: (Labellable a) => (NCFA a, S.Set State, Int) -> Regexp a -> RegexpTable a -> RegexpId -> (NCFA a, S.Set State, Int)
+ncfa_add_regexp :: (Labellable a) => (NCFA a, S.Set IStateID, Int) -> Regexp a -> MRegname2Regexp a -> IRegID -> (NCFA a, S.Set IStateID, Int)
 ncfa_add_regexp (ncfa, ss, l) (Regexp r) rt sign =
     let (ncfa', ss', l') = ncfa_add_regexp_alt (ncfa, ss, l) r rt sign
         ncfa''           = S.foldl' (\ c s -> ncfa_set_final s sign c) ncfa' ss'
     in  (ncfa'', ss', l')
 
 
-ncfa_add_regexp_alt :: (Labellable a) => (NCFA a, S.Set State, Int) -> RegexpAlt a -> RegexpTable a -> RegexpId -> (NCFA a, S.Set State, Int)
+ncfa_add_regexp_alt :: (Labellable a) => (NCFA a, S.Set IStateID, Int) -> RegexpAlt a -> MRegname2Regexp a -> IRegID -> (NCFA a, S.Set IStateID, Int)
 ncfa_add_regexp_alt (ncfa, ss, l) r rt sign = case r of
     AltFromCat rcat -> ncfa_add_regexp_cat (ncfa, ss, l) rcat rt sign
     Alt rcat ralt   ->
@@ -27,13 +27,13 @@ ncfa_add_regexp_alt (ncfa, ss, l) r rt sign = case r of
         in  (ncfa'', S.union ss' ss'', max l' l'')
 
 
-ncfa_add_regexp_cat :: (Labellable a) => (NCFA a, S.Set State, Int) -> RegexpCat a -> RegexpTable a -> RegexpId -> (NCFA a, S.Set State, Int)
+ncfa_add_regexp_cat :: (Labellable a) => (NCFA a, S.Set IStateID, Int) -> RegexpCat a -> MRegname2Regexp a -> IRegID -> (NCFA a, S.Set IStateID, Int)
 ncfa_add_regexp_cat (ncfa, ss, l) r rt sign = case r of
     CatFromIter riter -> ncfa_add_regexp_iter (ncfa, ss, l) riter rt sign
     Cat riter rcat    -> ncfa_add_regexp_cat (ncfa_add_regexp_iter (ncfa, ss, l) riter rt sign) rcat rt sign
 
 
-ncfa_add_regexp_iter :: (Labellable a) => (NCFA a, S.Set State, Int) -> RegexpIter a -> RegexpTable a -> RegexpId -> (NCFA a, S.Set State, Int)
+ncfa_add_regexp_iter :: (Labellable a) => (NCFA a, S.Set IStateID, Int) -> RegexpIter a -> MRegname2Regexp a -> IRegID -> (NCFA a, S.Set IStateID, Int)
 ncfa_add_regexp_iter (ncfa, ss, l) r rt sign = case r of
     IterFromPrim rprim  -> ncfa_add_regexp_prim (ncfa, ss, l) rprim rt sign
     IterMaybe rprim     ->
@@ -57,7 +57,7 @@ ncfa_add_regexp_iter (ncfa, ss, l) r rt sign = case r of
         in  (ncfa'', ss''', l'')
 
 
-ncfa_add_regexp_prim :: (Labellable a) => (NCFA a, S.Set State, Int) -> RegexpPrim a -> RegexpTable a -> RegexpId -> (NCFA a, S.Set State, Int)
+ncfa_add_regexp_prim :: (Labellable a) => (NCFA a, S.Set IStateID, Int) -> RegexpPrim a -> MRegname2Regexp a -> IRegID -> (NCFA a, S.Set IStateID, Int)
 ncfa_add_regexp_prim (ncfa, ss, l) r rt sign = case r of
     Elementary s -> foldl' (\(d, s, l) c -> ncfa_add_regexp_atom (d, s, l) (LOne c) sign) (ncfa, ss, l) s
     Name s       ->
@@ -68,7 +68,7 @@ ncfa_add_regexp_prim (ncfa, ss, l) r rt sign = case r of
     Range s      -> ncfa_add_regexp_atom (ncfa, ss, l) (LRange s) sign
 
 
-ncfa_add_regexp_atom :: (NCFA a, S.Set State, Int) -> Label a -> RegexpId -> (NCFA a, S.Set State, Int)
+ncfa_add_regexp_atom :: (NCFA a, S.Set IStateID, Int) -> Label a -> IRegID -> (NCFA a, S.Set IStateID, Int)
 ncfa_add_regexp_atom (ncfa, ss, l) lbl sign =
     let s_max        = ncfa_max_state ncfa
         (ncfa', ss') = S.foldl'
@@ -83,7 +83,7 @@ err :: String -> a
 err s = error $ "*** RE2CFA : " ++ s
 
 
-re2ncfa :: (Labellable a) => [RegexpName] -> RegexpTable a -> (NCFA a, Int)
+re2ncfa :: (Labellable a) => [SRegname] -> MRegname2Regexp a -> (NCFA a, Int)
 re2ncfa rs rt =
     let ncfa          = ncfa_empty
         (ncfa', _, l) = foldl'

@@ -22,26 +22,26 @@ import           Data.List                (foldl')
 import           Control.Monad            (forM_)
 import           Data.Maybe               (isJust)
 
-import           Types
+import           Types               hiding (err)
 
 
 ncfa_empty :: NCFA a
 ncfa_empty = NCFA 0 1 M.empty M.empty
 
 
-dcfa_is_final :: State -> DCFA a -> Bool
+dcfa_is_final :: IStateID -> DCFA a -> Bool
 dcfa_is_final s (DCFA _ _ fss) = isJust $ M.lookup s fss
 
 
-dcfa_accepted :: State -> DCFA a -> S.Set RegexpId
+dcfa_accepted :: IStateID -> DCFA a -> S.Set IRegID
 dcfa_accepted s (DCFA _ _ fss) = M.lookupDefault S.empty s fss
 
 
-ncfa_set_final :: State -> RegexpId -> NCFA a -> NCFA a
+ncfa_set_final :: IStateID -> IRegID -> NCFA a -> NCFA a
 ncfa_set_final s k (NCFA s0 sl g fss) = NCFA s0 sl g (M.insertWith (\ _ ks -> S.insert k ks) s (S.insert k S.empty) fss)
 
 
-ncfa_add_transition :: NCFA a -> (State, Label a, RegexpId, State) -> (NCFA a, State)
+ncfa_add_transition :: NCFA a -> (IStateID, Label a, IRegID, IStateID) -> (NCFA a, IStateID)
 ncfa_add_transition (NCFA s0 sl g fss) (s1, l, k, s2) =
     let g' = M.insertWith (\ _ node -> (l, k, s2) : node) s1 [(l, k, s2)] g
     in  (NCFA s0 (max (sl + 1) s2) g' fss, s2)
@@ -55,10 +55,10 @@ to_label [x] = LOne x
 to_label xs  = (LRange . S.toList . S.fromList) xs
 
 
-determine_node :: (Labellable a) => NCFANode a -> NCFAGraph a -> M.HashMap State (S.Set RegexpId) -> M.HashMap State (S.Set RegexpId) -> State ->
-    (DCFANode a, NCFAGraph a, M.HashMap State (S.Set RegexpId), State, S.Set State)
+determine_node :: (Labellable a) => NCFANode a -> NCFAGraph a -> M.HashMap IStateID (S.Set IRegID) -> M.HashMap IStateID (S.Set IRegID) -> IStateID ->
+    (DCFANode a, NCFAGraph a, M.HashMap IStateID (S.Set IRegID), IStateID, S.Set IStateID)
 determine_node n g fss_old fss s_max =
-    let f :: (Labellable a) => (RegexpId, State) -> M.HashMap a ([RegexpId], [State]) -> a -> M.HashMap a ([RegexpId], [State])
+    let f :: (Labellable a) => (IRegID, IStateID) -> M.HashMap a ([IRegID], [IStateID]) -> a -> M.HashMap a ([IRegID], [IStateID])
         f (k, s) n c = M.insertWith (\ _ (ks, ss) -> (k : ks, s : ss)) c ([k], [s]) n
         n' = foldl'
             (\ n (l, k, s) -> case l of
@@ -88,8 +88,8 @@ determine_node n g fss_old fss s_max =
     in  (n''', g', fss', s_max', ss)
 
 
-determine' :: (Labellable a) => (NCFAGraph a, DCFAGraph a, M.HashMap State (S.Set RegexpId), M.HashMap State (S.Set RegexpId), State, S.Set State) ->
-    (DCFAGraph a, M.HashMap State (S.Set RegexpId))
+determine' :: (Labellable a) => (NCFAGraph a, DCFAGraph a, M.HashMap IStateID (S.Set IRegID), M.HashMap IStateID (S.Set IRegID), IStateID, S.Set IStateID) ->
+    (DCFAGraph a, M.HashMap IStateID (S.Set IRegID))
 determine' (_, dg, _, fss,  _, ss) | ss == S.empty = (dg, fss)
 determine' (ng, dg, fss_old, fss, s_max, ss)       = determine' $ S.foldl'
     (\ (ng, dg, fss_old, fss, s_max, ss) s ->
