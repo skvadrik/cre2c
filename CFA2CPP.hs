@@ -48,49 +48,62 @@ cfa2cpp dcfa prolog id_info maxlen n_scanner opts =
             $$$ ending
 
 
+doc_decl_ :: Doc -> Doc -> Doc
+doc_decl_ d1 d2 = PP.text "m_" <> d1 <> d2 <> PP.colon
+
+
+doc_goto_ :: Doc -> Doc -> Doc
+doc_goto_ d1 d2 = PP.text "goto m_" <> d1 <> d2 <> PP.semi
+
+
 doc_decl :: IBlkID -> IStateID -> Doc
 doc_decl k n =
-    PP.char 'm'
-    <> PP.int k
-    <> PP.char '_'
-    <> PP.int n
-    <> PP.colon
+    let d1 = PP.int k
+        d2 = PP.int n
+    in  doc_decl_ d1 d2
 
 
 doc_goto :: IBlkID -> IStateID -> Doc
 doc_goto k n =
-    PP.text "goto m"
-    <> PP.int k
-    <> PP.char '_'
-    <> PP.int n
-    <> PP.semi
+    let d1 = PP.int k
+        d2 = PP.int n
+    in  doc_goto_ d1 d2
 
 
 doc_decl_fin :: IBlkID -> Options -> Doc
 doc_decl_fin k opts =
-    let block_id = case opts of
+    let d1 = case opts of
             OptsBlock b _ -> PP.text b
             _             -> PP.int k
-    in  PP.text "m_"
-        <> block_id
-        <> PP.text "_fin:"
+        d2 = PP.text "_fin"
+    in  doc_decl_ d1 d2
 
 
 doc_goto_fin :: IBlkID -> Options -> Doc
 doc_goto_fin k opts =
-    let block_id = case opts of
+    let d1 = case opts of
             OptsBlock b _ -> PP.text b
             _             -> PP.int k
-    in  PP.text "goto m_"
-        <> block_id
-        <> PP.text "_fin;"
+        d2 = PP.text "_fin"
+    in  doc_goto_ d1 d2
 
 
-doc_decl_start :: Options -> Doc
-doc_decl_start opts =
-    case opts of
-        OptsBlock b _ -> PP.text "m_" <> PP.text b <> PP.text "_start:"
-        _             -> PP.empty
+doc_decl_start :: IBlkID -> Options -> Doc
+doc_decl_start k opts =
+    let d1 = case opts of
+            OptsBlock b _ -> PP.text b
+            _             -> PP.int k
+        d2 = PP.text "_start"
+    in  doc_decl_ d1 d2
+
+
+doc_goto_start :: IBlkID -> Options -> Doc
+doc_goto_start k opts =
+    let d1 = case opts of
+            OptsBlock b _ -> PP.text b
+            _             -> PP.int k
+        d2 = PP.text "_start"
+    in  doc_goto_ d1 d2
 
 
 doc_goto_block :: SBlkname -> Doc
@@ -176,17 +189,19 @@ codegen_match_code id_info =
 
 router0 :: Options -> IBlkID -> MRegID2RegInfo -> Doc
 router0 opts k id_info =
-    let d1 = doc_decl_fin k opts
+    let d0 = doc_goto_start k opts
+        d1 = doc_decl_fin k opts
         d2 = PP.text "token = MARKER;"
         d3 = codegen_match_code id_info
-        d4 = PP.text "accept = -1;"
-        d5 = PP.text "CURSOR = MARKER;"
+        d4 = PP.text "CURSOR = MARKER;"
+        d5 = doc_decl_start k opts
+        d6 = PP.text "accept = -1;"
     in  case opts of
-            Opts      Single Longest _ ->       d2       $$ d4
-            Opts      Single All     _ ->       d2
-            Opts      Normal Longest _ -> d1       $$ d3 $$ d4 $$ d5
-            Opts      Normal All     _ -> d1                   $$ d5
-            OptsBlock _              _ -> d1       $$ d3 $$ d4 $$ d5
+            Opts      Single Longest _ ->             d2                   $$ d6
+            Opts      Single All     _ ->             d2
+            Opts      Normal Longest _ -> d0 $$ d1       $$ d3 $$ d4 $$ d5 $$ d6
+            Opts      Normal All     _ ->       d1             $$ d4
+            OptsBlock _              _ -> d0 $$ d1       $$ d3 $$ d4 $$ d5 $$ d6
 
 
 router1 :: Options -> Bool -> Bool -> Doc
@@ -254,7 +269,6 @@ codegen_entry :: Int -> IBlkID -> Options -> MRegID2RegInfo -> PP.Doc
 codegen_entry maxlen k opts id_info =
     PP.text "#define MAXLEN" <> PP.int k <> PP.space <> PP.int maxlen
     $$ router0 opts k id_info
-    $$ doc_decl_start opts
     $$ PP.text "if (LIMIT - CURSOR < MAXLEN" <> PP.int k <> PP.text ") FILL();"
     $$ doc_goto k 0
 
