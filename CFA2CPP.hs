@@ -49,11 +49,11 @@ cfa2cpp dcfa prolog id_info maxlen n_scanner opts =
 
 
 doc_decl_ :: Doc -> Doc -> Doc
-doc_decl_ d1 d2 = PP.text "m_" <> d1 <> d2 <> PP.colon
+doc_decl_ d1 d2 = PP.text "m_" <> d1 <> PP.char '_' <> d2 <> PP.colon
 
 
 doc_goto_ :: Doc -> Doc -> Doc
-doc_goto_ d1 d2 = PP.text "goto m_" <> d1 <> d2 <> PP.semi
+doc_goto_ d1 d2 = PP.text "goto m_" <> d1 <> PP.char '_' <> d2 <> PP.semi
 
 
 doc_decl :: IBlkID -> IStateID -> Doc
@@ -75,7 +75,7 @@ doc_decl_fin k opts =
     let d1 = case opts of
             OptsBlock b _ -> PP.text b
             _             -> PP.int k
-        d2 = PP.text "_fin"
+        d2 = PP.text "fin"
     in  doc_decl_ d1 d2
 
 
@@ -84,7 +84,7 @@ doc_goto_fin k opts =
     let d1 = case opts of
             OptsBlock b _ -> PP.text b
             _             -> PP.int k
-        d2 = PP.text "_fin"
+        d2 = PP.text "fin"
     in  doc_goto_ d1 d2
 
 
@@ -93,7 +93,7 @@ doc_decl_start k opts =
     let d1 = case opts of
             OptsBlock b _ -> PP.text b
             _             -> PP.int k
-        d2 = PP.text "_start"
+        d2 = PP.text "start"
     in  doc_decl_ d1 d2
 
 
@@ -102,7 +102,7 @@ doc_goto_start k opts =
     let d1 = case opts of
             OptsBlock b _ -> PP.text b
             _             -> PP.int k
-        d2 = PP.text "_start"
+        d2 = PP.text "start"
     in  doc_goto_ d1 d2
 
 
@@ -194,13 +194,13 @@ router0 opts k id_info =
         d2 = PP.text "token = MARKER;"
         d3 = codegen_match_code id_info
         d4 = PP.text "CURSOR = MARKER;"
-        d5 = doc_decl_start k opts
-        d6 = PP.text "accept = -1;"
+        d5 = PP.text "accept = -1;"
+        d6 = doc_decl_start k opts
     in  case opts of
-            Opts      Single Longest _ ->             d2                   $$ d6
+            Opts      Single Longest _ ->             d2
             Opts      Single All     _ ->             d2
             Opts      Normal Longest _ -> d0 $$ d1       $$ d3 $$ d4 $$ d5 $$ d6
-            Opts      Normal All     _ ->       d1             $$ d4
+            Opts      Normal All     _ -> d0 $$ d1             $$ d4       $$ d6
             OptsBlock _              _ -> d0 $$ d1       $$ d3 $$ d4 $$ d5 $$ d6
 
 
