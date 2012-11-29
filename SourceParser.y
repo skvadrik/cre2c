@@ -83,6 +83,7 @@ data OptionSet = OptionSet
     , opt_match       :: Match
     , opt_block       :: Maybe SBlkname
     , opt_token_type  :: TokenType
+    , opt_prelexer    :: Maybe String
     }
 
 
@@ -113,24 +114,26 @@ lex_options s =
     let s1 = "!cre2c_mode:"
         s2 = "!cre2c_match:"
         s3 = "!cre2c_type:"
+        s4 = "!cre2c_prelexer:"
         lex_options' (opts, rest) = case skip_spaces rest of
-            r | s1 `isPrefixOf` r -> (lex_options' . lex_mode opts       . drop (length s1)) r
-            r | s2 `isPrefixOf` r -> (lex_options' . lex_match opts      . drop (length s2)) r
+            r | s1 `isPrefixOf` r -> (lex_options' . lex_mode       opts . drop (length s1)) r
+            r | s2 `isPrefixOf` r -> (lex_options' . lex_match      opts . drop (length s2)) r
             r | s3 `isPrefixOf` r -> (lex_options' . lex_token_type opts . drop (length s3)) r
+            r | s4 `isPrefixOf` r -> (lex_options' . lex_prelexer   opts . drop (length s4)) r
             _                     -> (opts, rest)
-        def_opts    = OptionSet Normal Longest Nothing TTChar
+        def_opts    = OptionSet Normal Longest Nothing TTChar Nothing
         (opts', s') = lex_options' (def_opts, s)
     in  case opts' of
-            OptionSet _    Longest (Just block) ttype@(TTEnum _) -> TOptions (OptsBlock block ttype ) : lex_rules_b s'
-            OptionSet _    Longest (Just block) TTChar           -> TOptions (OptsBlock block TTChar) : lex_rules_b s'
-            OptionSet mode match   Nothing      ttype@(TTEnum _) -> TOptions (Opts mode match ttype ) : lex_rules   s'
-            OptionSet mode match   Nothing      TTChar           -> TOptions (Opts mode match TTChar) : lex_rules   s'
-            _                                                    -> err "conflicting options"
+            OptionSet _    Longest (Just block) ttype@(TTEnum _) prelexer -> TOptions (OptsBlock block ttype  prelexer) : lex_rules_b s'
+            OptionSet _    Longest (Just block) TTChar           prelexer -> TOptions (OptsBlock block TTChar prelexer) : lex_rules_b s'
+            OptionSet mode match   Nothing      ttype@(TTEnum _) prelexer -> TOptions (Opts mode match ttype  prelexer) : lex_rules   s'
+            OptionSet mode match   Nothing      TTChar           prelexer -> TOptions (Opts mode match TTChar prelexer) : lex_rules   s'
+            _                                                             -> err "conflicting options"
 
 
 lex_mode :: OptionSet -> String -> (OptionSet, String)
 lex_mode opts s =
-    let (m, s') = (span isAlpha . skip_spaces) s
+    let (m, s') = lex_name s
     in  case m of
             "single" -> (opts{opt_mode = Single}, s')
             "normal" -> (opts{opt_mode = Normal}, s')
@@ -142,7 +145,7 @@ lex_mode opts s =
 
 lex_match :: OptionSet -> String -> (OptionSet, String)
 lex_match opts s =
-    let (m, s') = (span isAlpha . skip_spaces) s
+    let (m, s') = lex_name s
     in  case m of
             "longest"  -> (opts{opt_match = Longest}, s')
             "all"      -> (opts{opt_match = All},     s')
@@ -151,10 +154,16 @@ lex_match opts s =
 
 lex_token_type :: OptionSet -> String -> (OptionSet, String)
 lex_token_type opts s =
-    let (t, s') = (span is_alpha_num_ . skip_spaces) s
+    let (t, s') = lex_name s
     in  case t of
             "char" -> (opts{opt_token_type = TTChar},   s')
             _      -> (opts{opt_token_type = TTEnum t}, s')
+
+
+lex_prelexer :: OptionSet -> String -> (OptionSet, String)
+lex_prelexer opts s =
+    let (pl, s') = lex_name s
+    in  (opts{opt_prelexer = Just pl}, s')
 
 
 lex_blockname :: String -> (SBlkname, String)

@@ -3,7 +3,7 @@ module Types where
 import qualified Data.HashMap.Strict   as M
 import qualified Data.Set              as S
 import           Data.Hashable
-import           Data.Char                   (toLower, toUpper, isAlphaNum)
+import           Data.Char                   (toLower, toUpper)
 import           Text.Printf
 
 import           Helpers
@@ -38,7 +38,7 @@ type NCFAGraph a   = M.HashMap IStateID (NCFANode a)
 data StateInfo a
     = SI IStateID Bool Bool (DCFANode a) (Maybe (S.Set IRegID))
 data BlockInfo a
-    = BI Int Options MRegID2RegInfo
+    = BI Int Options MRegID2RegInfo (Maybe MTokname2TokID)
 
 
 data Regexp a
@@ -88,10 +88,12 @@ data Options
         { mode        :: Mode
         , match       :: Match
         , token_type  :: TokenType
+        , prelexer    :: Maybe String
         }
     | OptsBlock
         { block       :: SBlkname
         , token_type  :: TokenType
+        , prelexer    :: Maybe String
         }
     deriving (Show)
 data Mode
@@ -140,10 +142,10 @@ class (Eq a, Ord a, PrintfArg a, Show a, Hashable a) => Labellable a where
         let (t, r) = read' s ttbl
         in  t : reads' ttbl r
 
-    full_range :: [a]
+    full_range :: Maybe MTokname2TokID -> [a]
 
-    is_full_range :: [a] -> Bool
-    is_full_range r = S.fromList r == S.fromList full_range
+    is_full_range :: [a] -> Maybe MTokname2TokID -> Bool
+    is_full_range r ttbl = S.fromList r == S.fromList (full_range ttbl)
 
     span_range :: [a] -> [a]
 
@@ -165,7 +167,8 @@ instance Labellable Char where
     reads' (Just _) _ = err "reads' (Char) : non-empty token table for char-based scanner ?"
     reads' _ cs       = cs
 
-    full_range = ['\x00' .. '\xFF']
+    full_range Nothing  = ['\x00' .. '\xFF']
+    full_range (Just _) = err "full_range (Char) : non-empty token table"
 
     span_range s =
         let span_range' :: [Char] -> String -> [Char]
@@ -180,13 +183,13 @@ instance Labellable Char where
 instance Labellable Int where
     read' _ Nothing     = err "read' (Int) : empty token table for int-based scanner ?"
     read' s (Just ttbl) =
-        let (t, r) = span (\ c -> isAlphaNum c || c == '_') s
+        let (t, r) = lex_name s
         in  case M.lookup t ttbl of
                 Just i  -> (i, r)
-                Nothing -> err $ printf "read (Int) : unknown token : %s" t
+                Nothing -> err $ printf "read (Int) : unknown token : %s" (show t)
 
--- ?????????????? -- do smth about range
-    full_range = [0x00 .. 0xFFFFffff]
+    full_range (Just ttbl) = M.elems ttbl
+    full_range Nothing     = err "full_range (Int) : empty token table"
 
     span_range = id
 
