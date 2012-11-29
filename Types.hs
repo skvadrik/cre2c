@@ -85,15 +85,17 @@ data Chunk
     | Ch2 SCode Options MRegname2RegInfo
 data Options
     = Opts
-        { mode        :: Mode
-        , match       :: Match
-        , token_type  :: TokenType
-        , prelexer    :: Maybe String
+        { mode           :: Mode
+        , match          :: Match
+        , token_type     :: TokenType
+        , prelexer       :: Maybe String
+        , default_action :: Maybe SCode
         }
     | OptsBlock
-        { block       :: SBlkname
-        , token_type  :: TokenType
-        , prelexer    :: Maybe String
+        { block          :: SBlkname
+        , token_type     :: TokenType
+        , prelexer       :: Maybe String
+        , default_action :: Maybe SCode
         }
     deriving (Show)
 data Mode

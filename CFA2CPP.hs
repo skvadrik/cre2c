@@ -72,8 +72,8 @@ doc_goto k n =
 doc_decl_fin :: IBlkID -> Options -> Doc
 doc_decl_fin k opts =
     let d1 = case opts of
-            OptsBlock b _ _ -> PP.text b
-            _               -> PP.int k
+            OptsBlock b _ _ _ -> PP.text b
+            _                 -> PP.int k
         d2 = PP.text "fin"
     in  doc_decl_ d1 d2
 
@@ -81,8 +81,8 @@ doc_decl_fin k opts =
 doc_goto_fin :: IBlkID -> Options -> Doc
 doc_goto_fin k opts =
     let d1 = case opts of
-            OptsBlock b _ _ -> PP.text b
-            _               -> PP.int k
+            OptsBlock b _ _ _ -> PP.text b
+            _                 -> PP.int k
         d2 = PP.text "fin"
     in  doc_goto_ d1 d2
 
@@ -90,8 +90,8 @@ doc_goto_fin k opts =
 doc_decl_start :: IBlkID -> Options -> Doc
 doc_decl_start k opts =
     let d1 = case opts of
-            OptsBlock b _ _ -> PP.text b
-            _               -> PP.int k
+            OptsBlock b _ _ _ -> PP.text b
+            _                 -> PP.int k
         d2 = PP.text "start"
     in  doc_decl_ d1 d2
 
@@ -99,8 +99,8 @@ doc_decl_start k opts =
 doc_goto_start :: IBlkID -> Options -> Doc
 doc_goto_start k opts =
     let d1 = case opts of
-            OptsBlock b _ _ -> PP.text b
-            _               -> PP.int k
+            OptsBlock b _ _ _ -> PP.text b
+            _                 -> PP.int k
         d2 = PP.text "start"
     in  doc_goto_ d1 d2
 
@@ -171,8 +171,8 @@ get_conds :: MRegID2RegInfo -> S.Set IRegID -> [S.Set SCond]
 get_conds id_info = (\ (_, conds, _, _) -> conds) . unzip4 . get_conds2code id_info
 
 
-codegen_match_code :: MRegID2RegInfo -> Doc
-codegen_match_code id_info =
+codegen_match_code :: MRegID2RegInfo -> Maybe SCode -> Doc
+codegen_match_code id_info df =
     let ids      = (S.fromList . M.keys) id_info
         id_info' = get_conds2code id_info ids
         f d (id, conds, block, code) =
@@ -182,8 +182,11 @@ codegen_match_code id_info =
                     Nothing -> PP.empty
                 d3 = doc_case_break id (d1 $$ d2)
             in  d $$ d3
-        d = foldl' f PP.empty id_info'
-    in  doc_switch (PP.text "ACCEPT") d
+        d1 = foldl' f PP.empty id_info'
+        d2 = case df of
+            Just code -> doc_default $ PP.text code
+            Nothing   -> PP.empty
+    in  doc_switch (PP.text "ACCEPT") (d1 $$ d2)
 
 
 router0 :: Options -> IBlkID -> MRegID2RegInfo -> Doc
@@ -191,16 +194,16 @@ router0 opts k id_info =
     let d0 = doc_goto_start k opts
         d1 = doc_decl_fin k opts
         d2 = PP.text "token = MARKER;"
-        d3 = codegen_match_code id_info
+        d3 = codegen_match_code id_info (default_action opts)
         d4 = PP.text "CURSOR = MARKER;"
         d5 = PP.text "ACCEPT = -1;"
         d6 = doc_decl_start k opts
     in  case opts of
-            Opts      Single Longest _ _ ->             d2
-            Opts      Single All     _ _ ->             d2
-            Opts      Normal Longest _ _ -> d0 $$ d1       $$ d3 $$ d4 $$ d5 $$ d6
-            Opts      Normal All     _ _ -> d0 $$ d1             $$ d4       $$ d6
-            OptsBlock _              _ _ -> d0 $$ d1       $$ d3 $$ d4 $$ d5 $$ d6
+            Opts      Single Longest _ _ _ ->             d2
+            Opts      Single All     _ _ _ ->             d2
+            Opts      Normal Longest _ _ _ -> d0 $$ d1       $$ d3 $$ d4 $$ d5 $$ d6
+            Opts      Normal All     _ _ _ -> d0 $$ d1             $$ d4       $$ d6
+            OptsBlock _              _ _ _ -> d0 $$ d1       $$ d3 $$ d4 $$ d5 $$ d6
 
 
 router1 :: Options -> Bool -> Bool -> Doc
@@ -213,10 +216,10 @@ router1 opts is_init is_final =
             (True, True)  -> PP.text "token = MARKER;"
             _             -> PP.empty
     in  case opts of
-            Opts      Single _       _ _  -> PP.empty
-            Opts      Normal All     _ _  -> d1
-            Opts      Normal Longest _ _  -> d2
-            OptsBlock _              _ _  -> d2
+            Opts      Single _       _ _ _  -> PP.empty
+            Opts      Normal All     _ _ _  -> d1
+            Opts      Normal Longest _ _ _  -> d2
+            OptsBlock _              _ _ _  -> d2
 
 
 router2 :: Options -> Doc
@@ -224,10 +227,10 @@ router2 opts =
     let d1 = PP.text "MARKER += adjust_marker;"
         d2 = PP.text "MARKER ++;"
     in  case opts of
-            Opts      Single _       _ _ -> PP.empty
-            Opts      Normal All     _ _ -> d1
-            Opts      Normal Longest _ _ -> d2
-            OptsBlock _              _ _ -> d2
+            Opts      Single _       _ _ _ -> PP.empty
+            Opts      Normal All     _ _ _ -> d1
+            Opts      Normal Longest _ _ _ -> d2
+            OptsBlock _              _ _ _ -> d2
 
 
 router3 :: Options -> Bool -> Doc
@@ -238,10 +241,10 @@ router3 opts is_init =
         d2 = PP.text "MARKER += adjust_marker;"
         d3 = PP.text "MARKER ++;"
     in  case opts of
-            Opts      Single _       _ _ -> PP.empty
-            Opts      Normal All     _ _ -> d1 $$ d2
-            Opts      Normal Longest _ _ -> d3
-            OptsBlock _              _ _ -> d3
+            Opts      Single _       _ _ _ -> PP.empty
+            Opts      Normal All     _ _ _ -> d1 $$ d2
+            Opts      Normal Longest _ _ _ -> d3
+            OptsBlock _              _ _ _ -> d3
 
 
 router4 :: Options -> Bool -> (IRegID, SCode) -> Doc
@@ -251,17 +254,17 @@ router4 opts empty_node (n, code) =
         d3 = PP.text "MARKER = CURSOR;"
         d4 = if empty_node then PP.empty else PP.text "adjust_marker = false;"
     in  case opts of
-            Opts      Single Longest _ _ ->       d2
-            Opts      Single All     _ _ -> d1
-            Opts      Normal Longest _ _ ->       d2 $$ d3
-            Opts      Normal All     _ _ -> d1       $$ d3 $$ d4
-            OptsBlock _              _ _ ->       d2 $$ d3
+            Opts      Single Longest _ _ _ ->       d2
+            Opts      Single All     _ _ _ -> d1
+            Opts      Normal Longest _ _ _ ->       d2 $$ d3
+            Opts      Normal All     _ _ _ -> d1       $$ d3 $$ d4
+            OptsBlock _              _ _ _ ->       d2 $$ d3
 
 
 router5 :: BlockInfo a -> Doc
 router5 (BI k opts id_info _) = case opts of
-    Opts Single _ _ _ -> doc_decl_fin k opts $$ codegen_match_code id_info
-    _                 -> PP.empty
+    Opts Single _ _ _ df -> doc_decl_fin k opts $$ codegen_match_code id_info df
+    _                    -> PP.empty
 
 
 router6 :: Options -> Bool -> Doc

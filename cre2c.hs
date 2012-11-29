@@ -30,9 +30,9 @@ gen_code chunks crtbl irtbls ttbls v = do
         find_irtbl t = M.lookupDefault (err "gen_code : regexp table not found") t irtbls
         find_ttbl  t = Just $ M.lookupDefault (err "gen_code : token table not found") t ttbls
         f (k, chunk) = case chunk of
-            Ch2 _ (Opts _ _ (TTEnum t) _)    _ -> gen_code_for_chunk k chunk (find_irtbl t) (find_ttbl t) v
-            Ch2 _ (OptsBlock _ (TTEnum t) _) _ -> gen_code_for_chunk k chunk (find_irtbl t) (find_ttbl t) v
-            _                                  -> gen_code_for_chunk k chunk crtbl          Nothing v
+            Ch2 _ (Opts _ _ (TTEnum t) _ _)    _ -> gen_code_for_chunk k chunk (find_irtbl t) (find_ttbl t) v
+            Ch2 _ (OptsBlock _ (TTEnum t) _ _) _ -> gen_code_for_chunk k chunk (find_irtbl t) (find_ttbl t) v
+            _                                    -> gen_code_for_chunk k chunk crtbl          Nothing v
     (codes, maxlens) <- unzip <$> mapM f chunks'
     return (concat codes, maximum maxlens)
 

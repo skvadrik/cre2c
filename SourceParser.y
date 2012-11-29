@@ -84,6 +84,7 @@ data OptionSet = OptionSet
     , opt_block       :: Maybe SBlkname
     , opt_token_type  :: TokenType
     , opt_prelexer    :: Maybe String
+    , opt_default     :: Maybe SCode
     }
 
 
@@ -115,19 +116,21 @@ lex_options s =
         s2 = "!cre2c_match:"
         s3 = "!cre2c_type:"
         s4 = "!cre2c_prelexer:"
+        s5 = "!cre2c_default:"
         lex_options' (opts, rest) = case skip_spaces rest of
             r | s1 `isPrefixOf` r -> (lex_options' . lex_mode       opts . drop (length s1)) r
             r | s2 `isPrefixOf` r -> (lex_options' . lex_match      opts . drop (length s2)) r
             r | s3 `isPrefixOf` r -> (lex_options' . lex_token_type opts . drop (length s3)) r
             r | s4 `isPrefixOf` r -> (lex_options' . lex_prelexer   opts . drop (length s4)) r
+            r | s5 `isPrefixOf` r -> (lex_options' . lex_default    opts . drop (length s5)) r
             _                     -> (opts, rest)
-        def_opts    = OptionSet Normal Longest Nothing TTChar Nothing
+        def_opts    = OptionSet Normal Longest Nothing TTChar Nothing Nothing
         (opts', s') = lex_options' (def_opts, s)
     in  case opts' of
-            OptionSet _    Longest (Just block) ttype@(TTEnum _) prelexer -> TOptions (OptsBlock block ttype  prelexer) : lex_rules_b s'
-            OptionSet _    Longest (Just block) TTChar           prelexer -> TOptions (OptsBlock block TTChar prelexer) : lex_rules_b s'
-            OptionSet mode match   Nothing      ttype@(TTEnum _) prelexer -> TOptions (Opts mode match ttype  prelexer) : lex_rules   s'
-            OptionSet mode match   Nothing      TTChar           prelexer -> TOptions (Opts mode match TTChar prelexer) : lex_rules   s'
+            OptionSet _    Longest (Just block) ttype@(TTEnum _) pl df -> TOptions (OptsBlock block ttype  pl df) : lex_rules_b s'
+            OptionSet _    Longest (Just block) TTChar           pl df -> TOptions (OptsBlock block TTChar pl df) : lex_rules_b s'
+            OptionSet mode match   Nothing      ttype@(TTEnum _) pl df -> TOptions (Opts mode match ttype  pl df) : lex_rules   s'
+            OptionSet mode match   Nothing      TTChar           pl df -> TOptions (Opts mode match TTChar pl df) : lex_rules   s'
             _                                                             -> err "conflicting options"
 
 
@@ -166,6 +169,12 @@ lex_prelexer opts s =
     in  (opts{opt_prelexer = Just pl}, s')
 
 
+lex_default :: OptionSet -> String -> (OptionSet, String)
+lex_default opts s =
+    let (df, s') = (lex_code . skip_spaces) s
+    in  (opts{opt_default = Just df}, s')
+
+
 lex_blockname :: String -> (SBlkname, String)
 lex_blockname ('(':s) =
     case span is_alpha_num_ s of
@@ -178,38 +187,41 @@ lex_block s           = err "missing '(' after \"block\" in \"cre2c_mode:\" dire
 lex_rules :: String -> [Token]
 lex_rules s =
     let s1 = "end*/"
-        s2 = (drop (length s1) . skip_spaces) s
-    in  case skip_spaces s of
-            s'       | s1 `isPrefixOf` s' -> TEnd : lexer s2
+        s2 = skip_spaces s
+        s3 = drop (length s1) s2
+    in  case s2 of
+            s'       | s1 `isPrefixOf` s' -> TEnd : lexer s3
             s'@(c:_) | isAlpha c          -> let (nm, s'') = lex_name s' in TName nm : lex_rules s''
             '>' : s'                      -> let (nm, s'') = lex_name s' in TAngle : TName nm : lex_rules s''
             '=' : s'                      -> TEq : lex_rules s'
-            '{' : s'                      -> let (cd, s'') = lex_code s' in TCode cd : lex_rules s''
+            '{' : s'                      -> let (cd, s'') = lex_code s2 in TCode cd : lex_rules s''
             s'                            -> err $ printf "lex_rules : can't parse rules at %s" $ (take 50 . show) s'
 
 
 lex_rules_b :: String -> [Token]
 lex_rules_b s =
     let s1 = "end*/"
-        s2 = (drop (length s1) . skip_spaces) s
-    in  case skip_spaces s of
-            s'       | s1 `isPrefixOf` s' -> TEnd : lexer s2
+        s2 = skip_spaces s
+        s3 = drop (length s1) s2
+    in  case s2 of
+            s'       | s1 `isPrefixOf` s' -> TEnd : lexer s3
             s'@(c:_) | isAlpha c          -> let (nm, s'') = lex_name s' in TName nm : lex_rules_b s''
             ':' : s'                      -> let (nm, s'') = lex_name s' in TColon : TName nm : lex_rules_b s''
             '>' : s'                      -> let (nm, s'') = lex_name s' in TAngle : TName nm : lex_rules_b s''
             '=' : s'                      -> TEq : lex_rules_b s'
-            '{' : s'                      -> let (cd, s'') = lex_code s' in TCode cd : lex_rules_b s''
+            '{' : s'                      -> let (cd, s'') = lex_code s2 in TCode cd : lex_rules_b s''
             s'                            -> err $ printf "lex_rules : can't parse rules at %s" $ (take 50 . show) s'
 
 
 lex_code :: String -> (SCode, String)
-lex_code s =
+lex_code ('{' : s) =
     let lex_code' 0 tok rest         = ((DL.toList . DL.cons '{') tok, rest)
-        lex_code' i tok ""           = err "invalid code block in regexp definition"
+        lex_code' i tok ""           = err "lex_code: invalid code block"
         lex_code' i tok ('{' : rest) = lex_code' (i + 1) (DL.snoc tok '{') rest
         lex_code' i tok ('}' : rest) = lex_code' (i - 1) (DL.snoc tok '}') rest
         lex_code' i tok (c   : rest) = lex_code' i       (DL.snoc tok c)   rest
     in  lex_code' 1 DL.empty s
+lex_code _         = err "lex_code : missing '{' before code block"
 
 
 err :: String -> a
