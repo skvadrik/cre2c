@@ -193,33 +193,37 @@ router0 :: Options -> IBlkID -> MRegID2RegInfo -> Doc
 router0 opts k id_info =
     let d0 = doc_goto_start k opts
         d1 = doc_decl_fin k opts
-        d2 = PP.text "token = MARKER;"
-        d3 = codegen_match_code id_info (default_action opts)
-        d4 = PP.text "CURSOR = MARKER;"
-        d5 = PP.text "ACCEPT = -1;"
-        d6 = doc_decl_start k opts
+        d2 = codegen_match_code id_info (default_action opts)
+        d3 = doc_decl_start k opts
+        d4 = PP.text "TOKEN = MARKER;"
+        d5 = PP.text "CURSOR = MARKER;"
+        d6 = PP.text "ACCEPT = -1;"
+        d7 = PP.text "if (LIMIT - CURSOR < MAXLEN" <> PP.int k <> PP.text ") FILL();"
     in  case opts of
-            Opts      Single Longest _ _ _ ->             d2
-            Opts      Single All     _ _ _ ->             d2
-            Opts      Normal Longest _ _ _ -> d0 $$ d1       $$ d3 $$ d4 $$ d5 $$ d6
-            Opts      Normal All     _ _ _ -> d0 $$ d1             $$ d4       $$ d6
-            OptsBlock _              _ _ _ -> d0 $$ d1       $$ d3 $$ d4 $$ d5 $$ d6
+            Opts      Single _       _ _ (Just _) -> d4
+            Opts      Single _       _ _ Nothing  -> d4 $$ d7
+            Opts      Normal Longest _ _ (Just _) -> d0 $$ d1 $$ d2 $$ d5 $$ d6 $$ d3
+            Opts      Normal Longest _ _ Nothing  -> d0 $$ d1 $$ d2 $$ d5 $$ d6 $$ d3 $$ d7
+            Opts      Normal All     _ _ (Just _) -> d0 $$ d1 $$ d5 $$ d3
+            Opts      Normal All     _ _ Nothing  -> d0 $$ d1 $$ d5 $$ d3 $$ d7
+            OptsBlock _              _ _ (Just _) -> d0 $$ d1 $$ d2 $$ d3 $$ d5 $$ d6
+            OptsBlock _              _ _ Nothing  -> d0 $$ d1 $$ d2 $$ d3 $$ d5 $$ d6 $$ d7
 
 
 router1 :: Options -> Bool -> Bool -> Doc
 router1 opts is_init is_final =
     let d1 = case (is_init, is_final) of
-            (True, True)  -> PP.text "token = adjust_marker ? MARKER : token;"
-            (True, False) -> PP.text "adjust_marker = true;"
+            (True, True)  -> PP.text "TOKEN = adjust_marker ? MARKER : TOKEN;"
+            (True, False) -> PP.text "TOKEN = MARKER;" $$ PP.text "adjust_marker = true;"
             _             -> PP.empty
-        d2 = case (is_init, is_final) of
-            (True, True)  -> PP.text "token = MARKER;"
-            _             -> PP.empty
+        d2 = case is_init of
+            True -> PP.text "TOKEN = MARKER;"
+            _    -> PP.empty
     in  case opts of
-            Opts      Single _       _ _ _  -> PP.empty
-            Opts      Normal All     _ _ _  -> d1
-            Opts      Normal Longest _ _ _  -> d2
-            OptsBlock _              _ _ _  -> d2
+            Opts      Single _       _ _ _ -> PP.empty
+            Opts      Normal All     _ _ _ -> d1
+            Opts      Normal Longest _ _ _ -> d2
+            OptsBlock _              _ _ _ -> d2
 
 
 router2 :: Options -> Doc
@@ -286,7 +290,6 @@ codegen_entry :: Int -> BlockInfo a -> PP.Doc
 codegen_entry maxlen (BI k opts id_info _) =
     PP.text "#define MAXLEN" <> PP.int k <> PP.space <> PP.int maxlen
     $$ router0 opts k id_info
-    $$ PP.text "if (LIMIT - CURSOR < MAXLEN" <> PP.int k <> PP.text ") FILL();"
     $$ doc_goto k 0
 
 
