@@ -5,6 +5,7 @@ import qualified Data.Set              as S
 import           Data.Hashable
 import           Data.Char                   (toLower, toUpper)
 import           Text.Printf
+import Control.DeepSeq
 
 import           Helpers
 
@@ -54,6 +55,7 @@ data RegexpCat a
     deriving (Show)
 data RegexpIter a
     = IterFromPrim (RegexpPrim a)
+    | IterZeroMany (RegexpPrim a)
     | IterMaybe    (RegexpPrim a)
     | IterRepeat   (RegexpPrim a) Int
     | IterRange    (RegexpPrim a) Int Int
@@ -67,12 +69,12 @@ data RegexpPrim a
     deriving (Show)
 
 
-data DCFA a          = DCFA
+data DCFA a = DCFA
     { dcfa_init_state   :: IStateID
     , dcfa_graph        :: DCFAGraph a
     , dcfa_final_states :: M.HashMap IStateID (S.Set IRegID)
     } deriving (Show)
-data NCFA a      = NCFA
+data NCFA a = NCFA
     { ncfa_init_state   :: IStateID
     , ncfa_max_state    :: IStateID
     , ncfa_graph        :: NCFAGraph a
@@ -133,9 +135,12 @@ instance Labellable a => Ord (Label a) where
 instance Labellable a => Show (Label a) where
     show (LOne   x ) = show_hex  x
     show (LRange xs) = shows_hex xs
+instance Labellable a => NFData (Label a) where
+    rnf (LOne x) = rnf x
+    rnf (LRange xs) = rnf xs
 
 
-class (Eq a, Ord a, PrintfArg a, Show a, Hashable a) => Labellable a where
+class (Eq a, Ord a, PrintfArg a, NFData a, Show a, Hashable a) => Labellable a where
     read' :: String -> Maybe MTokname2TokID -> (a, String)
 
     reads' :: Maybe MTokname2TokID -> String -> [a]

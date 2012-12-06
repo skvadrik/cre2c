@@ -40,6 +40,7 @@ import           Helpers
     '?'           { TokenQueryMark }
     '='           { TokenEq }
     ';'           { TokenSemicolon }
+    '*'           { TokenStar }
 
 %%
 
@@ -62,7 +63,8 @@ RCat :: { RegexpCat ta }
     | RIter                           { CatFromIter  $1    }
 
 RIter :: { RegexpIter ta }
-    : RPrim '?'                       { IterMaybe    $1       }
+    : RPrim '*'                       { IterZeroMany $1       }
+    | RPrim '?'                       { IterMaybe    $1       }
     | RPrim '{' int '}'               { IterRepeat   $1 $3    }
     | RPrim '{' int ',' int '}'       { IterRange    $1 $3 $5 }
     | RPrim                           { IterFromPrim $1       }
@@ -93,6 +95,7 @@ data Token ta
     | TokenDQuote
     | TokenDot
     | TokenQueryMark
+    | TokenStar
     | TokenChain       [ta]
     | TokenName        String
     | TokenInt         Int
@@ -145,6 +148,7 @@ lex_regexp ttbl (c : cs)
         in  TokenName nm : lex_regexp ttbl rest
 lex_regexp ttbl ('.'  : cs) = TokenDot          : lex_regexp  ttbl cs
 lex_regexp ttbl ('?'  : cs) = TokenQueryMark    : lex_regexp  ttbl cs
+lex_regexp ttbl ('*'  : cs) = TokenStar         : lex_regexp  ttbl cs
 lex_regexp ttbl ('('  : cs) = TokenOBracket     : lex_regexp  ttbl cs
 lex_regexp ttbl (')'  : cs) = TokenCBracket     : lex_regexp  ttbl cs
 lex_regexp ttbl ('{'  : cs) = TokenOParenthesis : lex_iters   ttbl cs

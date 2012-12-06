@@ -36,6 +36,10 @@ ncfa_add_regexp_cat (ncfa, ss, l) r rt ttbl sign = case r of
 ncfa_add_regexp_iter :: (Labellable a) => (NCFA a, S.Set IStateID, Int) -> RegexpIter a -> MRegname2Regexp a -> Maybe MTokname2TokID -> IRegID -> (NCFA a, S.Set IStateID, Int)
 ncfa_add_regexp_iter (ncfa, ss, l) r rt ttbl sign = case r of
     IterFromPrim rprim  -> ncfa_add_regexp_prim (ncfa, ss, l) rprim rt ttbl sign
+    IterZeroMany rprim  ->
+        let (ncfa', ss', l') = ncfa_add_regexp_prim (ncfa, ss, l) rprim rt ttbl sign
+            ncfa''           = ncfa_tie_states ncfa' ss' ss
+        in  (ncfa'', ss, l')
     IterMaybe rprim     ->
         let (ncfa', ss', l') = ncfa_add_regexp_prim (ncfa, ss, l) rprim rt ttbl sign
         in  (ncfa', S.union ss ss', l')
