@@ -56,6 +56,7 @@ data RegexpCat a
 data RegexpIter a
     = IterFromPrim (RegexpPrim a)
     | IterZeroMany (RegexpPrim a)
+    | IterOneMany  (RegexpPrim a)
     | IterMaybe    (RegexpPrim a)
     | IterRepeat   (RegexpPrim a) Int
     | IterRange    (RegexpPrim a) Int Int

@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 module CFA
-    ( ncfa_empty
+    ( new_ncfa
 
     , dcfa_is_final
     , dcfa_accepted
@@ -9,6 +9,7 @@ module CFA
     , ncfa_set_final
     , ncfa_add_transition
     , ncfa_tie_states
+    , ncfa_union
 
     , determine
 
@@ -27,8 +28,8 @@ import Control.DeepSeq
 import           Types               hiding (err)
 
 
-ncfa_empty :: NCFA a
-ncfa_empty = NCFA 0 1 M.empty M.empty
+new_ncfa :: IStateID -> NCFA a
+new_ncfa k = NCFA k (k + 1) M.empty M.empty
 
 
 dcfa_is_final :: IStateID -> DCFA a -> Bool
@@ -47,6 +48,16 @@ ncfa_add_transition :: NCFA a -> (IStateID, Label a, IRegID, IStateID) -> (NCFA 
 ncfa_add_transition (NCFA s0 sl g fss) (s1, l, k, s2) =
     let g' = M.insertWith (\ _ node -> (l, k, s2) : node) s1 [(l, k, s2)] g
     in  (NCFA s0 (max (sl + 1) s2) g' fss, s2)
+
+
+ncfa_union :: Labellable a => NCFA a -> NCFA a -> NCFA a
+ncfa_union (NCFA s0 sl g fss) (NCFA s0' sl' g' fss') =
+    let insert_node g s nd = M.insertWith (\ nd1 nd2 -> force (nd1 ++ nd2)) s nd g
+        g''   = M.foldlWithKey' insert_node g g'
+        fss'' = M.union fss fss'
+    in  if s0' < sl
+            then err "ncfa_union : initial state of second NCFA is less than final state of the first one."
+            else NCFA s0 sl' g'' fss''
 
 
 ncfa_tie_states :: Labellable a => NCFA a -> S.Set IStateID -> S.Set IStateID -> NCFA a

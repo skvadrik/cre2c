@@ -41,6 +41,7 @@ import           Helpers
     '='           { TokenEq }
     ';'           { TokenSemicolon }
     '*'           { TokenStar }
+    '+'           { TokenPlus }
 
 %%
 
@@ -64,6 +65,7 @@ RCat :: { RegexpCat ta }
 
 RIter :: { RegexpIter ta }
     : RPrim '*'                       { IterZeroMany $1       }
+    | RPrim '+'                       { IterOneMany  $1       }
     | RPrim '?'                       { IterMaybe    $1       }
     | RPrim '{' int '}'               { IterRepeat   $1 $3    }
     | RPrim '{' int ',' int '}'       { IterRange    $1 $3 $5 }
@@ -96,6 +98,7 @@ data Token ta
     | TokenDot
     | TokenQueryMark
     | TokenStar
+    | TokenPlus
     | TokenChain       [ta]
     | TokenName        String
     | TokenInt         Int
@@ -104,9 +107,6 @@ data Token ta
 
 parseError :: [Token ta] -> tb
 parseError _ = err "Parse error"
-
---parseError :: Labellable ta => [Token ta] -> tb
---parseError e = err $ "Parse error : " ++ show e
 
 
 analyze :: SCode -> M.HashMap STokname MTokname2TokID -> (STokname, Maybe MTokname2TokID, SCode)
@@ -121,7 +121,7 @@ analyze s ttbls =
                         "char" -> Nothing
                         _      -> Just (M.lookupDefault e t ttbls)
                 in  (t, ttbl, s3)
-            _                       -> err $ printf "missing %s directive" (show s1)
+            _                       -> err $ printf "missing %s directive in .def file" (show s1)
 
 
 lexer :: Labellable ta => Maybe MTokname2TokID -> SCode -> [Token ta]
@@ -149,14 +149,15 @@ lex_regexp ttbl (c : cs)
 lex_regexp ttbl ('.'  : cs) = TokenDot          : lex_regexp  ttbl cs
 lex_regexp ttbl ('?'  : cs) = TokenQueryMark    : lex_regexp  ttbl cs
 lex_regexp ttbl ('*'  : cs) = TokenStar         : lex_regexp  ttbl cs
+lex_regexp ttbl ('+'  : cs) = TokenPlus         : lex_regexp  ttbl cs
 lex_regexp ttbl ('('  : cs) = TokenOBracket     : lex_regexp  ttbl cs
 lex_regexp ttbl (')'  : cs) = TokenCBracket     : lex_regexp  ttbl cs
-lex_regexp ttbl ('{'  : cs) = TokenOParenthesis : lex_iters   ttbl cs
 lex_regexp ttbl ('}'  : cs) = TokenCParenthesis : lex_regexp  ttbl cs
+lex_regexp ttbl ('|'  : cs) = TokenVSlash       : lex_regexp  ttbl cs
+lex_regexp ttbl ('{'  : cs) = TokenOParenthesis : lex_iters   ttbl cs
 lex_regexp ttbl ('"'  : cs) = TokenDQuote       : lex_dqchain ttbl cs
 lex_regexp ttbl ('\'' : cs) =                     lex_qchain  ttbl cs
 lex_regexp ttbl ('['  : cs) = TokenOSqBracket   : lex_range   ttbl cs
-lex_regexp ttbl ('|'  : cs) = TokenVSlash       : lex_regexp  ttbl cs
 lex_regexp ttbl (';'  : cs) = TokenSemicolon    : lexer       ttbl cs
 
 

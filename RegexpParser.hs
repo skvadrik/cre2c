@@ -83,7 +83,8 @@ action_0,
  action_35,
  action_36,
  action_37,
- action_38 :: () => Int -> ({-HappyReduction (HappyIdentity) = -}
+ action_38,
+ action_39 :: () => Int -> ({-HappyReduction (HappyIdentity) = -}
 	   Int 
 	-> (Token ta)
 	-> HappyState (Token ta) (HappyStk HappyAbsSyn -> [(Token ta)] -> (HappyIdentity) HappyAbsSyn)
@@ -109,7 +110,8 @@ happyReduce_1,
  happyReduce_16,
  happyReduce_17,
  happyReduce_18,
- happyReduce_19 :: () => ({-HappyReduction (HappyIdentity) = -}
+ happyReduce_19,
+ happyReduce_20 :: () => ({-HappyReduction (HappyIdentity) = -}
 	   Int 
 	-> (Token ta)
 	-> HappyState (Token ta) (HappyStk HappyAbsSyn -> [(Token ta)] -> (HappyIdentity) HappyAbsSyn)
@@ -131,7 +133,7 @@ action_2 _ = happyFail
 action_3 (26) = happyShift action_7
 action_3 _ = happyFail
 
-action_4 (29) = happyAccept
+action_4 (30) = happyAccept
 action_4 _ = happyFail
 
 action_5 (11) = happyShift action_3
@@ -154,12 +156,12 @@ action_7 (9) = happyGoto action_11
 action_7 (10) = happyGoto action_12
 action_7 _ = happyFail
 
-action_8 (27) = happyShift action_28
+action_8 (27) = happyShift action_29
 action_8 _ = happyFail
 
 action_9 _ = happyReduce_4
 
-action_10 (21) = happyShift action_27
+action_10 (21) = happyShift action_28
 action_10 _ = happyReduce_6
 
 action_11 (11) = happyShift action_13
@@ -168,7 +170,7 @@ action_11 (16) = happyShift action_15
 action_11 (22) = happyShift action_16
 action_11 (23) = happyShift action_17
 action_11 (24) = happyShift action_18
-action_11 (8) = happyGoto action_26
+action_11 (8) = happyGoto action_27
 action_11 (9) = happyGoto action_11
 action_11 (10) = happyGoto action_12
 action_11 _ = happyReduce_8
@@ -176,9 +178,10 @@ action_11 _ = happyReduce_8
 action_12 (18) = happyShift action_23
 action_12 (25) = happyShift action_24
 action_12 (28) = happyShift action_25
-action_12 _ = happyReduce_13
+action_12 (29) = happyShift action_26
+action_12 _ = happyReduce_14
 
-action_13 _ = happyReduce_14
+action_13 _ = happyReduce_15
 
 action_14 (11) = happyShift action_13
 action_14 (14) = happyShift action_14
@@ -201,66 +204,68 @@ action_16 _ = happyFail
 action_17 (12) = happyShift action_19
 action_17 _ = happyFail
 
-action_18 _ = happyReduce_19
+action_18 _ = happyReduce_20
 
-action_19 (23) = happyShift action_34
+action_19 (23) = happyShift action_35
 action_19 _ = happyFail
 
-action_20 (22) = happyShift action_33
+action_20 (22) = happyShift action_34
 action_20 _ = happyFail
 
-action_21 (17) = happyShift action_32
+action_21 (17) = happyShift action_33
 action_21 _ = happyFail
 
-action_22 (15) = happyShift action_31
+action_22 (15) = happyShift action_32
 action_22 _ = happyFail
 
-action_23 (13) = happyShift action_30
+action_23 (13) = happyShift action_31
 action_23 _ = happyFail
 
-action_24 _ = happyReduce_10
+action_24 _ = happyReduce_11
 
 action_25 _ = happyReduce_9
 
-action_26 _ = happyReduce_7
+action_26 _ = happyReduce_10
 
-action_27 (11) = happyShift action_13
-action_27 (14) = happyShift action_14
-action_27 (16) = happyShift action_15
-action_27 (22) = happyShift action_16
-action_27 (23) = happyShift action_17
-action_27 (24) = happyShift action_18
-action_27 (7) = happyGoto action_29
-action_27 (8) = happyGoto action_10
-action_27 (9) = happyGoto action_11
-action_27 (10) = happyGoto action_12
-action_27 _ = happyFail
+action_27 _ = happyReduce_7
 
-action_28 _ = happyReduce_3
+action_28 (11) = happyShift action_13
+action_28 (14) = happyShift action_14
+action_28 (16) = happyShift action_15
+action_28 (22) = happyShift action_16
+action_28 (23) = happyShift action_17
+action_28 (24) = happyShift action_18
+action_28 (7) = happyGoto action_30
+action_28 (8) = happyGoto action_10
+action_28 (9) = happyGoto action_11
+action_28 (10) = happyGoto action_12
+action_28 _ = happyFail
 
-action_29 _ = happyReduce_5
+action_29 _ = happyReduce_3
 
-action_30 (19) = happyShift action_35
-action_30 (20) = happyShift action_36
-action_30 _ = happyFail
+action_30 _ = happyReduce_5
 
-action_31 _ = happyReduce_17
+action_31 (19) = happyShift action_36
+action_31 (20) = happyShift action_37
+action_31 _ = happyFail
 
 action_32 _ = happyReduce_18
 
-action_33 _ = happyReduce_16
+action_33 _ = happyReduce_19
 
-action_34 _ = happyReduce_15
+action_34 _ = happyReduce_17
 
-action_35 _ = happyReduce_11
+action_35 _ = happyReduce_16
 
-action_36 (13) = happyShift action_37
-action_36 _ = happyFail
+action_36 _ = happyReduce_12
 
-action_37 (19) = happyShift action_38
+action_37 (13) = happyShift action_38
 action_37 _ = happyFail
 
-action_38 _ = happyReduce_12
+action_38 (19) = happyShift action_39
+action_38 _ = happyFail
+
+action_39 _ = happyReduce_13
 
 happyReduce_1 = happySpecReduce_1  4 happyReduction_1
 happyReduction_1 (HappyAbsSyn5  happy_var_1)
@@ -337,12 +342,20 @@ happyReduce_10 = happySpecReduce_2  9 happyReduction_10
 happyReduction_10 _
 	(HappyAbsSyn10  happy_var_1)
 	 =  HappyAbsSyn9
-		 (IterMaybe    happy_var_1
+		 (IterOneMany  happy_var_1
 	)
 happyReduction_10 _ _  = notHappyAtAll 
 
-happyReduce_11 = happyReduce 4 9 happyReduction_11
-happyReduction_11 (_ `HappyStk`
+happyReduce_11 = happySpecReduce_2  9 happyReduction_11
+happyReduction_11 _
+	(HappyAbsSyn10  happy_var_1)
+	 =  HappyAbsSyn9
+		 (IterMaybe    happy_var_1
+	)
+happyReduction_11 _ _  = notHappyAtAll 
+
+happyReduce_12 = happyReduce 4 9 happyReduction_12
+happyReduction_12 (_ `HappyStk`
 	(HappyTerminal (TokenInt happy_var_3)) `HappyStk`
 	_ `HappyStk`
 	(HappyAbsSyn10  happy_var_1) `HappyStk`
@@ -351,8 +364,8 @@ happyReduction_11 (_ `HappyStk`
 		 (IterRepeat   happy_var_1 happy_var_3
 	) `HappyStk` happyRest
 
-happyReduce_12 = happyReduce 6 9 happyReduction_12
-happyReduction_12 (_ `HappyStk`
+happyReduce_13 = happyReduce 6 9 happyReduction_13
+happyReduction_13 (_ `HappyStk`
 	(HappyTerminal (TokenInt happy_var_5)) `HappyStk`
 	_ `HappyStk`
 	(HappyTerminal (TokenInt happy_var_3)) `HappyStk`
@@ -363,28 +376,19 @@ happyReduction_12 (_ `HappyStk`
 		 (IterRange    happy_var_1 happy_var_3 happy_var_5
 	) `HappyStk` happyRest
 
-happyReduce_13 = happySpecReduce_1  9 happyReduction_13
-happyReduction_13 (HappyAbsSyn10  happy_var_1)
+happyReduce_14 = happySpecReduce_1  9 happyReduction_14
+happyReduction_14 (HappyAbsSyn10  happy_var_1)
 	 =  HappyAbsSyn9
 		 (IterFromPrim happy_var_1
 	)
-happyReduction_13 _  = notHappyAtAll 
+happyReduction_14 _  = notHappyAtAll 
 
-happyReduce_14 = happySpecReduce_1  10 happyReduction_14
-happyReduction_14 (HappyTerminal (TokenName happy_var_1))
+happyReduce_15 = happySpecReduce_1  10 happyReduction_15
+happyReduction_15 (HappyTerminal (TokenName happy_var_1))
 	 =  HappyAbsSyn10
 		 (Name         happy_var_1
 	)
-happyReduction_14 _  = notHappyAtAll 
-
-happyReduce_15 = happySpecReduce_3  10 happyReduction_15
-happyReduction_15 _
-	(HappyTerminal (TokenChain happy_var_2))
-	_
-	 =  HappyAbsSyn10
-		 (Elementary   happy_var_2
-	)
-happyReduction_15 _ _ _  = notHappyAtAll 
+happyReduction_15 _  = notHappyAtAll 
 
 happyReduce_16 = happySpecReduce_3  10 happyReduction_16
 happyReduction_16 _
@@ -397,30 +401,39 @@ happyReduction_16 _ _ _  = notHappyAtAll
 
 happyReduce_17 = happySpecReduce_3  10 happyReduction_17
 happyReduction_17 _
-	(HappyAbsSyn7  happy_var_2)
+	(HappyTerminal (TokenChain happy_var_2))
 	_
 	 =  HappyAbsSyn10
-		 (Wrapped      happy_var_2
+		 (Elementary   happy_var_2
 	)
 happyReduction_17 _ _ _  = notHappyAtAll 
 
 happyReduce_18 = happySpecReduce_3  10 happyReduction_18
 happyReduction_18 _
+	(HappyAbsSyn7  happy_var_2)
+	_
+	 =  HappyAbsSyn10
+		 (Wrapped      happy_var_2
+	)
+happyReduction_18 _ _ _  = notHappyAtAll 
+
+happyReduce_19 = happySpecReduce_3  10 happyReduction_19
+happyReduction_19 _
 	(HappyTerminal (TokenChain happy_var_2))
 	_
 	 =  HappyAbsSyn10
 		 (Range        happy_var_2
 	)
-happyReduction_18 _ _ _  = notHappyAtAll 
+happyReduction_19 _ _ _  = notHappyAtAll 
 
-happyReduce_19 = happySpecReduce_1  10 happyReduction_19
-happyReduction_19 _
+happyReduce_20 = happySpecReduce_1  10 happyReduction_20
+happyReduction_20 _
 	 =  HappyAbsSyn10
 		 (Any
 	)
 
 happyNewToken action sts stk [] =
-	action 29 29 notHappyAtAll (HappyState action) sts stk []
+	action 30 30 notHappyAtAll (HappyState action) sts stk []
 
 happyNewToken action sts stk (tk:tks) =
 	let cont i = action i i tk (HappyState action) sts stk tks in
@@ -443,10 +456,11 @@ happyNewToken action sts stk (tk:tks) =
 	TokenEq -> cont 26;
 	TokenSemicolon -> cont 27;
 	TokenStar -> cont 28;
+	TokenPlus -> cont 29;
 	_ -> happyError' (tk:tks)
 	}
 
-happyError_ 29 tk tks = happyError' tks
+happyError_ 30 tk tks = happyError' tks
 happyError_ _ tk tks = happyError' (tk:tks)
 
 newtype HappyIdentity a = HappyIdentity a
@@ -489,6 +503,7 @@ data Token ta
     | TokenDot
     | TokenQueryMark
     | TokenStar
+    | TokenPlus
     | TokenChain       [ta]
     | TokenName        String
     | TokenInt         Int
@@ -497,9 +512,6 @@ data Token ta
 
 parseError :: [Token ta] -> tb
 parseError _ = err "Parse error"
-
---parseError :: Labellable ta => [Token ta] -> tb
---parseError e = err $ "Parse error : " ++ show e
 
 
 analyze :: SCode -> M.HashMap STokname MTokname2TokID -> (STokname, Maybe MTokname2TokID, SCode)
@@ -514,7 +526,7 @@ analyze s ttbls =
                         "char" -> Nothing
                         _      -> Just (M.lookupDefault e t ttbls)
                 in  (t, ttbl, s3)
-            _                       -> err $ printf "missing %s directive" (show s1)
+            _                       -> err $ printf "missing %s directive in .def file" (show s1)
 
 
 lexer :: Labellable ta => Maybe MTokname2TokID -> SCode -> [Token ta]
@@ -542,14 +554,15 @@ lex_regexp ttbl (c : cs)
 lex_regexp ttbl ('.'  : cs) = TokenDot          : lex_regexp  ttbl cs
 lex_regexp ttbl ('?'  : cs) = TokenQueryMark    : lex_regexp  ttbl cs
 lex_regexp ttbl ('*'  : cs) = TokenStar         : lex_regexp  ttbl cs
+lex_regexp ttbl ('+'  : cs) = TokenPlus         : lex_regexp  ttbl cs
 lex_regexp ttbl ('('  : cs) = TokenOBracket     : lex_regexp  ttbl cs
 lex_regexp ttbl (')'  : cs) = TokenCBracket     : lex_regexp  ttbl cs
-lex_regexp ttbl ('{'  : cs) = TokenOParenthesis : lex_iters   ttbl cs
 lex_regexp ttbl ('}'  : cs) = TokenCParenthesis : lex_regexp  ttbl cs
+lex_regexp ttbl ('|'  : cs) = TokenVSlash       : lex_regexp  ttbl cs
+lex_regexp ttbl ('{'  : cs) = TokenOParenthesis : lex_iters   ttbl cs
 lex_regexp ttbl ('"'  : cs) = TokenDQuote       : lex_dqchain ttbl cs
 lex_regexp ttbl ('\'' : cs) =                     lex_qchain  ttbl cs
 lex_regexp ttbl ('['  : cs) = TokenOSqBracket   : lex_range   ttbl cs
-lex_regexp ttbl ('|'  : cs) = TokenVSlash       : lex_regexp  ttbl cs
 lex_regexp ttbl (';'  : cs) = TokenSemicolon    : lexer       ttbl cs
 
 
