@@ -7,6 +7,7 @@ module CFA
     , dcfa_accepted
 
     , ncfa_set_final
+    , ncfa_set_cyclic
     , ncfa_add_transition
     , ncfa_tie_states
     , ncfa_union
@@ -44,9 +45,16 @@ ncfa_set_final :: IStateID -> IRegID -> NCFA a -> NCFA a
 ncfa_set_final s k (NCFA s0 sl g fss) = NCFA s0 sl g (M.insertWith (\ _ ks -> S.insert k ks) s (S.insert k S.empty) fss)
 
 
+ncfa_set_cyclic :: Labellable a => IStateID -> NCFA a -> NCFA a
+ncfa_set_cyclic s1 ncfa@NCFA{ ncfa_graph = g } =
+    let f  = map (\ (l, k, _, s) -> (l, k, True, s))
+        g' = M.adjust (\ nd -> f nd) s1 g
+    in  ncfa{ ncfa_graph = g' }
+
+
 ncfa_add_transition :: NCFA a -> (IStateID, Label a, IRegID, IStateID) -> (NCFA a, IStateID)
 ncfa_add_transition (NCFA s0 sl g fss) (s1, l, k, s2) =
-    let g' = M.insertWith (\ _ node -> (l, k, s2) : node) s1 [(l, k, s2)] g
+    let g' = M.insertWith (\ _ node -> (l, k, False, s2) : node) s1 [(l, k, False, s2)] g
     in  (NCFA s0 (max (sl + 1) s2) g' fss, s2)
 
 
@@ -64,9 +72,9 @@ ncfa_tie_states :: Labellable a => NCFA a -> S.Set IStateID -> S.Set IStateID ->
 ncfa_tie_states (NCFA s0 sl g fss) xs ys =
     let f :: NCFANode a -> NCFANode a
         f n = foldl'
-            (\ n' (l, k, s) -> if S.member s xs
-                then map (\ y -> (l, k, y)) (S.toList ys) ++ n'
-                else (l, k, s) : n'
+            (\ n' (l, k, b, s) -> if S.member s xs
+                then map (\ y -> (l, k, b, y)) (S.toList ys) ++ n'
+                else (l, k, b, s) : n'
             ) [] n
         g' = M.map f g
         g'' = S.foldl' (\ g x -> M.delete x g) g' xs
@@ -76,35 +84,36 @@ ncfa_tie_states (NCFA s0 sl g fss) xs ys =
 ------------------------------------------------------------------------------------------------
 
 
-group_by_symbol :: Labellable a => NCFANode a -> M.HashMap a ([IRegID], [IStateID])
+group_by_symbol :: Labellable a => NCFANode a -> M.HashMap a ([IRegID], Bool, [IStateID])
 group_by_symbol =
-    let f1 (k, s) n c  = M.insertWith (\ _ (ks, ss) -> (k : ks, s : ss)) c ([k], [s]) n
-        f2 n (l, k, s) = case l of
-            LOne   x  -> f1 (k, s) n x
-            LRange xs -> foldl' (f1 (k, s)) n xs
+    let f1 (k, b, s) n c  = M.insertWith (\ _ (ks, b', ss) -> (k : ks, b || b', s : ss)) c ([k], b, [s]) n
+        f2 n (l, k, b, s) = case l of
+            LOne   x  -> f1 (k, b, s) n x
+            LRange xs -> foldl' (f1 (k, b, s)) n xs
     in  foldl' f2 M.empty
 
 
-partition_arcs :: M.HashMap a ([IRegID], [IStateID]) -> (M.HashMap IStateID ([a], S.Set IRegID), M.HashMap (S.Set IStateID) ([a], S.Set IRegID))
+partition_arcs :: M.HashMap a ([IRegID], Bool, [IStateID]) -> (M.HashMap IStateID ([a], Bool, S.Set IRegID), M.HashMap (S.Set IStateID) ([a], Bool, S.Set IRegID))
 partition_arcs arcs =
-    let f1 (xs, ys) c (ks, ss) = case (ks, nub ss) of
+    let f1 (xs, ys) c (ks, b, ss) = case (ks, nub ss) of
             ([],  _  ) -> err "partition_arcs : empty id-list on arc"
             (_,   [] ) -> err "partition_arcs : empty state-list on arc"
             ([k], [s]) ->
-                let xs' = M.insertWith (\ _ (r, ks') -> (c : r, S.insert k ks')) s ([c], S.insert k S.empty) xs
+                let xs' = M.insertWith (\ _ (r, b', ks') -> (c : r, b || b', S.insert k ks')) s ([c], b, S.insert k S.empty) xs
                 in  (xs', ys)
             (_,   [s]) ->
                 let ks' = S.fromList ks
-                    xs' = M.insertWith (\ _ (r, ks'') -> (c : r, S.union ks' ks'')) s ([c], ks') xs
+                    xs' = M.insertWith (\ _ (r, b', ks'') -> (c : r, b || b', S.union ks' ks'')) s ([c], b, ks') xs
                 in  (xs', ys)
             _          ->
                 let ks' = S.fromList ks
-                    ys' = M.insertWith (\ _ (r, ks'') -> (c : r, S.union ks' ks'')) (S.fromList ss) ([c], ks') ys
+                    ys' = M.insertWith (\ _ (r, b', ks'') -> (c : r, b || b', S.union ks' ks'')) (S.fromList ss) ([c], b, ks') ys
                 in  (xs, ys')
     in  M.foldlWithKey' f1 (M.empty, M.empty) arcs
 
 
-tie_multiarcs :: IRegID -> M.HashMap (S.Set IStateID) ([a], S.Set IRegID) -> (M.HashMap IStateID ([a], S.Set IRegID), M.HashMap IStateID (S.Set IStateID), IStateID)
+tie_multiarcs :: IStateID -> M.HashMap (S.Set IStateID) ([a], Bool, S.Set IRegID)
+    -> (M.HashMap IStateID ([a], Bool, S.Set IRegID), M.HashMap IStateID (S.Set IStateID), IStateID)
 tie_multiarcs max =
     let f (arcs, new2olds, new) olds node =
             ( M.insert new node arcs
@@ -114,19 +123,19 @@ tie_multiarcs max =
     in  M.foldlWithKey' f (M.empty, M.empty, max)
 
 
-to_dcfa_node :: Labellable a => M.HashMap IStateID ([a], S.Set IRegID) -> DCFANode a
+to_dcfa_node :: Labellable a => M.HashMap IStateID ([a], Bool, S.Set IRegID) -> DCFANode a
 to_dcfa_node =
     let to_label r = case r of
             [x] -> LOne x
             xs  -> (LRange . S.toList . S.fromList) xs
-        f nd s (r, ids) = M.insert (to_label r) (ids, s) nd
+        f nd s (r, b, ids) = M.insert (to_label r) (ids, b, s) nd
     in  M.foldlWithKey' f M.empty
 
 
 update_ncfa_graph :: Labellable a => M.HashMap IStateID (S.Set IRegID) -> NCFAGraph a -> NCFAGraph a
 update_ncfa_graph new2olds graph =
 --    let f1 g s    = M.lookupDefault (err "update_ncfa_graph : missing node") s g
-    let f1 nd s ss = foldl' (\ xs (l, id, s') -> (if s' `S.member` ss then (l, id, s) else (l, id, s')) : xs) [] nd
+    let f1 nd s ss = foldl' (\ xs (l, id, b, s') -> (if s' `S.member` ss then (l, id, b, s) else (l, id, b, s')) : xs) [] nd
         f2 g s nd =
             let nd' = M.foldlWithKey' f1 nd new2olds
             in  M.adjust (\ _ -> nd') s g
@@ -168,7 +177,7 @@ determine_node ncfa@(NCFA ns0 max ngraph nfinals) dcfa@(DCFA ds0 dgraph dfinals)
         dfinals'                = update_fstates nfinals new2olds dfinals
         ncfa'                   = NCFA ns0 max' ngraph' nfinals
         dcfa'                   = DCFA ds0 dgraph' dfinals'
-        states_to_determine     = (S.fromList . snd . unzip . M.elems) dnode
+        states_to_determine     = (S.fromList . (\ (_, _, x) -> x) . unzip3 . M.elems) dnode
         (ncfa'', dcfa''@DCFA{dcfa_final_states = finals}, states_to_determine') = case nnode of
             Just _  -> (ncfa', dcfa', states_to_determine)
             Nothing -> (ncfa,  dcfa,  S.empty)
@@ -205,7 +214,7 @@ ncfa_to_dot (NCFA _ _ g fss) fp = do
             ]
     forM_ (M.toList g) $
         \ (s, node) -> forM_ node $
-            \ (l, k, s') -> appendFile fp $ concat
+            \ (l, k, b, s') -> appendFile fp $ concat
                 [ "\t"
                 , show s
                 , " -> "
@@ -214,7 +223,11 @@ ncfa_to_dot (NCFA _ _ g fss) fp = do
                 , show l
                 , ", "
                 , show k
-                , "\"]\n"
+                , "\""
+                , case b of
+                    True  -> ", style=bold, color=blue"
+                    False -> ""
+                , "]\n"
                 ]
     appendFile fp "}\n"
 
@@ -234,17 +247,25 @@ dcfa_to_dot (DCFA _ g fss) fp = do
             ]
     forM_ (M.toList g) $
         \ (s, node) -> forM_ (M.toList node) $
-            \ (l, (ks, s')) -> appendFile fp $ concat
+            \ (l, (ks, b, s')) -> appendFile fp $ concat
                 [ "\t"
                 , show s
                 , " -> "
                 , show s'
                 , " [label=\""
                 , show l
-                , case l of
-                    LRange _ -> "\", style=bold, color=red]\n"
-                    _        -> "\"]\n"
+                , ", "
                 , show $ S.toList ks
+                , "\""
+{-
+                , case l of
+                    LRange _ -> ", style=bold, color=red"
+                    _        -> ""
+-}
+                , case b of
+                    True  -> ", style=bold, color=blue"
+                    False -> ""
+                , "]\n"
                 ]
     appendFile fp "}\n"
 

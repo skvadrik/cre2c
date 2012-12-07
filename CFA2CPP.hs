@@ -189,6 +189,10 @@ codegen_match_code id_info df =
     in  doc_switch (PP.text "ACCEPT") (d1 $$ d2)
 
 
+codegen_refill :: IBlkID -> Doc
+codegen_refill k = PP.text "if (LIMIT - CURSOR < MAXLEN" <> PP.int k <> PP.text ") FILL();"
+
+
 router0 :: Options -> IBlkID -> MRegID2RegInfo -> Doc
 router0 opts k id_info =
     let d0 = doc_goto_start k opts
@@ -198,7 +202,7 @@ router0 opts k id_info =
         d4 = PP.text "TOKEN = MARKER;"
         d5 = PP.text "CURSOR = MARKER;"
         d6 = PP.text "ACCEPT = -1;"
-        d7 = PP.text "if (LIMIT - CURSOR < MAXLEN" <> PP.int k <> PP.text ") FILL();"
+        d7 = codegen_refill k
     in  case opts of
             Opts      Single _       _ _ (Just _) -> d4
             Opts      Single _       _ _ Nothing  -> d4 $$ d7
@@ -299,20 +303,20 @@ compare_by_label (l1, _) (l2, _) = l1 `compare` l2
 
 codegen_cases :: Labellable a => StateInfo a -> BlockInfo a -> PP.Doc
 codegen_cases (SI _ is_init is_final node _) (BI k opts id_info _) =
-    let case_body ids s =
-            let conds          = get_conds id_info ids
+    let case_body ids b s =
+            let check_cyclic   = if b then codegen_refill k else PP.empty
+                conds          = get_conds id_info ids
                 is_conditional = (null . fst . partition (== S.empty)) conds
                 goto_m         = doc_goto k s
                 goto_fin       = router2 opts $$ doc_goto_fin k opts
-            in  if is_conditional
-                    then doc_if_else conds goto_m goto_fin
-                    else goto_m
-        one_case doc (l, (ids, s)) =
+                body           = if is_conditional then doc_if_else conds goto_m goto_fin else goto_m
+            in  check_cyclic $$ body
+        one_case doc (l, (ids, b, s)) =
             doc
             $$ doc_case l
             $$ PP.nest 4
                 ( router1 opts is_init is_final
-                $$ case_body ids s
+                $$ case_body ids b s
                 )
         node'        = (sortBy compare_by_label . M.toList) node
         cases        = foldl' one_case PP.empty node'
@@ -336,9 +340,9 @@ codegen_state si@(SI s is_init is_final node _) bi@(BI k opts _ ttbl) =
         d1     = router6 opts is_init
         d2     = router7 opts
         state  = case M.toList node of
-            []                                          -> doc_goto_fin k opts
-            [(LRange r, (_, s))] | is_full_range r ttbl -> d1 $$ doc_goto k s
-            _                                           -> doc_switch d2 (codegen_cases si bi)
+            []                                             -> doc_goto_fin k opts
+            [(LRange r, (_, b, s))] | is_full_range r ttbl -> d1 $$ if b then codegen_refill k else PP.empty $$ doc_goto k s
+            _                                              -> doc_switch d2 (codegen_cases si bi)
     in  doc_decl k s
         $$ fstate
         $$ PP.nest 4 state

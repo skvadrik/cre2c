@@ -36,21 +36,23 @@ ncfa_add_regexp_cat (ncfa, ss, l) r rt ttbl sign = case r of
 ncfa_add_regexp_iter :: (Labellable a) => (NCFA a, S.Set IStateID, Int) -> RegexpIter a -> MRegname2Regexp a -> Maybe MTokname2TokID -> IRegID -> (NCFA a, S.Set IStateID, Int)
 ncfa_add_regexp_iter (ncfa, ss, l) r rt ttbl sign = case r of
     IterFromPrim rprim  -> ncfa_add_regexp_prim (ncfa, ss, l) rprim rt ttbl sign
+    -- non-determinism of NCFA allows to build a small NCFA subgraph and merge it to the whole NCFA graph painlessly
+    -- so that you can iterate only on subgraph when tying states
     IterZeroMany rprim  ->
-        -- non-determinism of NCFA allows to build a small NCFA subgraph and merge it to the whole NCFA graph painlessly
-        -- so that you can iterate only on subgraph when tying states
         let max              = ncfa_max_state ncfa
             (ncfa1, ss1, l1) = ncfa_add_regexp_prim (new_ncfa max, ss, l) rprim rt ttbl sign
             ncfa2            = ncfa_tie_states ncfa1 ss1 ss
-            ncfa3            = ncfa_union ncfa ncfa2
-        in  (ncfa3, ss, l1)
+            ncfa3            = S.foldl' (\ ncfa s -> ncfa_set_cyclic s ncfa) ncfa2 ss
+            ncfa4            = ncfa_union ncfa ncfa3
+        in  (ncfa4, ss, l1)
     IterOneMany rprim   ->
         let (ncfa1, ss1, l1) = ncfa_add_regexp_prim (ncfa, ss, l) rprim rt ttbl sign
             max              = ncfa_max_state ncfa1
             (ncfa2, ss2, l2) = ncfa_add_regexp_prim (new_ncfa max, ss1, l1) rprim rt ttbl sign
             ncfa3            = ncfa_tie_states ncfa2 ss2 ss1
-            ncfa4            = ncfa_union ncfa1 ncfa3
-        in  (ncfa4, ss1, l2)
+            ncfa4            = S.foldl' (\ ncfa s -> ncfa_set_cyclic s ncfa) ncfa3 ss1
+            ncfa5            = ncfa_union ncfa1 ncfa4
+        in  (ncfa5, ss1, l2)
     IterMaybe rprim     ->
         let (ncfa', ss', l') = ncfa_add_regexp_prim (ncfa, ss, l) rprim rt ttbl sign
         in  (ncfa', S.union ss ss', l')
