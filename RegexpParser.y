@@ -205,7 +205,9 @@ lex_dqchain ttbl cs =
 lex_range :: Labellable ta => Maybe MTokname2TokID -> SCode -> [Token ta]
 lex_range ttbl cs =
     let (ch, rest) = break_escaped ']' cs
-        ch'        = (span_range . reads' ttbl) ch
+        ch'        = case ch of
+            '^' : ch'' -> (span_negative_range . reads' ttbl) ch''
+            _          -> (span_range . reads' ttbl) ch
     in  TokenChain ch' : TokenCSqBracket : lex_regexp ttbl rest
 
 

@@ -93,42 +93,42 @@ group_by_symbol =
     in  foldl' f2 M.empty
 
 
-partition_arcs :: M.HashMap a ([IRegID], Bool, [IStateID]) -> (M.HashMap IStateID ([a], Bool, S.Set IRegID), M.HashMap (S.Set IStateID) ([a], Bool, S.Set IRegID))
+partition_arcs :: M.HashMap a ([IRegID], Bool, [IStateID]) -> (M.HashMap (IStateID, Bool) ([a], S.Set IRegID), M.HashMap (S.Set IStateID, Bool) ([a], S.Set IRegID))
 partition_arcs arcs =
     let f1 (xs, ys) c (ks, b, ss) = case (ks, nub ss) of
             ([],  _  ) -> err "partition_arcs : empty id-list on arc"
             (_,   [] ) -> err "partition_arcs : empty state-list on arc"
             ([k], [s]) ->
-                let xs' = M.insertWith (\ _ (r, b', ks') -> (c : r, b || b', S.insert k ks')) s ([c], b, S.insert k S.empty) xs
+                let xs' = M.insertWith (\ _ (r, ks') -> (c : r, S.insert k ks')) (s, b) ([c], S.insert k S.empty) xs
                 in  (xs', ys)
             (_,   [s]) ->
                 let ks' = S.fromList ks
-                    xs' = M.insertWith (\ _ (r, b', ks'') -> (c : r, b || b', S.union ks' ks'')) s ([c], b, ks') xs
+                    xs' = M.insertWith (\ _ (r, ks'') -> (c : r, S.union ks' ks'')) (s, b) ([c], ks') xs
                 in  (xs', ys)
             _          ->
                 let ks' = S.fromList ks
-                    ys' = M.insertWith (\ _ (r, b', ks'') -> (c : r, b || b', S.union ks' ks'')) (S.fromList ss) ([c], b, ks') ys
+                    ys' = M.insertWith (\ _ (r, ks'') -> (c : r, S.union ks' ks'')) (S.fromList ss, b) ([c], ks') ys
                 in  (xs, ys')
     in  M.foldlWithKey' f1 (M.empty, M.empty) arcs
 
 
-tie_multiarcs :: IStateID -> M.HashMap (S.Set IStateID) ([a], Bool, S.Set IRegID)
-    -> (M.HashMap IStateID ([a], Bool, S.Set IRegID), M.HashMap IStateID (S.Set IStateID), IStateID)
+tie_multiarcs :: IStateID -> M.HashMap (S.Set IStateID, Bool) ([a], S.Set IRegID)
+    -> (M.HashMap (IStateID, Bool) ([a], S.Set IRegID), M.HashMap IStateID (S.Set IStateID), IStateID)
 tie_multiarcs max =
-    let f (arcs, new2olds, new) olds node =
-            ( M.insert new node arcs
+    let f (arcs, new2olds, new) (olds, b) node =
+            ( M.insert (new, b) node arcs
             , M.insert new olds new2olds
             , new + 1
             )
     in  M.foldlWithKey' f (M.empty, M.empty, max)
 
 
-to_dcfa_node :: Labellable a => M.HashMap IStateID ([a], Bool, S.Set IRegID) -> DCFANode a
+to_dcfa_node :: Labellable a => M.HashMap (IStateID, Bool) ([a], S.Set IRegID) -> DCFANode a
 to_dcfa_node =
     let to_label r = case r of
             [x] -> LOne x
             xs  -> (LRange . S.toList . S.fromList) xs
-        f nd s (r, b, ids) = M.insert (to_label r) (ids, b, s) nd
+        f nd (s, b) (r, ids) = M.insert (to_label r) (ids, b, s) nd
     in  M.foldlWithKey' f M.empty
 
 

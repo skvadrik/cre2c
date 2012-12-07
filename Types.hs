@@ -157,6 +157,8 @@ class (Eq a, Ord a, PrintfArg a, NFData a, Show a, Hashable a) => Labellable a w
 
     span_range :: [a] -> [a]
 
+    span_negative_range :: [a] -> [a]
+
     span_case :: a -> [a]
 
     show_hex :: a -> String
@@ -185,6 +187,14 @@ instance Labellable Char where
             span_range' cs (a : s)           = span_range' (a : cs) s
         in  span_range' "" s
 
+    span_negative_range s =
+        let span_range' :: [Char] -> String -> [Char]
+            span_range' cs ""                = cs
+            span_range' cs (a : '-' : b : s) = span_range' ([a .. b] ++ cs) s
+            span_range' cs (a : s)           = span_range' (a : cs) s
+            r = span_range' "" s
+        in  filter (\ c -> c `notElem` r) (full_range Nothing)
+
     span_case c = if is_alpha c then [toLower c, toUpper c] else [c]
 
 
@@ -200,6 +210,8 @@ instance Labellable Int where
     full_range Nothing     = err "full_range (Int) : empty token table"
 
     span_range = id
+
+    span_negative_range = id
 
     span_case i = [i]
 
