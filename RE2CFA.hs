@@ -6,6 +6,7 @@ module RE2CFA
 import qualified Data.HashMap.Strict   as M
 import qualified Data.Set              as S
 import           Data.List                  (foldl')
+import           Control.DeepSeq
 
 import           Types                 hiding (err)
 import           CFA
@@ -39,20 +40,31 @@ ncfa_add_regexp_iter (ncfa, ss, l) r rt ttbl sign = case r of
     -- non-determinism of NCFA allows to build a small NCFA subgraph and merge it to the whole NCFA graph painlessly
     -- so that you can iterate only on subgraph when tying states
     IterZeroMany rprim  ->
-        let max              = ncfa_max_state ncfa
-            (ncfa1, ss1, l1) = ncfa_add_regexp_prim (new_ncfa max, ss, l) rprim rt ttbl sign
-            ncfa2            = ncfa_tie_states ncfa1 ss1 ss
-            ncfa3            = S.foldl' (\ ncfa s -> ncfa_set_cyclic s ncfa) ncfa2 ss
-            ncfa4            = ncfa_union ncfa ncfa3
-        in  (ncfa4, ss, l1)
+        let (ncfa', ss', l') = ncfa_add_regexp_prim (ncfa, ss, l) rprim rt ttbl sign
+            (ncfa'', l'')    = S.foldl'
+                (\ (ncfa1, _) s ->
+                    let (ncfa2, ss2, l2) = ncfa_add_regexp_prim (ncfa1, S.insert s S.empty, l) rprim rt ttbl sign
+                        ncfa3            = ncfa_tie_states ncfa2 ss2 s
+--                        ncfa4            = ncfa_set_cyclic s ncfa3
+                        ncfa4            = ncfa_set_all_cyclic ncfa3
+                    in  (ncfa4, l2)
+                )
+                (new_ncfa (ncfa_max_state ncfa'), l')
+                ss'
+        in  (ncfa_union ncfa' ncfa'', S.union ss ss', l'')
     IterOneMany rprim   ->
-        let (ncfa1, ss1, l1) = ncfa_add_regexp_prim (ncfa, ss, l) rprim rt ttbl sign
-            max              = ncfa_max_state ncfa1
-            (ncfa2, ss2, l2) = ncfa_add_regexp_prim (new_ncfa max, ss1, l1) rprim rt ttbl sign
-            ncfa3            = ncfa_tie_states ncfa2 ss2 ss1
-            ncfa4            = S.foldl' (\ ncfa s -> ncfa_set_cyclic s ncfa) ncfa3 ss1
-            ncfa5            = ncfa_union ncfa1 ncfa4
-        in  (ncfa5, ss1, l2)
+        let (ncfa', ss', l') = ncfa_add_regexp_prim (ncfa, ss, l) rprim rt ttbl sign
+            (ncfa'', l'')    = S.foldl'
+                (\ (ncfa1, _) s ->
+                    let (ncfa2, ss2, l2) = ncfa_add_regexp_prim (ncfa1, S.insert s S.empty, l) rprim rt ttbl sign
+                        ncfa3            = ncfa_tie_states ncfa2 ss2 s
+--                        ncfa4            = ncfa_set_cyclic s ncfa3
+                        ncfa4            = ncfa_set_all_cyclic ncfa3
+                    in  (ncfa4, l2)
+                )
+                (new_ncfa (ncfa_max_state ncfa'), l')
+                ss'
+        in  (ncfa_union ncfa' ncfa'', ss', l'')
     IterMaybe rprim     ->
         let (ncfa', ss', l') = ncfa_add_regexp_prim (ncfa, ss, l) rprim rt ttbl sign
         in  (ncfa', S.union ss ss', l')

@@ -24,7 +24,7 @@ import           SourceParser
 import           RegexpParser
 
 
-gen_code :: [Chunk] -> MRegname2Regexp Char -> M.HashMap STokname (MRegname2Regexp Int) -> M.HashMap STokname MTokname2TokID -> Verbosity -> IO (SCode, Int)
+gen_code :: [Chunk] -> MRegname2Regexp Char -> M.HashMap STokname (MRegname2Regexp Int) -> M.HashMap STokname MTokname2TokID -> Verbosity -> IO SCode
 gen_code chunks crtbl irtbls ttbls v = do
     let chunks'      = zip [0 .. length chunks] chunks
         find_irtbl t = M.lookupDefault (err "gen_code : regexp table not found") t irtbls
@@ -33,12 +33,12 @@ gen_code chunks crtbl irtbls ttbls v = do
             Ch2 _ (Opts _ _ (TTEnum t) _ _)    _ -> gen_code_for_chunk k chunk (find_irtbl t) (find_ttbl t) v
             Ch2 _ (OptsBlock _ (TTEnum t) _ _) _ -> gen_code_for_chunk k chunk (find_irtbl t) (find_ttbl t) v
             _                                    -> gen_code_for_chunk k chunk crtbl          Nothing v
-    (codes, maxlens) <- unzip <$> mapM f chunks'
-    return (concat codes, maximum maxlens)
+    codes <- mapM f chunks'
+    return $ concat codes
 
 
-gen_code_for_chunk :: Labellable a => IBlkID -> Chunk -> MRegname2Regexp a -> Maybe MTokname2TokID -> Verbosity -> IO (SCode, Int)
-gen_code_for_chunk _ (Ch1 code)            _    _    _ = return (code, 0)
+gen_code_for_chunk :: Labellable a => IBlkID -> Chunk -> MRegname2Regexp a -> Maybe MTokname2TokID -> Verbosity -> IO SCode
+gen_code_for_chunk _ (Ch1 code)            _    _    _ = return code
 gen_code_for_chunk k (Ch2 code opts rules) rtbl ttbl v = do
     let verbose :: (Show a) => a -> a
         verbose = case v of
@@ -52,11 +52,11 @@ gen_code_for_chunk k (Ch2 code opts rules) rtbl ttbl v = do
         code'                 = cfa2cpp (verbose dcfa) code maxlen' bi
     when (v == V2) $
         putStrLn "Generating .dot for NCFA..." >> ncfa_to_dot ncfa (printf "ncfa%d.dot" k) >>
-        putStrLn "Generating .dot for DCFA..." >> dcfa_to_dot dcfa (printf "dcfa%d.dot" k) >>
         putStrLn "Generating .png for NCFA..." >> system (printf "dot -Tpng -oncfa%d.png ncfa%d.dot" k k) >>
+        putStrLn "Generating .dot for DCFA..." >> dcfa_to_dot dcfa (printf "dcfa%d.dot" k) >>
         putStrLn "Generating .png for DCFA..." >> system (printf "dot -Tpng -odcfa%d.png dcfa%d.dot" k k) >>
         return ()
-    return (code', maxlen')
+    return code'
 
 
 parse_token_table :: String -> (STokname, MTokname2TokID)
@@ -170,11 +170,9 @@ main = do
     chunks          <- parse_source <$> readFile fsrc
     ttbls           <- M.fromList . map parse_token_table <$> mapM readFile fttbls
     (crtbl, irtbls) <- group_regexp_tables . map (parse_def_file ttbls) <$> mapM readFile fdefs
-    (code, maxlen)  <- gen_code chunks crtbl irtbls ttbls verbose
+    code            <- gen_code chunks crtbl irtbls ttbls verbose
     fttbl_hdrs      <- gen_ttbl_headers fttbls ttbls
 
     writeFile fdest $ PP.render $
-        PP.text "#define MAXLEN " <> PP.int maxlen
-        $$$ PP.vcat (map ((PP.text "#include " <>) . PP.doubleQuotes . PP.text) fttbl_hdrs)
+        PP.vcat (map ((PP.text "#include " <>) . PP.doubleQuotes . PP.text) fttbl_hdrs)
         $$$ PP.text code
-        $$$ PP.text "#undef MAXLEN"

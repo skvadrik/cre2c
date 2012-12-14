@@ -8,8 +8,8 @@ module RegexpParser
 import qualified Data.HashMap.Strict as M
 import           Data.Char
 import           Control.Applicative       ((<$>))
-import qualified Data.DList          as DL
 import           Data.List                 (foldl', isPrefixOf)
+import qualified Data.Set            as S
 import           Text.Printf
 
 import           Types               hiding (err)
@@ -25,6 +25,7 @@ import           Helpers
 %token
     name          { TokenName $$ }
     chain         { TokenChain $$ }
+    range         { TokenRange $$ }
     int           { TokenInt $$ }
     '('           { TokenOBracket }
     ')'           { TokenCBracket }
@@ -76,7 +77,7 @@ RPrim :: { RegexpPrim ta }
     | '"' chain '"'                   { Elementary   $2 }
     | '\'' chain '\''                 { Elementary   $2 }
     | '(' RAlt ')'                    { Wrapped      $2 }
-    | '[' chain ']'                   { Range        $2 }
+    | '[' range ']'                   { Range        $2 }
     | '.'                             { Any             }
 
 
@@ -100,6 +101,7 @@ data Token ta
     | TokenStar
     | TokenPlus
     | TokenChain       [ta]
+    | TokenRange       (S.Set ta)
     | TokenName        String
     | TokenInt         Int
     deriving (Show)
@@ -157,7 +159,7 @@ lex_regexp ttbl ('|'  : cs) = TokenVSlash       : lex_regexp  ttbl cs
 lex_regexp ttbl ('{'  : cs) = TokenOParenthesis : lex_iters   ttbl cs
 lex_regexp ttbl ('"'  : cs) = TokenDQuote       : lex_dqchain ttbl cs
 lex_regexp ttbl ('\'' : cs) =                     lex_qchain  ttbl cs
-lex_regexp ttbl ('['  : cs) = TokenOSqBracket   : lex_range   ttbl cs
+lex_regexp ttbl ('['  : cs) =                     lex_range   ttbl cs
 lex_regexp ttbl (';'  : cs) = TokenSemicolon    : lexer       ttbl cs
 
 
@@ -171,22 +173,11 @@ lex_iters ttbl s =
             '}' : s2 -> TokenInt n : TokenCParenthesis : lex_regexp ttbl s2
 
 
-break_escaped :: Char -> String -> (String, String)
-break_escaped c s =
-    let f :: DL.DList Char -> String -> (DL.DList Char, String)
-        f tok ""                        = (tok, "")
-        f tok ('\\' : x : xs) | x == c  = f (DL.snoc (DL.snoc tok '\\') x) xs
-        f tok (x : xs) | x == c         = (DL.snoc tok '"', xs)
-        f tok (x : xs)                  = f (DL.snoc tok x) xs
-        (tok, rest) = f (DL.fromList ['"']) s
-    in  ((read . DL.toList) tok, rest)
-
-
 lex_qchain' :: Labellable ta => [ta] -> [Token ta]
 lex_qchain' []       = []
 lex_qchain' (x : xs) = case span_case x of
-    [y] -> TokenQuote      : TokenChain [y] : TokenQuote      : lex_qchain' xs
-    ys  -> TokenOSqBracket : TokenChain ys  : TokenCSqBracket : lex_qchain' xs
+    [y] -> TokenQuote      : TokenChain [y]             : TokenQuote      : lex_qchain' xs
+    ys  -> TokenOSqBracket : TokenRange (S.fromList ys) : TokenCSqBracket : lex_qchain' xs
 
 
 lex_qchain :: Labellable ta => Maybe MTokname2TokID -> SCode -> [Token ta]
@@ -204,11 +195,13 @@ lex_dqchain ttbl cs =
 
 lex_range :: Labellable ta => Maybe MTokname2TokID -> SCode -> [Token ta]
 lex_range ttbl cs =
-    let (ch, rest) = break_escaped ']' cs
-        ch'        = case ch of
-            '^' : ch'' -> (span_negative_range . reads' ttbl) ch''
-            _          -> (span_range . reads' ttbl) ch
-    in  TokenChain ch' : TokenCSqBracket : lex_regexp ttbl rest
+    let (r1, cs') = break_escaped ']' cs
+        r2        = case r1 of
+            '^' : r3 -> (span_negative_range . reads' ttbl) r3
+            _        -> (span_range . reads' ttbl) r1
+    in  case r2 of
+            [x] -> TokenChain [x] : lex_regexp ttbl cs'
+            xs  -> TokenOSqBracket : TokenRange (S.fromList xs) : TokenCSqBracket : lex_regexp ttbl cs'
 
 
 err :: String -> a

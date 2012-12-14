@@ -16,7 +16,7 @@ import           CFA
 
 
 cfa2cpp :: Labellable a => DCFA a -> SCode -> Int -> BlockInfo a -> SCode
-cfa2cpp dcfa prolog maxlen bi@(BI n_scanner _ _ _) =
+cfa2cpp dcfa prolog maxlen bi@(BI _ _ _ _) =
     let entry      = codegen_entry maxlen bi
         g          = dcfa_graph dcfa
         s0         = dcfa_init_state dcfa
@@ -36,9 +36,7 @@ cfa2cpp dcfa prolog maxlen bi@(BI n_scanner _ _ _) =
                     si      = SI s is_init True node (Just accepted)
                 in  code $$$ codegen_state si bi
             ) PP.empty (dcfa_final_states dcfa)
-        ending      =
-            router5 bi
-            $$$ PP.text "#undef MAXLEN" <> PP.int n_scanner
+        ending      = router5 bi
     in  PP.render $
             PP.text prolog
             $$$ entry
@@ -146,7 +144,7 @@ doc_case l =
     let f x = PP.text "case " <> (PP.text . show_hex) x <> PP.colon
     in  case l of
             LOne x    -> f x
-            LRange xs -> (PP.vcat . map f) xs
+            LRange xs -> (PP.vcat . map f . S.toList) xs
 
 
 doc_case_break :: IRegID -> Doc -> Doc
@@ -189,8 +187,8 @@ codegen_match_code id_info df =
     in  doc_switch (PP.text "ACCEPT") (d1 $$ d2)
 
 
-codegen_refill :: IBlkID -> Doc
-codegen_refill k = PP.text "if (LIMIT - CURSOR < MAXLEN" <> PP.int k <> PP.text ") FILL();"
+codegen_refill :: Doc
+codegen_refill = PP.text "if (LIMIT - CURSOR < MAXLEN) FILL();"
 
 
 router0 :: Options -> IBlkID -> MRegID2RegInfo -> Doc
@@ -202,7 +200,7 @@ router0 opts k id_info =
         d4 = PP.text "TOKEN = MARKER;"
         d5 = PP.text "CURSOR = MARKER;"
         d6 = PP.text "ACCEPT = -1;"
-        d7 = codegen_refill k
+        d7 = codegen_refill
     in  case opts of
             Opts      Single _       _ _ (Just _) -> d4
             Opts      Single _       _ _ Nothing  -> d4 $$ d7
@@ -217,8 +215,8 @@ router0 opts k id_info =
 router1 :: Options -> Bool -> Bool -> Doc
 router1 opts is_init is_final =
     let d1 = case (is_init, is_final) of
-            (True, True)  -> PP.text "TOKEN = adjust_marker ? MARKER : TOKEN;"
-            (True, False) -> PP.text "TOKEN = MARKER;" $$ PP.text "adjust_marker = true;"
+            (True, True)  -> PP.text "TOKEN = ADJUST_MARKER ? MARKER : TOKEN;"
+            (True, False) -> PP.text "TOKEN = MARKER;" $$ PP.text "ADJUST_MARKER = true;"
             _             -> PP.empty
         d2 = case is_init of
             True -> PP.text "TOKEN = MARKER;"
@@ -232,7 +230,7 @@ router1 opts is_init is_final =
 
 router2 :: Options -> Doc
 router2 opts =
-    let d1 = PP.text "MARKER += adjust_marker;"
+    let d1 = PP.text "MARKER += ADJUST_MARKER;"
         d2 = PP.text "MARKER ++;"
     in  case opts of
             Opts      Single _       _ _ _ -> PP.empty
@@ -241,18 +239,21 @@ router2 opts =
             OptsBlock _              _ _ _ -> d2
 
 
-router3 :: Options -> Bool -> Doc
-router3 opts is_init =
+router3 :: Options -> Bool -> IBlkID -> Doc
+router3 opts is_init k =
     let d1 = if is_init
-            then PP.text "adjust_marker = true;"
+            then PP.text "ADJUST_MARKER = true;"
             else PP.empty
-        d2 = PP.text "MARKER += adjust_marker;"
+        d2 = PP.text "MARKER += ADJUST_MARKER;"
         d3 = PP.text "MARKER ++;"
+        d4 = doc_goto_fin k opts
     in  case opts of
-            Opts      Single _       _ _ _ -> PP.empty
-            Opts      Normal All     _ _ _ -> d1 $$ d2
-            Opts      Normal Longest _ _ _ -> d3
-            OptsBlock _              _ _ _ -> d3
+            Opts      _      _       _ _ (Just def_act) -> PP.text def_act
+            OptsBlock _              _ _ (Just def_act) -> PP.text def_act
+            Opts      Single _       _ _ Nothing        -> PP.empty $$ d4
+            Opts      Normal All     _ _ Nothing        -> d1 $$ d2 $$ d4
+            Opts      Normal Longest _ _ Nothing        -> d3 $$ d4
+            OptsBlock _              _ _ Nothing        -> d3 $$ d4
 
 
 router4 :: Options -> Bool -> (IRegID, SCode) -> Doc
@@ -260,7 +261,7 @@ router4 opts empty_node (n, code) =
     let d1 = PP.text code
         d2 = PP.text "ACCEPT = " <> PP.int n <> PP.semi
         d3 = PP.text "MARKER = CURSOR;"
-        d4 = if empty_node then PP.empty else PP.text "adjust_marker = false;"
+        d4 = if empty_node then PP.empty else PP.text "ADJUST_MARKER = false;"
     in  case opts of
             Opts      Single Longest _ _ _ ->       d2
             Opts      Single All     _ _ _ -> d1
@@ -292,7 +293,7 @@ router7 opts =
 
 codegen_entry :: Int -> BlockInfo a -> PP.Doc
 codegen_entry maxlen (BI k opts id_info _) =
-    PP.text "#define MAXLEN" <> PP.int k <> PP.space <> PP.int maxlen
+    PP.text "MAXLEN = " <> PP.int maxlen <> PP.semi
     $$ router0 opts k id_info
     $$ doc_goto k 0
 
@@ -304,7 +305,7 @@ compare_by_label (l1, _) (l2, _) = l1 `compare` l2
 codegen_cases :: Labellable a => StateInfo a -> BlockInfo a -> PP.Doc
 codegen_cases (SI _ is_init is_final node _) (BI k opts id_info _) =
     let case_body ids b s =
-            let check_cyclic   = if b then codegen_refill k else PP.empty
+            let check_cyclic   = if b then codegen_refill else PP.empty
                 conds          = get_conds id_info ids
                 is_conditional = (null . fst . partition (== S.empty)) conds
                 goto_m         = doc_goto k s
@@ -320,7 +321,7 @@ codegen_cases (SI _ is_init is_final node _) (BI k opts id_info _) =
                 )
         node'        = (sortBy compare_by_label . M.toList) node
         cases        = foldl' one_case PP.empty node'
-        default_case = doc_default (router3 opts is_init $$ doc_goto_fin k opts)
+        default_case = doc_default (router3 opts is_init k)
     in  cases $$ default_case
 
 
@@ -341,7 +342,7 @@ codegen_state si@(SI s is_init is_final node _) bi@(BI k opts _ ttbl) =
         d2     = router7 opts
         state  = case M.toList node of
             []                                             -> doc_goto_fin k opts
-            [(LRange r, (_, b, s))] | is_full_range r ttbl -> d1 $$ if b then codegen_refill k else PP.empty $$ doc_goto k s
+            [(LRange r, (_, b, s))] | is_full_range r ttbl -> d1 $$ if b then codegen_refill else PP.empty $$ doc_goto k s
             _                                              -> doc_switch d2 (codegen_cases si bi)
     in  doc_decl k s
         $$ fstate

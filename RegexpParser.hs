@@ -8,8 +8,8 @@ module RegexpParser
 import qualified Data.HashMap.Strict as M
 import           Data.Char
 import           Control.Applicative       ((<$>))
-import qualified Data.DList          as DL
 import           Data.List                 (foldl', isPrefixOf)
+import qualified Data.Set            as S
 import           Text.Printf
 
 import           Types               hiding (err)
@@ -130,10 +130,10 @@ action_1 _ = happyFail
 
 action_2 _ = happyFail
 
-action_3 (26) = happyShift action_7
+action_3 (27) = happyShift action_7
 action_3 _ = happyFail
 
-action_4 (30) = happyAccept
+action_4 (31) = happyAccept
 action_4 _ = happyFail
 
 action_5 (11) = happyShift action_3
@@ -144,11 +144,11 @@ action_5 _ = happyReduce_1
 action_6 _ = happyReduce_2
 
 action_7 (11) = happyShift action_13
-action_7 (14) = happyShift action_14
-action_7 (16) = happyShift action_15
-action_7 (22) = happyShift action_16
-action_7 (23) = happyShift action_17
-action_7 (24) = happyShift action_18
+action_7 (15) = happyShift action_14
+action_7 (17) = happyShift action_15
+action_7 (23) = happyShift action_16
+action_7 (24) = happyShift action_17
+action_7 (25) = happyShift action_18
 action_7 (6) = happyGoto action_8
 action_7 (7) = happyGoto action_9
 action_7 (8) = happyGoto action_10
@@ -156,46 +156,46 @@ action_7 (9) = happyGoto action_11
 action_7 (10) = happyGoto action_12
 action_7 _ = happyFail
 
-action_8 (27) = happyShift action_29
+action_8 (28) = happyShift action_29
 action_8 _ = happyFail
 
 action_9 _ = happyReduce_4
 
-action_10 (21) = happyShift action_28
+action_10 (22) = happyShift action_28
 action_10 _ = happyReduce_6
 
 action_11 (11) = happyShift action_13
-action_11 (14) = happyShift action_14
-action_11 (16) = happyShift action_15
-action_11 (22) = happyShift action_16
-action_11 (23) = happyShift action_17
-action_11 (24) = happyShift action_18
+action_11 (15) = happyShift action_14
+action_11 (17) = happyShift action_15
+action_11 (23) = happyShift action_16
+action_11 (24) = happyShift action_17
+action_11 (25) = happyShift action_18
 action_11 (8) = happyGoto action_27
 action_11 (9) = happyGoto action_11
 action_11 (10) = happyGoto action_12
 action_11 _ = happyReduce_8
 
-action_12 (18) = happyShift action_23
-action_12 (25) = happyShift action_24
-action_12 (28) = happyShift action_25
-action_12 (29) = happyShift action_26
+action_12 (19) = happyShift action_23
+action_12 (26) = happyShift action_24
+action_12 (29) = happyShift action_25
+action_12 (30) = happyShift action_26
 action_12 _ = happyReduce_14
 
 action_13 _ = happyReduce_15
 
 action_14 (11) = happyShift action_13
-action_14 (14) = happyShift action_14
-action_14 (16) = happyShift action_15
-action_14 (22) = happyShift action_16
-action_14 (23) = happyShift action_17
-action_14 (24) = happyShift action_18
+action_14 (15) = happyShift action_14
+action_14 (17) = happyShift action_15
+action_14 (23) = happyShift action_16
+action_14 (24) = happyShift action_17
+action_14 (25) = happyShift action_18
 action_14 (7) = happyGoto action_22
 action_14 (8) = happyGoto action_10
 action_14 (9) = happyGoto action_11
 action_14 (10) = happyGoto action_12
 action_14 _ = happyFail
 
-action_15 (12) = happyShift action_21
+action_15 (13) = happyShift action_21
 action_15 _ = happyFail
 
 action_16 (12) = happyShift action_20
@@ -206,19 +206,19 @@ action_17 _ = happyFail
 
 action_18 _ = happyReduce_20
 
-action_19 (23) = happyShift action_35
+action_19 (24) = happyShift action_35
 action_19 _ = happyFail
 
-action_20 (22) = happyShift action_34
+action_20 (23) = happyShift action_34
 action_20 _ = happyFail
 
-action_21 (17) = happyShift action_33
+action_21 (18) = happyShift action_33
 action_21 _ = happyFail
 
-action_22 (15) = happyShift action_32
+action_22 (16) = happyShift action_32
 action_22 _ = happyFail
 
-action_23 (13) = happyShift action_31
+action_23 (14) = happyShift action_31
 action_23 _ = happyFail
 
 action_24 _ = happyReduce_11
@@ -230,11 +230,11 @@ action_26 _ = happyReduce_10
 action_27 _ = happyReduce_7
 
 action_28 (11) = happyShift action_13
-action_28 (14) = happyShift action_14
-action_28 (16) = happyShift action_15
-action_28 (22) = happyShift action_16
-action_28 (23) = happyShift action_17
-action_28 (24) = happyShift action_18
+action_28 (15) = happyShift action_14
+action_28 (17) = happyShift action_15
+action_28 (23) = happyShift action_16
+action_28 (24) = happyShift action_17
+action_28 (25) = happyShift action_18
 action_28 (7) = happyGoto action_30
 action_28 (8) = happyGoto action_10
 action_28 (9) = happyGoto action_11
@@ -245,8 +245,8 @@ action_29 _ = happyReduce_3
 
 action_30 _ = happyReduce_5
 
-action_31 (19) = happyShift action_36
-action_31 (20) = happyShift action_37
+action_31 (20) = happyShift action_36
+action_31 (21) = happyShift action_37
 action_31 _ = happyFail
 
 action_32 _ = happyReduce_18
@@ -259,10 +259,10 @@ action_35 _ = happyReduce_16
 
 action_36 _ = happyReduce_12
 
-action_37 (13) = happyShift action_38
+action_37 (14) = happyShift action_38
 action_37 _ = happyFail
 
-action_38 (19) = happyShift action_39
+action_38 (20) = happyShift action_39
 action_38 _ = happyFail
 
 action_39 _ = happyReduce_13
@@ -419,7 +419,7 @@ happyReduction_18 _ _ _  = notHappyAtAll
 
 happyReduce_19 = happySpecReduce_3  10 happyReduction_19
 happyReduction_19 _
-	(HappyTerminal (TokenChain happy_var_2))
+	(HappyTerminal (TokenRange happy_var_2))
 	_
 	 =  HappyAbsSyn10
 		 (Range        happy_var_2
@@ -433,34 +433,35 @@ happyReduction_20 _
 	)
 
 happyNewToken action sts stk [] =
-	action 30 30 notHappyAtAll (HappyState action) sts stk []
+	action 31 31 notHappyAtAll (HappyState action) sts stk []
 
 happyNewToken action sts stk (tk:tks) =
 	let cont i = action i i tk (HappyState action) sts stk tks in
 	case tk of {
 	TokenName happy_dollar_dollar -> cont 11;
 	TokenChain happy_dollar_dollar -> cont 12;
-	TokenInt happy_dollar_dollar -> cont 13;
-	TokenOBracket -> cont 14;
-	TokenCBracket -> cont 15;
-	TokenOSqBracket -> cont 16;
-	TokenCSqBracket -> cont 17;
-	TokenOParenthesis -> cont 18;
-	TokenCParenthesis -> cont 19;
-	TokenComma -> cont 20;
-	TokenVSlash -> cont 21;
-	TokenQuote -> cont 22;
-	TokenDQuote -> cont 23;
-	TokenDot -> cont 24;
-	TokenQueryMark -> cont 25;
-	TokenEq -> cont 26;
-	TokenSemicolon -> cont 27;
-	TokenStar -> cont 28;
-	TokenPlus -> cont 29;
+	TokenRange happy_dollar_dollar -> cont 13;
+	TokenInt happy_dollar_dollar -> cont 14;
+	TokenOBracket -> cont 15;
+	TokenCBracket -> cont 16;
+	TokenOSqBracket -> cont 17;
+	TokenCSqBracket -> cont 18;
+	TokenOParenthesis -> cont 19;
+	TokenCParenthesis -> cont 20;
+	TokenComma -> cont 21;
+	TokenVSlash -> cont 22;
+	TokenQuote -> cont 23;
+	TokenDQuote -> cont 24;
+	TokenDot -> cont 25;
+	TokenQueryMark -> cont 26;
+	TokenEq -> cont 27;
+	TokenSemicolon -> cont 28;
+	TokenStar -> cont 29;
+	TokenPlus -> cont 30;
 	_ -> happyError' (tk:tks)
 	}
 
-happyError_ 30 tk tks = happyError' tks
+happyError_ 31 tk tks = happyError' tks
 happyError_ _ tk tks = happyError' (tk:tks)
 
 newtype HappyIdentity a = HappyIdentity a
@@ -505,6 +506,7 @@ data Token ta
     | TokenStar
     | TokenPlus
     | TokenChain       [ta]
+    | TokenRange       (S.Set ta)
     | TokenName        String
     | TokenInt         Int
     deriving (Show)
@@ -562,7 +564,7 @@ lex_regexp ttbl ('|'  : cs) = TokenVSlash       : lex_regexp  ttbl cs
 lex_regexp ttbl ('{'  : cs) = TokenOParenthesis : lex_iters   ttbl cs
 lex_regexp ttbl ('"'  : cs) = TokenDQuote       : lex_dqchain ttbl cs
 lex_regexp ttbl ('\'' : cs) =                     lex_qchain  ttbl cs
-lex_regexp ttbl ('['  : cs) = TokenOSqBracket   : lex_range   ttbl cs
+lex_regexp ttbl ('['  : cs) =                     lex_range   ttbl cs
 lex_regexp ttbl (';'  : cs) = TokenSemicolon    : lexer       ttbl cs
 
 
@@ -576,22 +578,11 @@ lex_iters ttbl s =
             '}' : s2 -> TokenInt n : TokenCParenthesis : lex_regexp ttbl s2
 
 
-break_escaped :: Char -> String -> (String, String)
-break_escaped c s =
-    let f :: DL.DList Char -> String -> (DL.DList Char, String)
-        f tok ""                        = (tok, "")
-        f tok ('\\' : x : xs) | x == c  = f (DL.snoc (DL.snoc tok '\\') x) xs
-        f tok (x : xs) | x == c         = (DL.snoc tok '"', xs)
-        f tok (x : xs)                  = f (DL.snoc tok x) xs
-        (tok, rest) = f (DL.fromList ['"']) s
-    in  ((read . DL.toList) tok, rest)
-
-
 lex_qchain' :: Labellable ta => [ta] -> [Token ta]
 lex_qchain' []       = []
 lex_qchain' (x : xs) = case span_case x of
-    [y] -> TokenQuote      : TokenChain [y] : TokenQuote      : lex_qchain' xs
-    ys  -> TokenOSqBracket : TokenChain ys  : TokenCSqBracket : lex_qchain' xs
+    [y] -> TokenQuote      : TokenChain [y]             : TokenQuote      : lex_qchain' xs
+    ys  -> TokenOSqBracket : TokenRange (S.fromList ys) : TokenCSqBracket : lex_qchain' xs
 
 
 lex_qchain :: Labellable ta => Maybe MTokname2TokID -> SCode -> [Token ta]
@@ -609,11 +600,13 @@ lex_dqchain ttbl cs =
 
 lex_range :: Labellable ta => Maybe MTokname2TokID -> SCode -> [Token ta]
 lex_range ttbl cs =
-    let (ch, rest) = break_escaped ']' cs
-        ch'        = case ch of
-            '^' : ch'' -> (span_negative_range . reads' ttbl) ch''
-            _          -> (span_range . reads' ttbl) ch
-    in  TokenChain ch' : TokenCSqBracket : lex_regexp ttbl rest
+    let (r1, cs') = break_escaped ']' cs
+        r2        = case r1 of
+            '^' : r3 -> (span_negative_range . reads' ttbl) r3
+            _        -> (span_range . reads' ttbl) r1
+    in  case r2 of
+            [x] -> TokenChain [x] : lex_regexp ttbl cs'
+            xs  -> TokenOSqBracket : TokenRange (S.fromList xs) : TokenCSqBracket : lex_regexp ttbl cs'
 
 
 err :: String -> a

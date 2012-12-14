@@ -66,7 +66,7 @@ data RegexpPrim a
     | Name       SRegname
     | Wrapped    (RegexpAlt a)
     | Any
-    | Range      [a]
+    | Range      (S.Set a)
     deriving (Show)
 
 
@@ -117,22 +117,20 @@ data Match
 
 data Label a
     = LOne a
-    | LRange [a]
+    | LRange (S.Set a)
 instance Labellable a => Hashable (Label a) where
     hash (LOne c)   = hash c
     hash (LRange r) = hash r
 instance Labellable a => Eq (Label a) where
     LOne   x  == LOne   y  = x == y
     LRange xs == LRange ys = xs == ys
-    LOne   x  == LRange xs = x `elem` xs
-    LRange xs == LOne   x  = x `elem` xs
+    LOne   x  == LRange xs = x `S.member` xs
+    LRange xs == LOne   x  = x `S.member` xs
 instance Labellable a => Ord (Label a) where
     LOne   x       `compare` LOne   y       = x  `compare` y
     LRange xs      `compare` LRange ys      = xs `compare` ys
-    LOne   x       `compare` LRange (y : _) = x  `compare` y
-    LRange (y : _) `compare` LOne   x       = y  `compare` x
-    LOne   _       `compare` LRange []      = err "empty range"
-    LRange []      `compare` LOne   _       = err "empty range"
+    LOne   _       `compare` LRange _       = LT
+    LRange _       `compare` LOne   _       = GT
 instance Labellable a => Show (Label a) where
     show (LOne   x ) = show_hex  x
     show (LRange xs) = shows_hex xs
@@ -150,10 +148,10 @@ class (Eq a, Ord a, PrintfArg a, NFData a, Show a, Hashable a) => Labellable a w
         let (t, r) = read' s ttbl
         in  t : reads' ttbl r
 
-    full_range :: Maybe MTokname2TokID -> [a]
+    full_range :: Maybe MTokname2TokID -> S.Set a
 
-    is_full_range :: [a] -> Maybe MTokname2TokID -> Bool
-    is_full_range r ttbl = S.fromList r == S.fromList (full_range ttbl)
+    is_full_range :: S.Set a -> Maybe MTokname2TokID -> Bool
+    is_full_range r ttbl = r == full_range ttbl
 
     span_range :: [a] -> [a]
 
@@ -164,9 +162,11 @@ class (Eq a, Ord a, PrintfArg a, NFData a, Show a, Hashable a) => Labellable a w
     show_hex :: a -> String
     show_hex a = printf "0x%02X" a
 
-    shows_hex :: [a] -> String
-    shows_hex [] = "EMPTY_RANGE"
-    shows_hex r = printf "%s-%s" ((show_hex . head) r) ((show_hex . last) r)
+    shows_hex :: S.Set a -> String
+    shows_hex r | r == S.empty = "EMPTY_RANGE"
+    shows_hex r                =
+        let cs = S.toList r
+        in  printf "%s-%s" ((show_hex . head) cs) ((show_hex . last) cs)
 
 
 instance Labellable Char where
@@ -177,7 +177,7 @@ instance Labellable Char where
     reads' (Just _) _ = err "reads' (Char) : non-empty token table for char-based scanner ?"
     reads' _ cs       = cs
 
-    full_range Nothing  = ['\x00' .. '\xFF']
+    full_range Nothing  = S.fromList ['\x00' .. '\xFF']
     full_range (Just _) = err "full_range (Char) : non-empty token table"
 
     span_range s =
@@ -193,7 +193,7 @@ instance Labellable Char where
             span_range' cs (a : '-' : b : s) = span_range' ([a .. b] ++ cs) s
             span_range' cs (a : s)           = span_range' (a : cs) s
             r = span_range' "" s
-        in  filter (\ c -> c `notElem` r) (full_range Nothing)
+        in  filter (\ c -> c `notElem` r) (S.toList $ full_range Nothing)
 
     span_case c = if is_alpha c then [toLower c, toUpper c] else [c]
 
@@ -206,7 +206,7 @@ instance Labellable Int where
                 Just i  -> (i, r)
                 Nothing -> err $ printf "read (Int) : unknown token : %s" (show t)
 
-    full_range (Just ttbl) = M.elems ttbl
+    full_range (Just ttbl) = (S.fromList . M.elems) ttbl
     full_range Nothing     = err "full_range (Int) : empty token table"
 
     span_range = id
