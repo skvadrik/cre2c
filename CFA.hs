@@ -30,6 +30,7 @@ import System.IO.Unsafe
 import System.Cmd
 
 import           Types               hiding (err)
+import           Helpers
 
 
 new_ncfa :: IStateID -> NCFA a
@@ -133,22 +134,23 @@ to_dcfa_node =
     in  M.foldlWithKey' f M.empty
 
 
--- теперь основная проблема в том, чтобы не дублировать те циклы, в которые ведут только мержимые дуги, а просто перенаправлять их.
-duplicate_cycles :: Labellable a => NCFAGraph a -> M.HashMap IStateID IStateID -> S.Set IStateID -> IStateID -> IStateID -> IStateID -> (NCFAGraph a, IStateID)
-duplicate_cycles g old2new fixed s1 s2 max =
+-- 1 не дублировать те циклы, в которые ведут только мержимые дуги, а просто перенаправлять их.
+-- 2 не генерить проверки для всех реверсных дуг
+duplicate_arcs :: Labellable a => (NCFAGraph a, IStateID) -> M.HashMap IStateID IStateID -> S.Set IStateID -> IStateID -> IStateID -> (NCFAGraph a, IStateID)
+duplicate_arcs (g, max) old2new fixed s1 s2 =
     let span_noncyclic g (l, k, b, s) = if s == s1
-            then M.insertWith (\ _ nd -> (l, k, b, s2) : nd) s2 [(l, k, b, s2)] g
-            else M.insertWith (\ _ nd -> (l, k, b, s) : nd) s2 [(l, k, b, s)] g
+            then M.insertWith (++) s2 [(l, k, b, s2)] g
+            else M.insertWith (++) s2 [(l, k, b, s)] g
         span_cyclic (g, max) (l, k, b, s) = case (M.lookup s old2new, S.member s fixed) of
             (Just s', _    ) ->
-                 let g1 = M.insertWith (\ _ nd -> (l, k, b, s') : nd) s2 [(l, k, b, s')] g
+                 let g1 = M.insertWith (++) s2 [(l, k, b, s')] g
                  in  (g1, max)
-            (_,       True ) ->
-                 let g1 = M.insertWith (\ _ nd -> (l, k, b, s) : nd) s2 [(l, k, b, s)] g
+            (Nothing, True ) ->
+                 let g1 = M.insertWith (++) s2 [(l, k, b, s)] g
                  in  (g1, max)
             (Nothing, False) ->
-                 let g1 = M.insertWith (\ _ nd -> (l, k, b, max) : nd) s2 [(l, k, b, max)] g
-                 in  duplicate_cycles g1 (M.insert s max old2new) fixed s max (max + 1)
+                 let g1 = M.insertWith (++) s2 [(l, k, b, max)] g
+                 in  duplicate_arcs (g1, max + 1) (M.insert s max old2new) fixed s max
     in  case M.lookup s1 g of
             Just nd ->
                 let (rev_arcs, arcs) = partition (\ (_, _, b, _) -> b) nd
@@ -158,17 +160,25 @@ duplicate_cycles g old2new fixed s1 s2 max =
             Nothing -> (g, max)
 
 
+duplicate_self ::  Labellable a => (NCFAGraph a, IStateID) -> S.Set IStateID -> IStateID -> IStateID -> (NCFAGraph a, IStateID)
+duplicate_self (g, max) olds old new =
+    let f arcs (l, k, b, s) = case s of
+            _ | s == old        -> (l, k, b, new) : arcs
+            _ | S.member s olds -> arcs
+            _                   -> (l, k, b, s) : arcs
+        arcs1 = M.lookupDefault [] old g
+        arcs2 = foldl' f [] arcs1
+        g1    = M.insertWith (++) new arcs2 g
+    in  (g1, max)
+
+
 update_ncfa_graph :: Labellable a => IStateID -> M.HashMap IStateID (S.Set IRegID) -> S.Set IStateID -> NCFA a -> NCFA a
 update_ncfa_graph s new2olds fixed (NCFA init max graph finals) =
     let f1 new olds (g, max) old = if old == s
-            then
-                let nd1 = M.lookupDefault [] old g
-                    nd2 = foldl' (\ nd (l, k, b, s') -> if s' == old then (l, k, b, new) : nd else nd) [] nd1
-                    g1  = M.insert new nd2 g
-                in  (g1, max)
+            then duplicate_self (g, max) olds old new
             else
                 let old2new = S.foldl' (\ m old -> M.insert old new m) M.empty olds
-                in  duplicate_cycles g old2new fixed old new max
+                in  duplicate_arcs (g, max) old2new fixed old new
         f2 (g, max) new olds = S.foldl' (f1 new olds) (g, max) olds
         (graph', max') = M.foldlWithKey' f2 (graph, max) new2olds
     in  NCFA init max' graph' finals
