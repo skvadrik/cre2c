@@ -32,7 +32,7 @@ type MTokname2TokID       = M.HashMap STokname      ITokID
 
 type DCFANode a    = M.HashMap (Label a) (S.Set IRegID, Bool, IStateID)
 type DCFAGraph a   = M.HashMap IStateID (DCFANode a)
-type NCFANode a    = [(Label a, IRegID, Bool, IStateID)]
+type NCFANode a    = [(Label a, S.Set IRegID, Bool, IStateID)]
 type NCFAGraph a   = M.HashMap IStateID (NCFANode a)
 
 
@@ -72,6 +72,7 @@ data RegexpPrim a
 
 data DCFA a = DCFA
     { dcfa_init_state   :: IStateID
+    , dcfa_max_state    :: IStateID
     , dcfa_graph        :: DCFAGraph a
     , dcfa_final_states :: M.HashMap IStateID (S.Set IRegID)
     } deriving (Show)
@@ -126,6 +127,12 @@ instance Labellable a => Eq (Label a) where
     LRange xs == LRange ys = xs == ys
     LOne   x  == LRange xs = x `S.member` xs
     LRange xs == LOne   x  = x `S.member` xs
+
+(~=) :: Labellable a => Label a -> Label a -> Bool
+(LOne x)    ~= (LOne y)    = x == y
+(LRange xs) ~= (LRange ys) = xs == ys
+_           ~= _           = False
+
 instance Labellable a => Ord (Label a) where
     LOne   x       `compare` LOne   y       = x  `compare` y
     LRange xs      `compare` LRange ys      = xs `compare` ys

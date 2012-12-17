@@ -6,7 +6,6 @@ module RE2CFA
 import qualified Data.HashMap.Strict   as M
 import qualified Data.Set              as S
 import           Data.List                  (foldl')
-import           Control.DeepSeq
 
 import           Types                 hiding (err)
 import           CFA
@@ -44,9 +43,8 @@ ncfa_add_regexp_iter (ncfa, ss, l) r rt ttbl sign = case r of
             (ncfa'', l'')    = S.foldl'
                 (\ (ncfa1, _) s ->
                     let (ncfa2, ss2, l2) = ncfa_add_regexp_prim (ncfa1, S.insert s S.empty, l) rprim rt ttbl sign
-                        ncfa3            = ncfa_tie_states ncfa2 ss2 s
---                        ncfa4            = ncfa_set_cyclic s ncfa3
-                        ncfa4            = ncfa_set_all_cyclic ncfa3
+                        ncfa3            = ncfa_tie_states ncfa2 (S.delete s ss2) s
+                        ncfa4            = ncfa_set_cyclic s ncfa3
                     in  (ncfa4, l2)
                 )
                 (new_ncfa (ncfa_max_state ncfa'), l')
@@ -57,9 +55,8 @@ ncfa_add_regexp_iter (ncfa, ss, l) r rt ttbl sign = case r of
             (ncfa'', l'')    = S.foldl'
                 (\ (ncfa1, _) s ->
                     let (ncfa2, ss2, l2) = ncfa_add_regexp_prim (ncfa1, S.insert s S.empty, l) rprim rt ttbl sign
-                        ncfa3            = ncfa_tie_states ncfa2 ss2 s
---                        ncfa4            = ncfa_set_cyclic s ncfa3
-                        ncfa4            = ncfa_set_all_cyclic ncfa3
+                        ncfa3            = ncfa_tie_states ncfa2 (S.delete s ss2) s
+                        ncfa4            = ncfa_set_cyclic s ncfa3
                     in  (ncfa4, l2)
                 )
                 (new_ncfa (ncfa_max_state ncfa'), l')
