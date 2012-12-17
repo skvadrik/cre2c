@@ -9,8 +9,6 @@ module CFA
     , ncfa_set_final
     , ncfa_set_cyclic
     , ncfa_add_transition
-    , unsafe_ncfa_add_transition
-    , ncfa_add_final_transition
     , ncfa_tie_states
     , ncfa_union
 
@@ -24,7 +22,7 @@ module CFA
 
 import qualified Data.HashMap.Strict as M
 import qualified Data.Set            as S
-import           Data.List                (foldl', partition)
+import           Data.List                (foldl')
 import           Control.Monad            (forM_)
 import           Control.Applicative      ((<$>))
 import           Data.Maybe               (isJust)
@@ -53,43 +51,14 @@ ncfa_set_final s k (NCFA s0 sl g fss) = NCFA s0 sl g (M.insertWith (\ _ ks -> S.
 
 ncfa_set_cyclic :: Labellable a => IStateID -> NCFA a -> NCFA a
 ncfa_set_cyclic s1 ncfa@NCFA{ ncfa_graph = g } =
-    let f  = map (\ (l, ks, _, s) -> (l, ks, True, s))
+    let f  = map (\ (l, k, _, s) -> (l, k, True, s))
         g' = M.adjust f s1 g
     in  ncfa{ ncfa_graph = g' }
 
 
-unsafe_ncfa_add_transition :: Labellable a => NCFA a -> (IStateID, Label a, IRegID, IStateID) -> (NCFA a, IStateID)
-unsafe_ncfa_add_transition (NCFA s0 sl g fss) (s1, l, k, s2) =
-    let def_arc1 = (l, S.singleton k, False, s2)
-        (g', sl', s') = case M.lookup s1 g of
-            Nothing          ->
-                let g1 = M.insert s1 [def_arc1] g
-                in  (g1, max (sl + 1) s2, s2)
-            Just arcs -> case partition (\ (l', _, _, _) -> l ~= l') arcs of
-                ([(_, ks, b, s)], arcs2) ->
-                    ( M.insert s1 ((l, S.insert k ks, b, s) : arcs2) g
-                    , sl
-                    , s
-                    )
-                _ ->
-                    ( M.insert s1 (def_arc1 : arcs) g
-                    , max (sl + 1) s2
-                    , s2
-                    )
-    in  (NCFA s0 sl' g' fss, s')
-
-
-ncfa_add_final_transition :: NCFA a -> (IStateID, Label a, IRegID, IStateID) -> (NCFA a, IStateID)
-ncfa_add_final_transition (NCFA s0 sl g fss) (s1, l, k, s2) =
-    let def_arc = (l, S.singleton k, False, s2)
-        g'      = M.insertWith (++) s1 [def_arc] g
-        fss'    = M.insertWith (\ _ ks -> S.insert k ks) s2 (S.insert k S.empty) fss
-    in  (NCFA s0 (max (sl + 1) s2) g' fss', s2)
-
-
 ncfa_add_transition :: NCFA a -> (IStateID, Label a, IRegID, IStateID) -> (NCFA a, IStateID)
 ncfa_add_transition (NCFA s0 sl g fss) (s1, l, k, s2) =
-    let def_arc = (l, S.singleton k, False, s2)
+    let def_arc = (l, k, False, s2)
         g'      = M.insertWith (++) s1 [def_arc] g
     in  (NCFA s0 (max (sl + 1) s2) g' fss, s2)
 
@@ -105,9 +74,9 @@ ncfa_union (NCFA s0 _ g fss) (NCFA _ sl' g' fss') =
 ncfa_tie_states :: Labellable a => NCFA a -> S.Set IStateID -> IStateID -> NCFA a
 ncfa_tie_states (NCFA s0 sl g fss) xs y =
     let f arcs = foldl'
-            (\ arcs1 (l, ks, b, s') -> if S.member s' xs
-                then (l, ks, b, y) : arcs1
-                else (l, ks, b, s') : arcs1
+            (\ arcs1 (l, k, b, s') -> if S.member s' xs
+                then (l, k, b, y) : arcs1
+                else (l, k, b, s') : arcs1
             ) [] arcs
         g'  = M.map f g
         g'' = S.foldl' (\ g s -> M.delete s g) g' xs
@@ -117,10 +86,10 @@ ncfa_tie_states (NCFA s0 sl g fss) xs y =
 
 group_by_symbol :: Labellable a => NCFANode a -> M.HashMap a (S.Set IRegID, Bool, S.Set IStateID)
 group_by_symbol =
-    let f1 (ks, b, s) n c  = M.insertWith (\ _ (ks', b', ss) -> (S.union ks' ks, b || b', S.insert s ss)) c (ks, b, S.singleton s) n
-        f2 n (l, ks, b, s) = case l of
-            LOne   x  -> f1 (ks, b, s) n x
-            LRange xs -> S.foldl' (f1 (ks, b, s)) n xs
+    let f1 (k, b, s) n c  = M.insertWith (\ _ (ks, b', ss) -> (S.insert k ks, b || b', S.insert s ss)) c (S.singleton k, b, S.singleton s) n
+        f2 n (l, k, b, s) = case l of
+            LOne   x  -> f1 (k, b, s) n x
+            LRange xs -> S.foldl' (f1 (k, b, s)) n xs
     in  foldl' f2 M.empty
 
 

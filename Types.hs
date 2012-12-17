@@ -32,7 +32,7 @@ type MTokname2TokID       = M.HashMap STokname      ITokID
 
 type DCFANode a    = M.HashMap (Label a) (S.Set IRegID, Bool, IStateID)
 type DCFAGraph a   = M.HashMap IStateID (DCFANode a)
-type NCFANode a    = [(Label a, S.Set IRegID, Bool, IStateID)]
+type NCFANode a    = [(Label a, IRegID, Bool, IStateID)]
 type NCFAGraph a   = M.HashMap IStateID (NCFANode a)
 
 
