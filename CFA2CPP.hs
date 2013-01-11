@@ -5,7 +5,7 @@ module CFA2CPP
 
 import qualified Data.HashMap.Strict       as M
 import qualified Data.Set                  as S
-import           Data.List                       (foldl', partition, nub, unzip4, sortBy)
+import           Data.List                       (foldl', partition, nub, sortBy)
 import           Text.PrettyPrint.HughesPJ       (($$), (<>), Doc)
 import qualified Text.PrettyPrint.HughesPJ as PP
 import           Data.Maybe                      (fromJust)
@@ -166,7 +166,11 @@ get_conds2code id_info ids  =
 
 
 get_conds :: MRegID2RegInfo -> S.Set IRegID -> [S.Set SCond]
-get_conds id_info = (\ (_, conds, _, _) -> conds) . unzip4 . get_conds2code id_info
+get_conds id_info ids =
+    let f conds id (_, conds2code) = conds ++ if id `S.member` ids
+            then (map fst . M.toList) conds2code
+            else []
+    in  M.foldlWithKey' f [] id_info
 
 
 codegen_match_code :: MRegID2RegInfo -> Maybe SCode -> Doc
@@ -239,13 +243,15 @@ router2 opts =
             OptsBlock _              _ _ _ -> d2
 
 
-router3 :: Options -> Bool -> IBlkID -> Doc
-router3 opts is_init k =
+router3 :: Options -> Bool -> Bool -> IBlkID -> Doc
+router3 opts is_init is_final k =
     let d1 = if is_init
             then PP.text "ADJUST_MARKER = true;"
             else PP.empty
         d2 = PP.text "MARKER += ADJUST_MARKER;"
-        d3 = PP.text "MARKER ++;"
+        d3 = if is_final
+            then PP.empty
+            else PP.text "MARKER ++;"
         d4 = doc_goto_fin k opts
     in  case opts of
             Opts      _      _       _ _ (Just def_act) -> PP.text def_act
@@ -321,13 +327,13 @@ codegen_cases (SI _ is_init is_final node _) (BI k opts id_info _) =
                 )
         node'        = (sortBy compare_by_label . M.toList) node
         cases        = foldl' one_case PP.empty node'
-        default_case = doc_default (router3 opts is_init k)
+        default_case = doc_default (router3 opts is_init is_final k)
     in  cases $$ default_case
 
 
 codegen_fstate :: Labellable a => StateInfo a -> BlockInfo a -> PP.Doc
 codegen_fstate (SI _ _ _ node ids) (BI _ opts id_info _) =
-    let id_conds_code = get_conds2code id_info (fromJust ids)
+    let id_conds_code = get_conds2code id_info ((S.singleton . S.findMin . fromJust) ids)
         f doc (id, conds, _, code) =
             let code'  = router4 opts (node == M.empty) (id, code)
                 code'' = doc_if [conds] code'

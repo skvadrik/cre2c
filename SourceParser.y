@@ -34,7 +34,7 @@ import           Helpers
 
 Source :: { [Chunk] }
     : code                                           { [Ch1 $1] }
-    | code start options Rules end Source            { (Ch2 $1 $3 (foldl' insert_rule M.empty $4)) : $6 }
+    | code start options Rules end Source            { (Ch2 $1 $3 (fst $ foldl' insert_rule (M.empty, 0) $4)) : $6 }
     | code start options       end Source            { err "empty rule list; useless scanner block." }
 
 Rules :: { [Rule] }
@@ -231,11 +231,11 @@ err s = error $ "*** SourceParser : " ++ s
 --------------------------------------------------------------------------------
 
 
-combine_rules :: (Maybe SBlkname, MCondset2Code) -> (Maybe SBlkname, MCondset2Code) -> (Maybe SBlkname, MCondset2Code)
-combine_rules (Just b, _) (Just b', _) | b /= b' = err "rules for one regexp lead to different blocks"
-combine_rules (Just b, _) (Nothing, _)           = err "combine_rules: dark magic..."
-combine_rules (Nothing, _) (Just b, _)           = err "combine_rules: dark magic..."
-combine_rules (b, conds2code) (b', conds2code')  =
+combine_rules :: (IRegID, (Maybe SBlkname, MCondset2Code)) -> (IRegID, (Maybe SBlkname, MCondset2Code)) -> (IRegID, (Maybe SBlkname, MCondset2Code))
+combine_rules (_, (Just b,  _         )) (_,  (Just b', _          )) | b /= b' = err "rules for one regexp lead to different blocks"
+combine_rules (_, (Just b,  _         )) (_,  (Nothing, _          ))           = err "combine_rules: dark magic..."
+combine_rules (_, (Nothing, _         )) (_,  (Just b,  _          ))           = err "combine_rules: dark magic..."
+combine_rules (k, (b,       conds2code)) (k', (b',      conds2code'))           =
     let conds2code'' = M.foldlWithKey'
             (\ c2c conds code -> M.insertWith
                 (\ _ code' -> concat ["{ ", code, code', " }"])
@@ -243,15 +243,17 @@ combine_rules (b, conds2code) (b', conds2code')  =
                 code
                 conds2code
             ) conds2code' conds2code
-    in  (b, conds2code'')
+    in  (min k k', (b, conds2code''))
 
 
-insert_rule :: MRegname2RegInfo -> Rule -> MRegname2RegInfo
-insert_rule rules (name, block, conds, code) = M.insertWith
-    combine_rules
-    name
-    (block, M.insert (S.fromList conds) code M.empty)
-    rules
+insert_rule :: (MRegname2RegInfo, Int) -> Rule -> (MRegname2RegInfo, Int)
+insert_rule (rules, k) (name, block, conds, code) =
+    let rules' = M.insertWith
+            combine_rules
+            name
+            (k, (block, M.insert (S.fromList conds) code M.empty))
+            rules
+    in  (rules', k + 1)
 
 
 parse_source :: String -> [Chunk]

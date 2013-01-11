@@ -24,7 +24,7 @@ type IBlkID    = Int
 
 
 type MRegID2RegInfo       = M.HashMap IRegID        (Maybe SBlkname, MCondset2Code)
-type MRegname2RegInfo     = M.HashMap SRegname      (Maybe SBlkname, MCondset2Code)
+type MRegname2RegInfo     = M.HashMap SRegname      (IRegID, (Maybe SBlkname, MCondset2Code))
 type MCondset2Code        = M.HashMap (S.Set SCond) SCode
 type MRegname2Regexp a    = M.HashMap SRegname      (Regexp a)
 type MTokname2TokID       = M.HashMap STokname      ITokID

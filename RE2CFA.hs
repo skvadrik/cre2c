@@ -109,15 +109,15 @@ err :: String -> a
 err s = error $ "*** RE2CFA : " ++ s
 
 
-re2ncfa :: (Labellable a) => [SRegname] -> MRegname2Regexp a -> Maybe MTokname2TokID -> (NCFA a, Int)
+re2ncfa :: (Labellable a) => M.HashMap IRegID SRegname -> MRegname2Regexp a -> Maybe MTokname2TokID -> (NCFA a, Int)
 re2ncfa rs rt ttbl =
     let ncfa          = new_ncfa 0
-        (ncfa', _, l) = foldl'
-            (\ (ncfa, ss, l) (k, r) ->
+        (ncfa', _, l) = M.foldlWithKey'
+            (\ (ncfa, ss, l) k r ->
                 let regexp         = M.lookupDefault (err ("re2ncfa : undefined regexp: " ++ show r)) r rt
                     (ncfa', _, l') = ncfa_add_regexp (ncfa, ss, 0) regexp rt ttbl k
                 in  (ncfa', ss, max l l')
             )
             (ncfa, S.insert (ncfa_init_state ncfa) S.empty, 0)
-            (zip [0 .. length rs - 1] rs)
+            rs
     in  (ncfa', l)

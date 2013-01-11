@@ -44,12 +44,13 @@ gen_code_for_chunk k (Ch2 code opts rules) rtbl ttbl v = do
         verbose = case v of
             V1 -> trace'
             _  -> id
-        (regexps, conds2code) = (unzip . M.toList) rules
-        conds2code'           = M.fromList $ zip [0 .. length conds2code - 1] conds2code
-        (ncfa, maxlen')       = re2ncfa regexps rtbl ttbl
-        dcfa                  = determine (verbose ncfa)
-        bi                    = BI k opts conds2code' ttbl
-        code'                 = cfa2cpp (verbose dcfa) code maxlen' bi
+        (regexps, id_conds2code) = (unzip . M.toList) rules
+        id2conds2code            = M.fromList id_conds2code
+        rid2regname              = M.fromList $ zip ((fst . unzip) id_conds2code) regexps
+        (ncfa, maxlen')          = re2ncfa rid2regname rtbl ttbl
+        dcfa                     = determine (verbose ncfa)
+        bi                       = BI k opts id2conds2code ttbl
+        code'                    = cfa2cpp (verbose dcfa) code maxlen' bi
     when (v == V2) $
         putStrLn "Generating .dot for NCFA..." >> ncfa_to_dot ncfa (printf "ncfa%d.dot" k) >>
         putStrLn "Generating .png for NCFA..." >> system (printf "dot -Tpng -oncfa%d.png ncfa%d.dot" k k) >>
