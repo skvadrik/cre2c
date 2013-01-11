@@ -208,12 +208,9 @@ router0 opts k id_info =
     in  case opts of
             Opts      Single _       _ _ (Just _) -> d4
             Opts      Single _       _ _ Nothing  -> d4 $$ d7
-            Opts      Normal Longest _ _ (Just _) -> d0 $$ d1 $$ d2 $$ d5 $$ d6 $$ d3
-            Opts      Normal Longest _ _ Nothing  -> d0 $$ d1 $$ d2 $$ d5 $$ d6 $$ d3 $$ d7
-            Opts      Normal All     _ _ (Just _) -> d0 $$ d1 $$ d5 $$ d3
-            Opts      Normal All     _ _ Nothing  -> d0 $$ d1 $$ d5 $$ d3 $$ d7
-            OptsBlock _              _ _ (Just _) -> d0 $$ d1 $$ d2 $$ d3 $$ d5 $$ d6
-            OptsBlock _              _ _ Nothing  -> d0 $$ d1 $$ d2 $$ d3 $$ d5 $$ d6 $$ d7
+            Opts      Normal Longest _ _ _        -> d0 $$ d1 $$ d2 $$ d5 $$ d6 $$ d3 $$ d7
+            Opts      Normal All     _ _ _        -> d0 $$ d1 $$ d5 $$ d3 $$ d7
+            OptsBlock _              _ _ _        -> d0 $$ d1 $$ d2 $$ d3 $$ d5 $$ d6 $$ d7
 
 
 router1 :: Options -> Bool -> Bool -> Doc
@@ -243,6 +240,7 @@ router2 opts =
             OptsBlock _              _ _ _ -> d2
 
 
+-- я предполагаю что начальное состояние не может быть финальным
 router3 :: Options -> Bool -> Bool -> IBlkID -> Doc
 router3 opts is_init is_final k =
     let d1 = if is_init
@@ -254,11 +252,12 @@ router3 opts is_init is_final k =
             else PP.text "MARKER ++;"
         d4 = doc_goto_fin k opts
     in  case opts of
-            Opts      _      _       _ _ (Just def_act) -> PP.text def_act
-            OptsBlock _              _ _ (Just def_act) -> PP.text def_act
+            Opts      Single _       _ _ (Just def_act) -> PP.text def_act $$ d4
             Opts      Single _       _ _ Nothing        -> PP.empty $$ d4
+            Opts      Normal _       _ _ (Just _)       -> d4
             Opts      Normal All     _ _ Nothing        -> d1 $$ d2 $$ d4
             Opts      Normal Longest _ _ Nothing        -> d3 $$ d4
+            OptsBlock _              _ _ (Just _)       -> d4
             OptsBlock _              _ _ Nothing        -> d3 $$ d4
 
 
@@ -322,6 +321,7 @@ codegen_cases (SI _ is_init is_final node _) (BI k opts id_info _) =
             doc
             $$ doc_case l
             $$ PP.nest 4
+--                ( PP.text "printf (\"%c\\n\", *(CURSOR - 1));"
                 ( router1 opts is_init is_final
                 $$ case_body ids b s
                 )
