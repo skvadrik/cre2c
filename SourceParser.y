@@ -54,7 +54,9 @@ Rules2 :: { [Rule] }
     | Rule2 Rules2                                   { $1 : $2 }
 
 Rule2 :: { Rule }
-    : name ':' name '=' code                         { ($1, Just $3, [], $5) }
+    : name '=' code                                  { ($1, Nothing, [], $3) }
+    | Conds '>' name '=' code                        { ($3, Nothing, $1, $5) }
+    | name ':' name '=' code                         { ($1, Just $3, [], $5) }
     | Conds '>' name ':' name '=' code               { ($3, Just $5, $1, $7) }
 
 Conds :: { [SCond] }

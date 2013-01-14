@@ -173,14 +173,16 @@ get_conds id_info ids =
     in  M.foldlWithKey' f [] id_info
 
 
-codegen_match_code :: MRegID2RegInfo -> Maybe SCode -> Doc
-codegen_match_code id_info df =
+codegen_match_code :: Maybe SBlkname -> MRegID2RegInfo -> Maybe SCode -> Doc
+codegen_match_code cur_block id_info df =
     let ids      = (S.fromList . M.keys) id_info
         id_info' = get_conds2code id_info ids
         f d (id, conds, block, code) =
             let d1 = doc_if [conds] (PP.text code)
-                d2 = case block of
-                    Just b  -> doc_goto_block b
+                d2 = case cur_block of
+                    Just b  -> case block of
+                        Just b' -> doc_goto_block b'
+                        Nothing -> doc_goto_block b
                     Nothing -> PP.empty
                 d3 = doc_case_break id (d1 $$ d2)
             in  d $$ d3
@@ -199,7 +201,9 @@ router0 :: Options -> IBlkID -> MRegID2RegInfo -> Doc
 router0 opts k id_info =
     let d0 = doc_goto_start k opts
         d1 = doc_decl_fin k opts
-        d2 = codegen_match_code id_info (default_action opts)
+        d2 = case opts of
+            Opts _ _ _ _ _    -> codegen_match_code Nothing id_info (default_action opts)
+            OptsBlock b _ _ _ -> codegen_match_code (Just b) id_info (default_action opts)
         d3 = doc_decl_start k opts
         d4 = PP.text "TOKEN = MARKER;"
         d5 = PP.text "CURSOR = MARKER;"
@@ -277,7 +281,7 @@ router4 opts empty_node (n, code) =
 
 router5 :: BlockInfo a -> Doc
 router5 (BI k opts id_info _) = case opts of
-    Opts Single _ _ _ df -> doc_decl_fin k opts $$ codegen_match_code id_info df
+    Opts Single _ _ _ df -> doc_decl_fin k opts $$ codegen_match_code Nothing id_info df
     _                    -> PP.empty
 
 
