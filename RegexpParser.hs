@@ -540,6 +540,7 @@ lexer ttbl (c : cs)
         in  TokenName nm : lexer ttbl rest
 lexer ttbl ('='  : cs)        = TokenEq : lex_regexp ttbl cs
 lexer ttbl ('-'  : '-'  : cs) = lex_comment ttbl cs
+lexer _    s = err $ "cant't parse " ++ s
 
 
 lex_comment :: Labellable ta => Maybe MTokname2TokID -> SCode -> [Token ta]
@@ -626,7 +627,6 @@ parse_def_file ttbls s =
             Just _  -> Right (ttype, parse_regexps ttbl s')
 {-# LINE 1 "templates/GenericTemplate.hs" #-}
 {-# LINE 1 "templates/GenericTemplate.hs" #-}
-{-# LINE 1 "<built-in>" #-}
 {-# LINE 1 "<command-line>" #-}
 {-# LINE 1 "templates/GenericTemplate.hs" #-}
 -- Id: GenericTemplate.hs,v 1.26 2005/01/14 14:47:22 simonmar Exp 

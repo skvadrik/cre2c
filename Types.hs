@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module Types where
 
 import qualified Data.HashMap.Strict   as M
@@ -5,7 +7,7 @@ import qualified Data.Set              as S
 import           Data.Hashable
 import           Data.Char                   (toLower, toUpper)
 import           Text.Printf
-import Control.DeepSeq
+import           GHC.Generics                (Generic)
 
 import           Helpers
 
@@ -119,9 +121,10 @@ data Match
 data Label a
     = LOne a
     | LRange (S.Set a)
-instance Labellable a => Hashable (Label a) where
-    hash (LOne c)   = hash c
-    hash (LRange r) = hash r
+    deriving (Generic)
+
+instance Labellable a => Hashable (Label a)
+
 instance Labellable a => Eq (Label a) where
     LOne   x  == LOne   y  = x == y
     LRange xs == LRange ys = xs == ys
@@ -138,15 +141,13 @@ instance Labellable a => Ord (Label a) where
     LRange xs      `compare` LRange ys      = xs `compare` ys
     LOne   _       `compare` LRange _       = LT
     LRange _       `compare` LOne   _       = GT
+
 instance Labellable a => Show (Label a) where
     show (LOne   x ) = show_hex  x
     show (LRange xs) = shows_hex xs
-instance Labellable a => NFData (Label a) where
-    rnf (LOne x) = rnf x
-    rnf (LRange xs) = rnf xs
 
 
-class (Eq a, Ord a, PrintfArg a, NFData a, Show a, Hashable a) => Labellable a where
+class (Eq a, Ord a, PrintfArg a, Show a, Hashable a) => Labellable a where
     read' :: String -> Maybe MTokname2TokID -> (a, String)
 
     reads' :: Maybe MTokname2TokID -> String -> [a]
@@ -224,10 +225,11 @@ instance Labellable Int where
 
 
 hashAndCombine :: Hashable h => Int -> h -> Int
-hashAndCombine acc h = acc `combine` hash h
+hashAndCombine acc h = acc `hashWithSalt` h
 
-instance (Hashable a) => Hashable (S.Set a) where
-    hash = S.foldl' hashAndCombine 0
+instance Hashable a => Hashable (S.Set a) where
+    hashWithSalt s set = s `hashWithSalt` S.foldl' hashAndCombine 0 set
+--    hash = S.foldl' hashAndCombine 0
 
 
 err :: String -> a

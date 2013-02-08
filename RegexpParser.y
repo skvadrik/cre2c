@@ -135,6 +135,7 @@ lexer ttbl (c : cs)
         in  TokenName nm : lexer ttbl rest
 lexer ttbl ('='  : cs)        = TokenEq : lex_regexp ttbl cs
 lexer ttbl ('-'  : '-'  : cs) = lex_comment ttbl cs
+lexer _    s = err $ "cant't parse " ++ s
 
 
 lex_comment :: Labellable ta => Maybe MTokname2TokID -> SCode -> [Token ta]
