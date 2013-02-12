@@ -607,7 +607,7 @@ lex_range ttbl cs =
             '^' : r3 -> (span_negative_range . reads' ttbl) r3
             _        -> (span_range . reads' ttbl) r1
     in  case r2 of
-            [x] -> TokenChain [x] : lex_regexp ttbl cs'
+            [x] -> TokenDQuote : TokenChain [x] : TokenDQuote : lex_regexp ttbl cs'
             xs  -> TokenOSqBracket : TokenRange (S.fromList xs) : TokenCSqBracket : lex_regexp ttbl cs'
 
 
