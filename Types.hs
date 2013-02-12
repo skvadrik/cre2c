@@ -2,12 +2,12 @@
 
 module Types where
 
-import qualified Data.HashMap.Strict   as M
+import qualified Data.HashMap.Strict   as M hiding (lookupDefault)
 import qualified Data.Set              as S
 import           Data.Hashable
-import           Data.Char                   (toLower, toUpper)
+import           Data.Char                         (toLower, toUpper)
 import           Text.Printf
-import           GHC.Generics                (Generic)
+import           GHC.Generics                      (Generic)
 
 import           Helpers
 
@@ -121,15 +121,9 @@ data Match
 data Label a
     = LOne a
     | LRange (S.Set a)
-    deriving (Generic)
+    deriving (Eq, Generic)
 
 instance Labellable a => Hashable (Label a)
-
-instance Labellable a => Eq (Label a) where
-    LOne   x  == LOne   y  = x == y
-    LRange xs == LRange ys = xs == ys
-    LOne   x  == LRange xs = x `S.member` xs
-    LRange xs == LOne   x  = x `S.member` xs
 
 (~=) :: Labellable a => Label a -> Label a -> Bool
 (LOne x)    ~= (LOne y)    = x == y
@@ -224,13 +218,12 @@ instance Labellable Int where
     span_case i = [i]
 
 
-hashAndCombine :: Hashable h => Int -> h -> Int
-hashAndCombine acc h = acc `hashWithSalt` h
-
 instance Hashable a => Hashable (S.Set a) where
-    hashWithSalt s set = s `hashWithSalt` S.foldl' hashAndCombine 0 set
---    hash = S.foldl' hashAndCombine 0
+    hashWithSalt s set = s `hashWithSalt` S.foldl' hashWithSalt 0 set
 
 
 err :: String -> a
 err s = error $ "*** Types : " ++ s
+
+
+

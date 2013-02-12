@@ -3,14 +3,15 @@ module CFA2CPP
     ) where
 
 
-import qualified Data.HashMap.Strict       as M
+import qualified Data.HashMap.Strict       as M hiding (lookupDefault)
+import qualified Data.HashMap.Lazy         as M        (lookupDefault)
 import qualified Data.Set                  as S
-import           Data.List                       (foldl', partition, nub, sortBy)
-import           Text.PrettyPrint.HughesPJ       (($$), (<>), Doc)
+import           Data.List                             (foldl', partition, nub, sortBy)
+import           Text.PrettyPrint.HughesPJ             (($$), (<>), Doc)
 import qualified Text.PrettyPrint.HughesPJ as PP
-import           Data.Maybe                      (fromJust)
+import           Data.Maybe                            (fromJust)
 
-import           Types                     hiding (err)
+import           Types                          hiding (err)
 import           Helpers
 import           CFA
 

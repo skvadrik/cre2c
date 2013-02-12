@@ -20,12 +20,13 @@ module CFA
     ) where
 
 
-import qualified Data.HashMap.Strict as M
+import qualified Data.HashMap.Strict as M hiding (lookupDefault)
+import qualified Data.HashMap.Lazy   as M        (lookupDefault)
 import qualified Data.Set            as S
-import           Data.List                (foldl')
-import           Control.Monad            (forM_)
-import           Control.Applicative      ((<$>))
-import           Data.Maybe               (isJust)
+import           Data.List                       (foldl')
+import           Control.Monad                   (forM_)
+import           Control.Applicative             ((<$>))
+import           Data.Maybe                      (isJust)
 import           System.Cmd
 import           System.IO.Unsafe
 import           Data.Time.Clock

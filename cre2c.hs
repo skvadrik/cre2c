@@ -1,21 +1,22 @@
 #!/usr/bin/env runghc
 
 
-import           Control.Applicative             ((<$>))
-import           Control.Monad                   (when)
-import           Data.Char                       (toUpper, toLower)
-import qualified Data.HashMap.Strict       as M
-import           Data.Either                     (lefts, rights)
-import           Data.List                       (foldl')
+import           Control.Applicative                   ((<$>))
+import           Control.Monad                         (when)
+import           Data.Char                             (toUpper, toLower)
+import qualified Data.HashMap.Strict       as M hiding (lookupDefault)
+import qualified Data.HashMap.Lazy         as M        (lookupDefault)
+import           Data.Either                           (lefts, rights)
+import           Data.List                             (foldl')
 import           System.Cmd
 import           System.Console.GetOpt
-import           System.Environment              (getArgs)
-import           System.FilePath.Posix           (takeDirectory, (<.>), (</>))
+import           System.Environment                    (getArgs)
+import           System.FilePath.Posix                 (takeDirectory, (<.>), (</>))
 import           Text.Printf
 import qualified Text.PrettyPrint.HughesPJ as PP
-import           Text.PrettyPrint.HughesPJ       (($$), (<>))
+import           Text.PrettyPrint.HughesPJ             (($$), (<>))
 
-import           Types                           hiding (err)
+import           Types                          hiding (err)
 import           Helpers
 import           CFA
 import           RE2CFA

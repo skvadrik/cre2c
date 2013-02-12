@@ -3,7 +3,8 @@ module RE2CFA
     ) where
 
 
-import qualified Data.HashMap.Strict   as M
+import qualified Data.HashMap.Strict   as M hiding (lookupDefault)
+import qualified Data.HashMap.Lazy     as M        (lookupDefault)
 import qualified Data.Set              as S
 import           Data.List                  (foldl')
 

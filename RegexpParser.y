@@ -5,14 +5,15 @@ module RegexpParser
     ( parse_def_file
     ) where
 
-import qualified Data.HashMap.Strict as M
+import qualified Data.HashMap.Strict as M hiding (lookupDefault)
+import qualified Data.HashMap.Lazy   as M        (lookupDefault)
 import           Data.Char
-import           Control.Applicative       ((<$>))
-import           Data.List                 (foldl', isPrefixOf)
+import           Control.Applicative             ((<$>))
+import           Data.List                       (foldl', isPrefixOf)
 import qualified Data.Set            as S
 import           Text.Printf
 
-import           Types               hiding (err)
+import           Types                    hiding (err)
 import           Helpers
 
 #define HappyAbsSyn    (HappyAbsSyn_ ta)

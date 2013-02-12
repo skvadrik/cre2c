@@ -3,14 +3,15 @@ module SourceParser
     ( parse_source
     ) where
 
-import qualified Data.HashMap.Strict   as M
+import qualified Data.HashMap.Strict   as M hiding (lookupDefault)
+import qualified Data.HashMap.Lazy     as M        (lookupDefault)
 import           Data.Char
-import           Data.List                   (foldl', isPrefixOf)
+import           Data.List                         (foldl', isPrefixOf)
 import qualified Data.DList            as DL
 import qualified Data.Set              as S
 import           Text.Printf
 
-import           Types                 hiding (err)
+import           Types                      hiding (err)
 import           Helpers
 
 -- parser produced by Happy Version 1.18.10
