@@ -340,7 +340,9 @@ codegen_fstate (SI _ _ _ node ids) (BI _ opts id_info _) =
     let id_conds_code = get_conds2code id_info ((S.singleton . S.findMin . fromJust) ids)
         f doc (id, conds, _, code) =
             let code'  = router4 opts (node == M.empty) (id, code)
-                code'' = doc_if [conds] code'
+                code'' = if conds /= S.empty
+                    then doc_if_else [conds] code' (PP.text "MARKER ++;")
+                    else code'
             in  doc $$ PP.nest 4 code''
     in  foldl' f  PP.empty id_conds_code
 
