@@ -1,4 +1,4 @@
 #!/bin/sh
 
 make clean_all
-make PROF="-auto-all -prof"
+make PROF="-rtsopts -auto-all -caf-all -prof -fforce-recomp"
