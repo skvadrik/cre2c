@@ -1,7 +1,7 @@
 O            ?= obj
 HI           ?= hi
 PROGRAM       = cre2c
-GHCFLAGS     += -O2 -hidir $(HI) -odir $(O) -i$(O):$(HI) $(PROF)
+GHCFLAGS     += -O2 -hidir $(HI) -odir $(O) -i$(O):$(HI) -rtsopts $(PROF)
 GHCFLAGS     += -Wall -W -fno-warn-name-shadowing
 
 HAPPY_SOURCES       = RegexpParser.y SourceParser.y
