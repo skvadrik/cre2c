@@ -350,13 +350,14 @@ codegen_fstate (SI _ _ _ node ids) (BI _ _ opts id_info _) =
 codegen_state :: Labellable a => StateInfo a -> BlockInfo a -> PP.Doc
 codegen_state si@(SI s is_init is_final node _) bi@(BI k maxlen opts _ ttbl) =
     let fstate = if is_final then codegen_fstate si bi else PP.empty
+        d0     = if is_init then PP.empty else doc_decl k s
         d1     = router6 opts is_init
         d2     = router7 opts
         state  = case M.toList node of
             []                                             -> doc_goto_fin k opts
             [(LRange r, (_, b, s))] | is_full_range r ttbl -> d1 $$ if b then codegen_refill maxlen else PP.empty $$ doc_goto k s
             _                                              -> doc_switch d2 (codegen_cases si bi)
-    in  doc_decl k s
+    in  d0
         $$ fstate
         $$ PP.nest 4 state
 
