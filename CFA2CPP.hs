@@ -3,6 +3,7 @@ module CFA2CPP
     ) where
 
 
+import           Data.Function                         (on)
 import qualified Data.HashMap.Strict       as M hiding (lookupDefault)
 import qualified Data.HashMap.Lazy         as M        (lookupDefault)
 import qualified Data.Set                  as S
@@ -18,25 +19,25 @@ import           CFA
 
 cfa2cpp :: Labellable a => DCFA a -> SCode -> BlockInfo a -> SCode
 cfa2cpp dcfa prolog bi =
-    let entry      = codegen_entry bi
-        g          = dcfa_graph dcfa
-        s0         = dcfa_init_state dcfa
-        states     = M.foldlWithKey'
-            (\ code s node ->
+    let entry        = codegen_entry bi
+        g            = dcfa_graph dcfa
+        s0           = dcfa_init_state dcfa
+        states       = foldl'
+            (\ code (s, node) ->
                 let is_init  = s == s0
                     is_final = dcfa_is_final s dcfa
                     si       = SI s is_init False node Nothing
                 in  code $$$ if is_final
                         then PP.empty
                         else codegen_state si bi
-            ) PP.empty g
-        final_states = M.foldlWithKey'
-            (\ code s accepted ->
-                let is_init = s == s0
-                    node    = M.lookupDefault M.empty s g
-                    si      = SI s is_init True node (Just accepted)
+            ) PP.empty (sortBy (compare `on` fst) $ M.toList g)
+        final_states = foldl'
+            (\ code (s, accepted) ->
+                let is_init  = s == s0
+                    node     = M.lookupDefault M.empty s g
+                    si       = SI s is_init True node (Just accepted)
                 in  code $$$ codegen_state si bi
-            ) PP.empty (dcfa_final_states dcfa)
+            ) PP.empty (sortBy (compare `on` fst) $ M.toList $ dcfa_final_states dcfa)
         ending      = router5 bi
     in  PP.render $
             (PP.text prolog)
@@ -304,7 +305,6 @@ router7 opts =
 codegen_entry :: BlockInfo a -> PP.Doc
 codegen_entry (BI k maxlen opts id_info _) =
     router0 opts maxlen k id_info
-    $$ doc_goto k 0
 
 
 compare_by_label :: Labellable a => (Label a, b) -> (Label a, b) -> Ordering
