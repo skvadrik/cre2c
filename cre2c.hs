@@ -50,8 +50,8 @@ gen_code_for_chunk k (Ch2 code opts rules) rtbl ttbl v = do
         rid2regname              = M.fromList $ zip ((fst . unzip) id_conds2code) regexps
         (ncfa, maxlen')          = re2ncfa rid2regname rtbl ttbl
         dcfa                     = determine (verbose ncfa)
-        bi                       = BI k opts id2conds2code ttbl
-        code'                    = cfa2cpp (verbose dcfa) code maxlen' bi
+        bi                       = BI k maxlen' opts id2conds2code ttbl
+        code'                    = cfa2cpp (verbose dcfa) code bi
     when (v == V2) $
         putStrLn "Generating .dot for NCFA..." >> ncfa_to_dot ncfa (printf "ncfa%d.dot" k) >>
         putStrLn "Generating .png for NCFA..." >> system (printf "dot -Tpng -oncfa%d.png ncfa%d.dot" k k) >>

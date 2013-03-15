@@ -16,9 +16,9 @@ import           Helpers
 import           CFA
 
 
-cfa2cpp :: Labellable a => DCFA a -> SCode -> Int -> BlockInfo a -> SCode
-cfa2cpp dcfa prolog maxlen bi@(BI _ _ _ _) =
-    let entry      = codegen_entry maxlen bi
+cfa2cpp :: Labellable a => DCFA a -> SCode -> BlockInfo a -> SCode
+cfa2cpp dcfa prolog bi =
+    let entry      = codegen_entry bi
         g          = dcfa_graph dcfa
         s0         = dcfa_init_state dcfa
         states     = M.foldlWithKey'
@@ -39,7 +39,7 @@ cfa2cpp dcfa prolog maxlen bi@(BI _ _ _ _) =
             ) PP.empty (dcfa_final_states dcfa)
         ending      = router5 bi
     in  PP.render $
-            PP.text prolog
+            (PP.text prolog)
             $$$ entry
             $$$ states
             $$$ final_states
@@ -194,12 +194,12 @@ codegen_match_code cur_block id_info df =
     in  doc_switch (PP.text "ACCEPT") (d1 $$ d2)
 
 
-codegen_refill :: Doc
-codegen_refill = PP.text "if (LIMIT - CURSOR < MAXLEN) FILL();"
+codegen_refill :: Int -> Doc
+codegen_refill maxlen = PP.text "if (LIMIT - CURSOR < " <> PP.int maxlen <> PP.text ") FILL();"
 
 
-router0 :: Options -> IBlkID -> MRegID2RegInfo -> Doc
-router0 opts k id_info =
+router0 :: Options -> Int -> IBlkID -> MRegID2RegInfo -> Doc
+router0 opts maxlen k id_info =
     let d0 = doc_goto_start k opts
         d1 = doc_decl_fin k opts
         d2 = case opts of
@@ -209,7 +209,7 @@ router0 opts k id_info =
         d4 = PP.text "TOKEN = MARKER;"
         d5 = PP.text "CURSOR = MARKER;"
         d6 = PP.text "ACCEPT = -1;"
-        d7 = codegen_refill
+        d7 = codegen_refill maxlen
     in  case opts of
             Opts      Single _       _ _ (Just _) -> d4
             Opts      Single _       _ _ Nothing  -> d4 $$ d7
@@ -245,7 +245,7 @@ router2 opts =
             OptsBlock _              _ _ _ -> d2
 
 
--- я предполагаю что начальное состояние не может быть финальным
+-- suppose init state cannot be final
 router3 :: Options -> Bool -> Bool -> IBlkID -> Doc
 router3 opts is_init is_final k =
     let d1 = if is_init
@@ -281,7 +281,7 @@ router4 opts empty_node (n, code) =
 
 
 router5 :: BlockInfo a -> Doc
-router5 (BI k opts id_info _) = case opts of
+router5 (BI k _ opts id_info _) = case opts of
     Opts Single _ _ _ df -> doc_decl_fin k opts $$ codegen_match_code Nothing id_info df
     _                    -> PP.empty
 
@@ -301,10 +301,9 @@ router7 opts =
         Nothing         -> PP.text "*CURSOR++"
 
 
-codegen_entry :: Int -> BlockInfo a -> PP.Doc
-codegen_entry maxlen (BI k opts id_info _) =
-    PP.text "MAXLEN = " <> PP.int maxlen <> PP.semi
-    $$ router0 opts k id_info
+codegen_entry :: BlockInfo a -> PP.Doc
+codegen_entry (BI k maxlen opts id_info _) =
+    router0 opts maxlen k id_info
     $$ doc_goto k 0
 
 
@@ -313,9 +312,9 @@ compare_by_label (l1, _) (l2, _) = l1 `compare` l2
 
 
 codegen_cases :: Labellable a => StateInfo a -> BlockInfo a -> PP.Doc
-codegen_cases (SI _ is_init is_final node _) (BI k opts id_info _) =
+codegen_cases (SI _ is_init is_final node _) (BI k maxlen opts id_info _) =
     let case_body ids b s =
-            let check_cyclic   = if b then codegen_refill else PP.empty
+            let check_cyclic   = if b then codegen_refill maxlen else PP.empty
                 conds          = get_conds id_info ids
                 is_conditional = (null . fst . partition (== S.empty)) conds
                 goto_m         = doc_goto k s
@@ -326,7 +325,6 @@ codegen_cases (SI _ is_init is_final node _) (BI k opts id_info _) =
             doc
             $$ doc_case l
             $$ PP.nest 4
---                ( PP.text "printf (\"%c\\n\", *(CURSOR - 1));"
                 ( router1 opts is_init is_final
                 $$ case_body ids b s
                 )
@@ -337,7 +335,7 @@ codegen_cases (SI _ is_init is_final node _) (BI k opts id_info _) =
 
 
 codegen_fstate :: Labellable a => StateInfo a -> BlockInfo a -> PP.Doc
-codegen_fstate (SI _ _ _ node ids) (BI _ opts id_info _) =
+codegen_fstate (SI _ _ _ node ids) (BI _ _ opts id_info _) =
     let id_conds_code = get_conds2code id_info ((S.singleton . S.findMin . fromJust) ids)
         f doc (id, conds, _, code) =
             let code'  = router4 opts (node == M.empty) (id, code)
@@ -349,13 +347,13 @@ codegen_fstate (SI _ _ _ node ids) (BI _ opts id_info _) =
 
 
 codegen_state :: Labellable a => StateInfo a -> BlockInfo a -> PP.Doc
-codegen_state si@(SI s is_init is_final node _) bi@(BI k opts _ ttbl) =
+codegen_state si@(SI s is_init is_final node _) bi@(BI k maxlen opts _ ttbl) =
     let fstate = if is_final then codegen_fstate si bi else PP.empty
         d1     = router6 opts is_init
         d2     = router7 opts
         state  = case M.toList node of
             []                                             -> doc_goto_fin k opts
-            [(LRange r, (_, b, s))] | is_full_range r ttbl -> d1 $$ if b then codegen_refill else PP.empty $$ doc_goto k s
+            [(LRange r, (_, b, s))] | is_full_range r ttbl -> d1 $$ if b then codegen_refill maxlen else PP.empty $$ doc_goto k s
             _                                              -> doc_switch d2 (codegen_cases si bi)
     in  doc_decl k s
         $$ fstate

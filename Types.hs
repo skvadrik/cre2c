@@ -41,7 +41,7 @@ type NCFAGraph a   = M.HashMap IStateID (NCFANode a)
 data StateInfo a
     = SI IStateID Bool Bool (DCFANode a) (Maybe (S.Set IRegID))
 data BlockInfo a
-    = BI Int Options MRegID2RegInfo (Maybe MTokname2TokID)
+    = BI Int Int Options MRegID2RegInfo (Maybe MTokname2TokID)
 
 
 data Regexp a
