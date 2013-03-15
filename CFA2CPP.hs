@@ -304,7 +304,8 @@ router7 opts =
 
 codegen_entry :: BlockInfo a -> PP.Doc
 codegen_entry (BI k maxlen opts id_info _) =
-    router0 opts maxlen k id_info
+    PP.text "MAXLEN = " <> PP.int maxlen <> PP.semi
+    $$ router0 opts maxlen k id_info
 
 
 compare_by_label :: Labellable a => (Label a, b) -> (Label a, b) -> Ordering
