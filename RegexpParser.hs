@@ -591,7 +591,7 @@ lex_qchain :: Labellable ta => Maybe MTokname2TokID -> SCode -> [Token ta]
 lex_qchain ttbl cs =
     let (ch, rest) = break_escaped '\'' cs
         ch'        = reads' ttbl ch
-    in lex_qchain' ch' ++ lex_regexp ttbl rest
+    in TokenOBracket : lex_qchain' ch' ++ TokenCBracket : lex_regexp ttbl rest
 
 
 lex_dqchain :: Labellable ta => Maybe MTokname2TokID -> SCode -> [Token ta]
