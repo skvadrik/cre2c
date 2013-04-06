@@ -22,51 +22,88 @@ import           Helpers
 %error     { parseError }
 
 %token
-    name          { TName    $$ }
-    code          { TCode    $$ }
-    options       { TOptions $$ }
-    ':'           { TColon      }
-    '>'           { TAngle      }
-    '='           { TEq         }
-    start         { TStart      }
-    end           { TEnd        }
+    name           { TName    $$    }
+    code           { TCode    $$    }
+    start          { TStart         }
+    end            { TEnd           }
+    option_name    { TOptionName    }
+    option_type    { TOptionType    }
+    option_default { TOptionDefault }
+    type_char      { TypeChar       }
+    ':'            { TColon         }
+    '>'            { TAngle         }
+    '='            { TEq            }
 
 %%
 
 Source :: { [Chunk] }
-    : code                                           { [Ch1 $1] }
-    | code start options Rules end Source            { (Ch2 $1 $3 (fst $ foldl' insert_rule (M.empty, 0) $4)) : $6 }
-    | code start options       end Source            { err "empty rule list; useless scanner block." }
+    : code                                             { [Ch1 $1] }
+    | code start Rules end Source
+        {
+            let {
+                chunks  = $5;
+                options = Options (show $ length chunks) TTChar Nothing;
+                rules   = fst $ foldl' insert_rule (M.empty, 0) $3;
+                code    = $1
+            }
+            in  Ch2 code options rules : chunks
+        }
+    | code start Opts Rules end Source
+        {
+            let {
+                chunks  = $6;
+                options = case block_name $3 of {
+                    "" -> $3{block_name = show $ length chunks};
+                    _  -> $3
+                };
+                rules   = fst $ foldl' insert_rule (M.empty, 0) $4;
+                code    = $1
+            }
+            in  Ch2 code options rules : chunks
+        }
+
+Opts :: { Options }
+    :      OptName                                     { Options $1 TTChar Nothing  }
+    |      OptType                                     { Options "" $1     Nothing  }
+    |      OptDefault                                  { Options "" TTChar (Just $1)}
+    | Opts OptName                                     { $1{block_name = $2}     }
+    | Opts OptType                                     { $1{token_type = $2}     }
+    | Opts OptDefault                                  { $1{default_action = Just $2} }
+
+OptName :: { SBlkname }
+    : option_name '=' name                             { $3 }
+
+OptType :: { TokenType }
+    : option_type '=' type_char                        { TTChar    }
+    | option_type '=' name                             { TTEnum $3 }
+
+OptDefault :: { SCode }
+    : option_default '=' code                          { $3 }
 
 Rules :: { [Rule] }
-    : Rules1                                         { $1 }
-    | Rules2                                         { $1 }
+    : Rule                                             { [$1]    }
+    | Rule Rules                                       { $1 : $2 }
 
-Rules1 :: { [Rule] }
-    : Rule1                                          { [$1]    }
-    | Rule1 Rules1                                   { $1 : $2 }
-
-Rule1 :: { Rule }
-    : name '=' code                                  { ($1, Nothing, [], $3) }
-    | Conds '>' name '=' code                        { ($3, Nothing, $1, $5) }
-
-Rules2 :: { [Rule] }
-    : Rule2                                          { [$1]    }
-    | Rule2 Rules2                                   { $1 : $2 }
-
-Rule2 :: { Rule }
-    : name '=' code                                  { ($1, Nothing, [], $3) }
-    | Conds '>' name '=' code                        { ($3, Nothing, $1, $5) }
-    | name ':' name '=' code                         { ($1, Just $3, [], $5) }
-    | Conds '>' name ':' name '=' code               { ($3, Just $5, $1, $7) }
+Rule :: { Rule }
+    :           name          code                     { ($1, Nothing, [], $2) }
+    | Conds '>' name          code                     { ($3, Nothing, $1, $4) }
+    |           name ':' name code                     { ($1, Just $3, [], $4) }
+    | Conds '>' name ':' name code                     { ($3, Just $5, $1, $6) }
 
 Conds :: { [SCond] }
-    : name                                           { [$1]    }
-    | name Conds                                     { $1 : $2 }
+    : name                                             { [$1]    }
+    | name Conds                                       { $1 : $2 }
 
 
 {
+{-
+data ParserState = ParserState { parser_name :: String }
 
+then_ps :: ParserState a -> (a -> ParserState b) -> ParserState b
+then_ps =
+
+return_ps = a -> ParserState a
+-}
 type Rule
     = (SRegname, Maybe SBlkname, [SCond], SCode)
 
@@ -76,144 +113,49 @@ data Token
     | TColon
     | TStart
     | TEnd
+    | TOptionName
+    | TOptionType
+    | TOptionDefault
+    | TypeChar
     | TCode    SCode
     | TName    String
-    | TOptions Options
     deriving (Show)
-
-data OptionSet = OptionSet
-    { opt_mode        :: Mode
-    , opt_match       :: Match
-    , opt_block       :: Maybe SBlkname
-    , opt_token_type  :: TokenType
-    , opt_prelexer    :: Maybe String
-    , opt_default     :: Maybe SCode
-    }
 
 
 parseError :: [Token] -> a
 parseError e = err $ "Parse error: " ++ show e
 
 
-lexer :: String -> [Token]
-lexer s =
-    let (entry, s') = lex_entry s
-    in  TCode entry : case s' of
-            "" -> []
-            _  -> TStart : lex_options s'
-
-
-lex_entry :: SCode -> (SCode, String)
-lex_entry s =
-    let s1 = "/*start:"
-        lex_entry' entry rest = case rest of
-            ""                    -> (DL.toList entry, "")
-            r | s1 `isPrefixOf` r -> (DL.toList entry, drop (length s1) r)
-            c : cs                -> lex_entry' (DL.snoc entry c) cs
-    in  lex_entry' DL.empty s
-
-
-lex_options :: String -> [Token]
-lex_options s =
-    let s1 = "!cre2c_mode:"
-        s2 = "!cre2c_match:"
-        s3 = "!cre2c_type:"
-        s4 = "!cre2c_prelexer:"
-        s5 = "!cre2c_default:"
-        lex_options' (opts, rest) = case skip_spaces rest of
-            r | s1 `isPrefixOf` r -> (lex_options' . lex_mode       opts . drop (length s1)) r
-            r | s2 `isPrefixOf` r -> (lex_options' . lex_match      opts . drop (length s2)) r
-            r | s3 `isPrefixOf` r -> (lex_options' . lex_token_type opts . drop (length s3)) r
-            r | s4 `isPrefixOf` r -> (lex_options' . lex_prelexer   opts . drop (length s4)) r
-            r | s5 `isPrefixOf` r -> (lex_options' . lex_default    opts . drop (length s5)) r
-            _                     -> (opts, rest)
-        def_opts    = OptionSet Normal Longest Nothing TTChar Nothing Nothing
-        (opts', s') = lex_options' (def_opts, s)
-    in  case opts' of
-            OptionSet _    Longest (Just block) ttype@(TTEnum _) pl df -> TOptions (OptsBlock block ttype  pl df) : lex_rules_b s'
-            OptionSet _    Longest (Just block) TTChar           pl df -> TOptions (OptsBlock block TTChar pl df) : lex_rules_b s'
-            OptionSet mode match   Nothing      ttype@(TTEnum _) pl df -> TOptions (Opts mode match ttype  pl df) : lex_rules   s'
-            OptionSet mode match   Nothing      TTChar           pl df -> TOptions (Opts mode match TTChar pl df) : lex_rules   s'
-            _                                                             -> err "conflicting options"
-
-
-lex_mode :: OptionSet -> String -> (OptionSet, String)
-lex_mode opts s =
-    let (m, s') = lex_name s
-    in  case m of
-            "single" -> (opts{opt_mode = Single}, s')
-            "normal" -> (opts{opt_mode = Normal}, s')
-            "block"  ->
-                let (b, s'') = lex_blockname s'
-                in  (opts{opt_block = Just b}, s'')
-            _        -> err $ printf "unknown mode: %s" m
-
-
-lex_match :: OptionSet -> String -> (OptionSet, String)
-lex_match opts s =
-    let (m, s') = lex_name s
-    in  case m of
-            "longest"  -> (opts{opt_match = Longest}, s')
-            "all"      -> (opts{opt_match = All},     s')
-            _          -> err $ printf "unknown match: %s" m
-
-
-lex_token_type :: OptionSet -> String -> (OptionSet, String)
-lex_token_type opts s =
-    let (t, s') = lex_name s
-    in  case t of
-            "char" -> (opts{opt_token_type = TTChar},   s')
-            _      -> (opts{opt_token_type = TTEnum t}, s')
-
-
-lex_prelexer :: OptionSet -> String -> (OptionSet, String)
-lex_prelexer opts s =
-    let (pl, s') = lex_name s
-    in  (opts{opt_prelexer = Just pl}, s')
-
-
-lex_default :: OptionSet -> String -> (OptionSet, String)
-lex_default opts s =
-    let (df, s') = (lex_code . skip_spaces) s
-    in  (opts{opt_default = Just df}, s')
-
-
-lex_blockname :: String -> (SBlkname, String)
-lex_blockname ('(':s) =
-    case span is_alpha_num_ s of
-        ("", _     ) -> err "block name not specified."
-        (b,  ')':s') -> (b, s')
-        (b,  _     ) -> err $ printf "missing ')' after \"cre2c: block(%s\"" b
-lex_block s           = err "missing '(' after \"block\" in \"cre2c_mode:\" directive"
-
-
-lex_rules :: String -> [Token]
-lex_rules s =
-    let s1 = "end*/"
-        s2 = skip_spaces s
-        s3 = drop (length s1) s2
+lexer :: String -> String -> [Token]
+lexer s1 "" = [TCode s1]
+lexer s1 s2@(x : xs) =
+    let s_start = "/*cre2c"
     in  case s2 of
-            s'       | s1 `isPrefixOf` s' -> TEnd : lexer s3
-            s'@(c:_) | isAlpha c          -> let (nm, s'') = lex_name s' in TName nm : lex_rules s''
-            '>' : s'                      -> let (nm, s'') = lex_name s' in TAngle : TName nm : lex_rules s''
-            '=' : s'                      -> TEq : lex_rules s'
-            '{' : s'                      -> let (cd, s'') = lex_code s2 in TCode cd : lex_rules s''
-            s'                            -> err $ printf "lex_rules : can't parse rules at %s" $ (take 50 . show) s'
+        _ | s_start `isPrefixOf` s2 -> TCode s1 : TStart : lex_block (drop (length s_start) s2)
+        _                           -> lexer (s1 ++ [x]) xs
 
 
-lex_rules_b :: String -> [Token]
-lex_rules_b s =
-    let s1 = "end*/"
-        s2 = skip_spaces s
-        s3 = drop (length s1) s2
-    in  case s2 of
-            s'       | s1 `isPrefixOf` s' -> TEnd : lexer s3
-            s'@(c:_) | isAlpha c          -> let (nm, s'') = lex_name s' in TName nm : lex_rules_b s''
-            ':' : s'                      -> let (nm, s'') = lex_name s' in TColon : TName nm : lex_rules_b s''
-            '>' : s'                      -> let (nm, s'') = lex_name s' in TAngle : TName nm : lex_rules_b s''
-            '=' : s'                      -> TEq : lex_rules_b s'
-            '{' : s'                      -> let (cd, s'') = lex_code s2 in TCode cd : lex_rules_b s''
-            s'                            -> err $ printf "lex_rules : can't parse rules at %s" $ (take 50 . show) s'
+lex_block :: String -> [Token]
+lex_block s =
+    let s_end            = "cre2c*/"
+        s_option_name    = "cre2c:name"
+        s_option_type    = "cre2c:type"
+        s_option_default = "cre2c:default"
+    in  case s of
+            _ | s_end            `isPrefixOf` s -> TEnd           : lexer "" (drop (length s_end) s)
+            _ | s_option_name    `isPrefixOf` s -> TOptionName    : lex_block (drop (length s_option_name) s)
+            _ | s_option_type    `isPrefixOf` s -> TOptionType    : lex_block (drop (length s_option_type) s)
+            _ | s_option_default `isPrefixOf` s -> TOptionDefault : lex_block (drop (length s_option_default) s)
+            '>' : xs                            -> TAngle    : lex_block xs
+            ':' : xs                            -> TColon    : lex_block xs
+            '=' : xs                            -> TEq       : lex_block xs
+            xs@('{' : _)                        ->
+                let (c, xs') = lex_code xs
+                in  TCode c : lex_block xs'
+            x : xs | x `elem` "\n\r\t "         -> lex_block xs
+            xs                                  ->
+                let (n, xs') = lex_name xs
+                in  TName n : lex_block xs'
 
 
 lex_code :: String -> (SCode, String)
@@ -234,11 +176,9 @@ err s = error $ "*** SourceParser : " ++ s
 --------------------------------------------------------------------------------
 
 
-combine_rules :: (IRegID, (Maybe SBlkname, MCondset2Code)) -> (IRegID, (Maybe SBlkname, MCondset2Code)) -> (IRegID, (Maybe SBlkname, MCondset2Code))
-combine_rules (_, (Just b,  _         )) (_,  (Just b', _          )) | b /= b' = err "rules for one regexp lead to different blocks"
-combine_rules (_, (Just b,  _         )) (_,  (Nothing, _          ))           = err "combine_rules: dark magic..."
-combine_rules (_, (Nothing, _         )) (_,  (Just b,  _          ))           = err "combine_rules: dark magic..."
-combine_rules (k, (b,       conds2code)) (k', (b',      conds2code'))           =
+combine_rules :: (IRegID, (SBlkname, MCondset2Code)) -> (IRegID, (SBlkname, MCondset2Code)) -> (IRegID, (SBlkname, MCondset2Code))
+combine_rules (_, (b,  _         )) (_,  (b', _          )) | b /= b' = err "rules for one regexp lead to different blocks"
+combine_rules (k, (b,  conds2code)) (k', (_,  conds2code'))           =
     let conds2code'' = M.foldlWithKey'
             (\ c2c conds code -> M.insertWith
                 (\ _ code' -> concat ["{ ", code, code', " }"])
@@ -251,16 +191,19 @@ combine_rules (k, (b,       conds2code)) (k', (b',      conds2code'))           
 
 insert_rule :: (MRegname2RegInfo, Int) -> Rule -> (MRegname2RegInfo, Int)
 insert_rule (rules, k) (name, block, conds, code) =
-    let rules' = M.insertWith
+    let block' = case block of
+            Just b  -> b
+            Nothing -> "main"
+        rules' = M.insertWith
             combine_rules
             name
-            (k, (block, M.insert (S.fromList conds) code M.empty))
+            (k, (block', M.insert (S.fromList conds) code M.empty))
             rules
     in  (rules', k + 1)
 
 
 parse_source :: String -> [Chunk]
-parse_source = parser . lexer
+parse_source = parser . lexer ""
 
 }
 

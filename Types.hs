@@ -25,8 +25,8 @@ type ITokID    = Int
 type IBlkID    = Int
 
 
-type MRegID2RegInfo       = M.HashMap IRegID        (Maybe SBlkname, MCondset2Code)
-type MRegname2RegInfo     = M.HashMap SRegname      (IRegID, (Maybe SBlkname, MCondset2Code))
+type MRegID2RegInfo       = M.HashMap IRegID        (SBlkname, MCondset2Code)
+type MRegname2RegInfo     = M.HashMap SRegname      (IRegID, (SBlkname, MCondset2Code))
 type MCondset2Code        = M.HashMap (S.Set SCond) SCode
 type MRegname2Regexp a    = M.HashMap SRegname      (Regexp a)
 type MTokname2TokID       = M.HashMap STokname      ITokID
@@ -89,32 +89,14 @@ data NCFA a = NCFA
 data Chunk
     = Ch1 SCode
     | Ch2 SCode Options MRegname2RegInfo
-data Options
-    = Opts
-        { mode           :: Mode
-        , match          :: Match
-        , token_type     :: TokenType
-        , prelexer       :: Maybe String
-        , default_action :: Maybe SCode
-        }
-    | OptsBlock
-        { block          :: SBlkname
-        , token_type     :: TokenType
-        , prelexer       :: Maybe String
-        , default_action :: Maybe SCode
-        }
-    deriving (Show)
-data Mode
-    = Single
-    | Normal
-    deriving (Show)
+data Options = Options
+    { block_name     :: SBlkname
+    , token_type     :: TokenType
+    , default_action :: Maybe SCode
+    } deriving (Show)
 data TokenType
     = TTChar
     | TTEnum STokname
-    deriving (Show)
-data Match
-    = Longest
-    | All
     deriving (Show)
 
 
