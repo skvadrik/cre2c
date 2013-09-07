@@ -141,18 +141,16 @@ doc_switch :: Doc -> Doc -> Doc
 doc_switch d1 d2 = PP.text "switch " <> (PP.parens d1) $$ (wrap_in_braces d2)
 
 
-doc_case :: Labellable a => Label a -> Doc
-doc_case l =
-    let f x = PP.text "case " <> (PP.text . show_hex) x <> PP.colon
-    in  case l of
-            LOne x    -> f x
-            LRange xs -> (PP.vcat . map f . S.toList) xs
+doc_case :: Doc -> Doc -> Doc
+doc_case d1 d2  =
+    PP.text "case " <> d1 <> PP.colon
+    $$ PP.nest 4 d2
 
 
-doc_case_break :: IRegID -> Doc -> Doc
-doc_case_break n d =
-    PP.text "case " <> PP.int n <> PP.colon
-    $$ PP.nest 4 (d $$ PP.text "break;")
+doc_case_break :: Doc -> Doc -> Doc
+doc_case_break d1 d2  =
+    PP.text "case " <> d1 <> PP.colon
+    $$ PP.nest 4 (d2 $$ PP.text "break;")
 
 
 doc_default :: Doc -> Doc
@@ -182,12 +180,13 @@ codegen_match_code cur_block id_info df =
         f d (id, conds, block, code) =
             let d1 = doc_if [conds] (PP.text code)
                 d2 = case cur_block of
-                    Just b  -> case block of
-                        Just b' -> doc_goto_block b'
-                        Nothing -> doc_goto_block b
-                    Nothing -> PP.empty
-                d3 = doc_case_break id (d1 $$ d2)
-            in  d $$ d3
+                    Just b  ->
+                        let d3 = case block of
+                                Just b' -> doc_goto_block b'
+                                Nothing -> doc_goto_block b
+                        in  doc_case (PP.int id) (d1 $$ d3)
+                    Nothing -> doc_case_break (PP.int id) d1
+            in  d $$ d2
         d1 = foldl' f PP.empty id_info'
         d2 = case df of
             Just code -> doc_default $ PP.text code
@@ -312,6 +311,14 @@ compare_by_label :: Labellable a => (Label a, b) -> (Label a, b) -> Ordering
 compare_by_label (l1, _) (l2, _) = l1 `compare` l2
 
 
+doc_case_label :: Labellable a => Label a -> Doc
+doc_case_label l =
+    let f x = PP.text "case " <> (PP.text . show_hex) x <> PP.colon
+    in  case l of
+            LOne x    -> f x
+            LRange xs -> (PP.vcat . map f . S.toList) xs
+
+
 codegen_cases :: Labellable a => StateInfo a -> BlockInfo a -> PP.Doc
 codegen_cases (SI _ is_init is_final node _) (BI k maxlen opts id_info _) =
     let case_body ids b s =
@@ -324,7 +331,7 @@ codegen_cases (SI _ is_init is_final node _) (BI k maxlen opts id_info _) =
             in  check_cyclic $$ body
         one_case doc (l, (ids, b, s)) =
             doc
-            $$ doc_case l
+            $$ doc_case_label l
             $$ PP.nest 4
                 ( router1 opts is_init is_final
                 $$ case_body ids b s
