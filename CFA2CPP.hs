@@ -18,8 +18,8 @@ import           CFA
 
 
 cfa2cpp :: Labellable a => DCFA a -> SCode -> BlockInfo a -> SCode
-cfa2cpp dcfa prolog bi =
-    let entry        = codegen_entry bi
+cfa2cpp dcfa prolog bi@(BI k maxlen opts id_info _) =
+    let entry        = router0 opts maxlen k id_info
         g            = dcfa_graph dcfa
         s0           = dcfa_init_state dcfa
         states       = foldl'
@@ -206,6 +206,7 @@ router0 opts maxlen k id_info =
             Opts _ _ _ _ _    -> codegen_match_code Nothing id_info (default_action opts)
             OptsBlock b _ _ _ -> codegen_match_code (Just b) id_info (default_action opts)
         d3 = doc_decl_start k opts
+            $$ PP.text "MAXLEN = " <> PP.int maxlen <> PP.semi
         d4 = PP.text "TOKEN = MARKER;"
         d5 = PP.text "CURSOR = MARKER;"
         d6 = PP.text "ACCEPT = -1;"
@@ -299,12 +300,6 @@ router7 opts =
     case prelexer opts of
         (Just prelexer) -> PP.text prelexer <> PP.text " ()"
         Nothing         -> PP.text "*CURSOR++"
-
-
-codegen_entry :: BlockInfo a -> PP.Doc
-codegen_entry (BI k maxlen opts id_info _) =
-    PP.text "MAXLEN = " <> PP.int maxlen <> PP.semi
-    $$ router0 opts maxlen k id_info
 
 
 compare_by_label :: Labellable a => (Label a, b) -> (Label a, b) -> Ordering
