@@ -37,10 +37,6 @@ trace''' s a = trace (show a ++ s) a
 
 -------------------------------------------------------------------
 
-instance Eq Doc where
-    d1 == d2 = PP.render d1 == PP.render d2
-
-
 ($$$) :: Doc -> Doc -> Doc
 ($$$) d1 d2 | PP.isEmpty d1 = d2
 ($$$) d1 d2 | PP.isEmpty d2 = d1
